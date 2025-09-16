@@ -40,3 +40,21 @@
 .read-the-docs {
   color: #888;
 }
+
+/* Стили для ячеек, которые можно перетаскивать */
+.draggable-cell {
+  cursor: grab;
+}
+
+.draggable-cell:active {
+  cursor: grabbing;
+}
+
+/* Стили для ячеек недель, которые можно перетаскивать */
+.week-cell {
+  cursor: grab;
+}
+
+.week-cell:active {
+  cursor: grabbing;
+}

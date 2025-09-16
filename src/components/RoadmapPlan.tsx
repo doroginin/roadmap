@@ -1,7 +1,7 @@
 
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { TeamSelect, TeamMultiSelect } from "./TeamSelect";
-import { TeamManagementModal } from "./TeamManagementModal";
+import { Select } from "./Select";
+import { TeamMultiSelect } from "./TeamMultiSelect";
 import { ColorPickerPanel } from "./ColorPickerPanel";
 import { normalizeColorValue, getBg, getText } from "./colorUtils";
 import { DEFAULT_BG } from "./colorDefaults";
@@ -264,12 +264,16 @@ function ArrowOverlay({
 
                 let x1: number, y1: number, x2: number, y2: number, d: string;
 
+                // Определяем, идет ли стрелка снизу вверх
+                const isUpward = ra.top > rb.top;
+                
                 if (routeType === 'top') {
-                    // Маршрут: правая граница источника → верх цели
+                    // Маршрут: правая граница источника → верх/низ цели
                     x1 = ra.right - wrapRect.left + container.scrollLeft;
                     y1 = ra.top + ra.height / 2 - wrapRect.top + container.scrollTop;
                     x2 = rb.left + rb.width / 2 - wrapRect.left + container.scrollLeft;
-                    y2 = rb.top - wrapRect.top + container.scrollTop;
+                    // Если стрелка идет снизу вверх, направляем в нижний край ячейки
+                    y2 = isUpward ? rb.bottom - wrapRect.top + container.scrollTop : rb.top - wrapRect.top + container.scrollTop;
                     d = `M ${x1} ${y1} L ${x2} ${y1} L ${x2} ${y2}`;
                 } else {
                     // Маршрут: низ источника → левая граница цели
@@ -393,7 +397,7 @@ function ArrowOverlay({
 // ---- Компонент ----
 export function RoadmapPlan() {
     // ===== Tabs =====
-    type Tab = "plan" | "sprints";
+    type Tab = "plan" | "sprints" | "teams";
     const [tab, setTab] = useState<Tab>("plan");
 
     // ===== Спринты (редактируемые) =====
@@ -403,6 +407,20 @@ export function RoadmapPlan() {
         { code: "Q3S3", start: "2025-07-28", end: "2025-08-24" },
         { code: "Q3S4", start: "2025-08-25", end: "2025-09-21" },
     ]);
+
+    // ===== Команды (редактируемые) =====
+    type TeamData = {
+        name: string;
+        jiraProject: string;
+        featureTeam: string;
+        issueType: string;
+    };
+    const [teamData, setTeamData] = useState<TeamData[]>([
+        { name: "Demo", jiraProject: "", featureTeam: "", issueType: "" }
+    ]);
+
+    // Преобразуем данные команд в массив имен для совместимости с существующими компонентами
+    const teamNames = useMemo(() => teamData.map(t => t.name), [teamData]);
     const WEEK0 = sprints[0]?.start || "2025-06-02";
 
     function mapWeekToSprintLocal(weekIndex0: number): string | null {
@@ -440,27 +458,6 @@ export function RoadmapPlan() {
     const [teamFnColors, setTeamFnColors] = useState<Record<string, string | { bg: string; text: string }>>({});
     const [colorPanel, setColorPanel] = useState<{ anchor: { x: number; y: number }; teamFnKey: string; view: "resource" | "task"; initial: { bg: string; text: string } } | null>(null)
 
-    // ===== Глобальный список команд =====
-    const [teams, setTeams] = useState<string[]>(() => {
-        const initialRows: Row[] = [
-            { id: "r1", kind: "resource", team: ["Demo"], fn: "BE", empl: "Ivan", weeks: Array(TOTAL_WEEKS).fill(1) },
-            { id: "r2", kind: "resource", team: ["Demo"], fn: "FE", weeks: Array(TOTAL_WEEKS).fill(1) },
-            { id: "r3", kind: "resource", team: ["Demo"], fn: "PO", weeks: Array(TOTAL_WEEKS).fill(1) },
-            { id: "t1", kind: "task", status: "Todo", sprintsAuto: [], epic: "Эпик 1", task: "Задача 1", team: "Demo", fn: "BE", empl: "Ivan", planEmpl: 1, planWeeks: 3, blockerIds: [], fact: 0, startWeek: null, endWeek: null, manualEdited: false, autoPlanEnabled: true, weeks: Array(TOTAL_WEEKS).fill(0) },
-            { id: "t2", kind: "task", status: "Todo", sprintsAuto: [], epic: "Эпик 1", task: "Задача 2", team: "Demo", fn: "BE", planEmpl: 1, planWeeks: 2, blockerIds: ["t1"], fact: 0, startWeek: null, endWeek: null, manualEdited: false, autoPlanEnabled: true, weeks: Array(TOTAL_WEEKS).fill(0) },
-            { id: "t3", kind: "task", status: "Backlog", sprintsAuto: [], epic: "Эпик 2", task: "Задача 3", team: "Demo", fn: "FE", planEmpl: 1, planWeeks: 4, blockerIds: [], fact: 0, startWeek: null, endWeek: null, manualEdited: false, autoPlanEnabled: true, weeks: Array(TOTAL_WEEKS).fill(0) }
-        ];
-        // Извлекаем все команды из ресурсов (массивы) и задач (строки)
-        const resourceTeams = initialRows
-            .filter((r): r is ResourceRow => r.kind === "resource")
-            .flatMap(r => r.team);
-        const taskTeams = initialRows
-            .filter((r): r is TaskRow => r.kind === "task")
-            .map(r => r.team);
-        const allTeams = [...resourceTeams, ...taskTeams];
-        const uniqueTeams = Array.from(new Set(allTeams));
-        return uniqueTeams;
-    });
 
     // ===== Демо-данные строк =====
     const [rows, setRows] = useState<Row[]>(() => {
@@ -613,10 +610,20 @@ export function RoadmapPlan() {
 
     // ====== Выделение/редактирование ======
     type ColKey = "type"|"status"|"sprintsAuto"|"epic"|"task"|"team"|"fn"|"empl"|"planEmpl"|"planWeeks"|"fact"|"start"|"end"|"autoplan"|{week:number};
+    type SprintColKey = "code"|"start"|"end";
+    type TeamColKey = "name"|"jiraProject"|"featureTeam"|"issueType";
     type Selection = { rowId: ID; col: ColKey } | null;
+    type SprintSelection = { rowId: number; col: SprintColKey } | null;
+    type TeamSelection = { rowId: number; col: TeamColKey } | null;
     const [sel, setSel] = useState<Selection>(null);
     const [editing, setEditing] = useState<Selection>(null);
+    const [sprintSel, setSprintSel] = useState<SprintSelection>(null);
+    const [sprintEditing, setSprintEditing] = useState<SprintSelection>(null);
+    const [teamSel, setTeamSel] = useState<TeamSelection>(null);
+    const [teamEditing, setTeamEditing] = useState<TeamSelection>(null);
     const cancelEditRef = useRef<boolean>(false);
+    const cancelSprintEditRef = useRef<boolean>(false);
+    const cancelTeamEditRef = useRef<boolean>(false);
 
     // ====== Стрелки блокеров ======
     const tableContainerRef = useRef<HTMLDivElement | null>(null);
@@ -635,11 +642,18 @@ export function RoadmapPlan() {
     }, []);
     function moveSelection(delta: number) {
         if (!sel) return;
-        const keyEq = (a: ColKey, b: ColKey) => (typeof a === "string" && typeof b === "string" && a===b) || (typeof a === "object" && typeof b === "object" && a.week===b.week);
-        const idx = columnOrder.findIndex(k => keyEq(k, sel.col));
-        if (idx === -1) return;
-        const next = columnOrder[Math.max(0, Math.min(columnOrder.length-1, idx + delta))];
-        setSel({ rowId: sel.rowId, col: next });
+        
+        // Определяем тип строки
+        const row = computedRows.find(r => r.id === sel.rowId);
+        const isResource = row?.kind === "resource";
+        
+        // Находим следующую редактируемую ячейку
+        const next = findNextEditableColumn(sel.col, delta, isResource);
+        
+        if (next) {
+            setSel({ rowId: sel.rowId, col: next });
+        }
+        // Если не найдено редактируемых ячеек в этом направлении, не двигаем курсор
     }
     // Переход по строкам при сохранении текущей колонки
     function moveSelectionRow(delta: number) {
@@ -648,28 +662,190 @@ export function RoadmapPlan() {
         if (i < 0) return;
         const j = Math.max(0, Math.min(filteredRows.length - 1, i + delta));
         const target = filteredRows[j];
-        if (target) setSel({ rowId: target.id, col: sel.col });
+        if (!target) return;
+        
+        // Определяем тип текущей и целевой строки
+        const currentRow = computedRows.find(r => r.id === sel.rowId);
+        const targetRow = computedRows.find(r => r.id === target.id);
+        const currentIsResource = currentRow?.kind === "resource";
+        const targetIsResource = targetRow?.kind === "resource";
+        
+        let targetCol: ColKey = sel.col;
+        
+        // Если переходим от задачи к ресурсу
+        if (!currentIsResource && targetIsResource) {
+            // Маппинг колонок задач к объединенным ячейкам ресурсов
+            if (sel.col === "sprintsAuto" || sel.col === "epic" || sel.col === "task") {
+                targetCol = "status"; // Объединенная ячейка Status/Sprints/Epic/Task
+            } else if (sel.col === "planWeeks" || sel.col === "autoplan") {
+                targetCol = "planEmpl"; // Объединенная ячейка Plan empl/Plan weeks/Auto
+            }
+            // Для остальных колонок (type, status, team, fn, empl, planEmpl) оставляем как есть
+        }
+        // Если переходим от ресурса к задаче
+        else if (currentIsResource && !targetIsResource) {
+            // Маппинг объединенных ячеек ресурсов к первым колонкам задач
+            if (sel.col === "status") {
+                targetCol = "status"; // Первая колонка объединенной ячейки
+            } else if (sel.col === "planEmpl") {
+                targetCol = "planEmpl"; // Первая колонка объединенной ячейки плана
+            }
+            // Для остальных колонок оставляем как есть
+        }
+        
+        // Проверяем, можно ли перейти в целевую строку
+        if (!currentIsResource && targetIsResource) {
+            // Переход от задачи к ресурсу - проверяем, можно ли переходить из этой колонки
+            if (!canNavigateFromTaskToResource(sel.col)) {
+                return; // Не переходим, если нельзя переходить из этой колонки задачи в ресурс
+            }
+        } else if (!hasEditableColumnsInTargetRow(targetCol, targetIsResource)) {
+            // Для остальных случаев проверяем, есть ли редактируемые ячейки в целевой строке
+            return; // Не переходим, если нет редактируемых ячеек в целевой строке
+        }
+        
+        setSel({ rowId: target.id, col: targetCol });
+        
+        // Прокручиваем таблицу, чтобы выделенная ячейка была видна
+        setTimeout(() => {
+            const tableContainer = tableContainerRef.current;
+            if (tableContainer) {
+                const selectedRow = tableContainer.querySelector(`tr[data-row-id="${target.id}"]`);
+                if (selectedRow) {
+                    selectedRow.scrollIntoView({ 
+                        behavior: 'smooth', 
+                        block: 'nearest' 
+                    });
+                }
+            }
+        }, 0);
     }
-    // Перейти к следующей справа ячейке и сразу включить редактирование
-    function focusNextRight(rowId: ID, col: ColKey) {
+    // Проверяет, является ли колонка редактируемой
+    function isEditableColumn(col: ColKey, isResource: boolean): boolean {
+        if (isResource) {
+            // Для ресурсов редактируемые колонки: team, fn, empl, недели
+            return col === "team" || col === "fn" || col === "empl" || 
+                   (typeof col === "object" && col.week !== undefined);
+        } else {
+            // Для задач редактируемые колонки: status, epic, task, team, fn, empl, planEmpl, planWeeks, autoplan, недели
+            return col === "status" || col === "epic" || col === "task" || 
+                   col === "team" || col === "fn" || col === "empl" || col === "planEmpl" || 
+                   col === "planWeeks" || col === "autoplan" || 
+                   (typeof col === "object" && col.week !== undefined);
+        }
+    }
+
+    // Находит следующую редактируемую ячейку в заданном направлении
+    function findNextEditableColumn(currentCol: ColKey, direction: number, isResource: boolean): ColKey | null {
         const keyEq = (a: ColKey, b: ColKey) => (typeof a === "string" && typeof b === "string" && a===b) || (typeof a === "object" && typeof b === "object" && a.week===b.week);
-        const idx = columnOrder.findIndex(k => keyEq(k, col));
-        if (idx === -1) return;
-        const next = columnOrder[idx + 1];
-        if (!next) return;
-        const nextSel: Selection = { rowId, col: next };
-        setSel(nextSel);
-        startEdit(nextSel);
+        const idx = columnOrder.findIndex(k => keyEq(k, currentCol));
+        if (idx === -1) return null;
+        
+        // Ищем в заданном направлении
+        for (let i = idx + direction; i >= 0 && i < columnOrder.length; i += direction) {
+            const col = columnOrder[i];
+            if (isEditableColumn(col, isResource)) {
+                return col;
+            }
+        }
+        
+        return null; // Не найдено редактируемых ячеек в этом направлении
     }
-    function focusPrevLeft(rowId: ID, col: ColKey) {
-      const keyEq = (a: ColKey, b: ColKey) => (typeof a === "string" && typeof b === "string" && a===b) || (typeof a === "object" && typeof b === "object" && a.week===b.week);
-      const idx = columnOrder.findIndex(k => keyEq(k, col));
-      if (idx === -1) return;
-      const prev = columnOrder[idx - 1];
-      if (!prev) return;
-      const prevSel: Selection = { rowId, col: prev };
-      setSel(prevSel);
-      startEdit(prevSel);
+
+    // Проверяет, есть ли редактируемые ячейки в целевой строке, которые соответствуют текущей позиции
+    function hasEditableColumnsInTargetRow(targetCol: ColKey, targetIsResource: boolean): boolean {
+        // Проверяем, является ли сама целевая колонка редактируемой
+        if (isEditableColumn(targetCol, targetIsResource)) {
+            return true;
+        }
+        
+        // Если целевая колонка не редактируемая, проверяем, есть ли редактируемые колонки в том же "блоке"
+        // Например, если мы в колонке "status" задачи и переходим к ресурсу, 
+        // то проверяем, есть ли редактируемые колонки в том же диапазоне
+        
+        const keyEq = (a: ColKey, b: ColKey) => (typeof a === "string" && typeof b === "string" && a===b) || (typeof a === "object" && typeof b === "object" && a.week===b.week);
+        const idx = columnOrder.findIndex(k => keyEq(k, targetCol));
+        if (idx === -1) return false;
+        
+        // Для ресурсов проверяем колонки team, fn, empl, недели
+        if (targetIsResource) {
+            return isEditableColumn("team", true) || isEditableColumn("fn", true) || 
+                   isEditableColumn("empl", true) || isEditableColumn({ week: 0 }, true);
+        } else {
+            // Для задач проверяем все редактируемые колонки
+            return isEditableColumn("status", false) || isEditableColumn("epic", false) || 
+                   isEditableColumn("task", false) || isEditableColumn("team", false) || 
+                   isEditableColumn("fn", false) || isEditableColumn("empl", false) || 
+                   isEditableColumn("planEmpl", false) || isEditableColumn("planWeeks", false) || 
+                   isEditableColumn("autoplan", false) || isEditableColumn({ week: 0 }, false);
+        }
+    }
+
+    // Проверяет, можно ли перейти из колонки задачи в ресурс в режиме просмотра
+    function canNavigateFromTaskToResource(taskCol: ColKey): boolean {
+        // Для колонок задач, которые не имеют соответствующих редактируемых ячеек в ресурсах выше
+        if (taskCol === "status" || taskCol === "sprintsAuto" || taskCol === "epic" || taskCol === "task" || 
+            taskCol === "planEmpl" || taskCol === "planWeeks" || taskCol === "autoplan") {
+            return false; // Нельзя переходить в ресурсы из этих колонок
+        }
+        
+        // Для остальных колонок (type, team, fn, empl, недели) можно переходить
+        return true;
+    }
+
+    // Перейти к следующей справа ячейке и сразу включить редактирование
+    function focusNextRight(rowId: ID, col: ColKey): boolean {
+        // Определяем тип строки
+        const row = computedRows.find(r => r.id === rowId);
+        const isResource = row?.kind === "resource";
+        
+        // Находим следующую редактируемую ячейку
+        const next = findNextEditableColumn(col, 1, isResource);
+        
+        if (next) {
+            const nextSel: Selection = { rowId, col: next };
+            setSel(nextSel);
+            // Всегда переходим в режим редактирования для редактируемых ячеек
+            startEdit(nextSel);
+            return true;
+        }
+        // Если не найдено редактируемых ячеек в этом направлении, не двигаем курсор
+        return false;
+    }
+    function focusPrevLeft(rowId: ID, col: ColKey): boolean {
+        // Определяем тип строки
+        const row = computedRows.find(r => r.id === rowId);
+        const isResource = row?.kind === "resource";
+        
+        // Находим предыдущую редактируемую ячейку
+        const prev = findNextEditableColumn(col, -1, isResource);
+        
+        if (prev) {
+            const prevSel: Selection = { rowId, col: prev };
+            setSel(prevSel);
+            // Всегда переходим в режим редактирования для редактируемых ячеек
+            startEdit(prevSel);
+            return true;
+        }
+        // Если не найдено редактируемых ячеек в этом направлении, не двигаем курсор
+        return false;
+    }
+
+    // Навигация в режиме редактирования - сохраняет режим редактирования
+    function navigateInEditMode(direction: 'next' | 'prev', currentRowId: ID, currentCol: ColKey): boolean {
+        const row = computedRows.find(r => r.id === currentRowId);
+        const isResource = row?.kind === "resource";
+        
+        const next = findNextEditableColumn(currentCol, direction === 'next' ? 1 : -1, isResource);
+        
+        if (next) {
+            const nextSel: Selection = { rowId: currentRowId, col: next };
+            setSel(nextSel);
+            // Сохраняем режим редактирования
+            startEdit(nextSel);
+            return true;
+        }
+        return false;
     }
 
     useEffect(() => {
@@ -678,6 +854,75 @@ export function RoadmapPlan() {
             const tag = el?.tagName;
             const isEditable = !!el && (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || el.isContentEditable);
             if (isEditable) return;
+            // Обработка для таблицы спринтов
+            if (tab === 'sprints') {
+                if (!sprintSel) return;
+                // Space: редактирование
+                if (e.key === " ") {
+                    e.preventDefault();
+                    if (sprintEditing) {
+                        commitSprintEdit();
+                    } else {
+                        startSprintEdit(sprintSel);
+                    }
+                    return;
+                }
+                if (!sprintEditing && e.key === "Tab") { e.preventDefault(); if (e.shiftKey) { moveSprintSelection(-1); } else { moveSprintSelection(1); } return; }
+                if (!sprintEditing && e.key === "ArrowUp") { e.preventDefault(); moveSprintSelectionRow(-1); return; }
+                if (!sprintEditing && e.key === "ArrowDown") { e.preventDefault(); moveSprintSelectionRow(1); return; }
+                if (e.key === "Enter") {
+                    e.preventDefault();
+                    if (sprintEditing) {
+                        commitSprintEdit();
+                    } else {
+                        startSprintEdit(sprintSel);
+                    }
+                    return;
+                }
+                if (e.key === "Escape") {
+                    if (sprintEditing) { cancelSprintEditRef.current = true; stopSprintEdit(); }
+                    return;
+                }
+                if (e.key === "ArrowRight") { e.preventDefault(); moveSprintSelection(1); return; }
+                if (e.key === "ArrowLeft")  { e.preventDefault(); moveSprintSelection(-1); return; }
+                return;
+            }
+            
+            // Обработка для таблицы команд
+            if (tab === 'teams') {
+                if (!teamSel) return;
+                // Space: редактирование
+                if (e.key === " ") {
+                    e.preventDefault();
+                    if (teamEditing) {
+                        commitTeamEdit();
+                    } else {
+                        startTeamEdit(teamSel);
+                    }
+                    return;
+                }
+                if (!teamEditing && e.key === "Tab") { e.preventDefault(); if (e.shiftKey) { moveTeamSelection(-1); } else { moveTeamSelection(1); } return; }
+                if (!teamEditing && e.key === "ArrowUp") { e.preventDefault(); moveTeamSelectionRow(-1); return; }
+                if (!teamEditing && e.key === "ArrowDown") { e.preventDefault(); moveTeamSelectionRow(1); return; }
+                if (e.key === "Enter") {
+                    e.preventDefault();
+                    if (teamEditing) {
+                        commitTeamEdit();
+                    } else {
+                        startTeamEdit(teamSel);
+                    }
+                    return;
+                }
+                if (e.key === "Escape") {
+                    if (teamEditing) { cancelTeamEditRef.current = true; stopTeamEdit(); }
+                    return;
+                }
+                if (e.key === "ArrowRight") { e.preventDefault(); moveTeamSelection(1); return; }
+                if (e.key === "ArrowLeft")  { e.preventDefault(); moveTeamSelection(-1); return; }
+                return;
+            }
+            
+            // Обработка для таблицы плана
             if (!sel) return;
             // Space: автоплан
             if (e.key === " ") {
@@ -696,10 +941,20 @@ export function RoadmapPlan() {
                     const w = sel.col.week;
                     if (row?.kind === "task") {
                         const base = weeksBaseForTaskLocal(row as TaskRow);
+                        const originalWeeks = (row as TaskRow).weeks.slice();
                         base[w] = 0;
+                        
+                        // Проверяем, изменилось ли значение
+                        const hasChanged = !weeksArraysEqual(base, originalWeeks);
+                        
                         setRows(prev=>prev.map(x =>
                             (x.kind==='task' && x.id===row.id)
-                                ? { ...(x as TaskRow), manualEdited: true, autoPlanEnabled: false, weeks: base }
+                                ? { 
+                                    ...(x as TaskRow), 
+                                    weeks: base,
+                                    // Устанавливаем флаги только если значение изменилось
+                                    ...(hasChanged ? { manualEdited: true, autoPlanEnabled: false } : {})
+                                }
                                 : x
                         ));
                     } else if (row?.kind === "resource") {
@@ -737,21 +992,298 @@ export function RoadmapPlan() {
         }
         window.addEventListener("keydown", onKey);
         return () => window.removeEventListener("keydown", onKey);
-    }, [sel, editing, computedRows]);
+    }, [sel, editing, computedRows, sprintSel, sprintEditing, sprints, teamSel, teamEditing, teamData]);
 
     function startEdit(s: Selection) {
-        console.log('startEdit called with:', s);
         setEditing(s);
         cancelEditRef.current = false;
     }
-    function stopEdit() { setEditing(null); }
+    function stopEdit() { 
+        setEditing(null); 
+    }
     function commitEdit() { setEditing(null); }
+
+    // ====== Функции для редактирования спринтов ======
+    function startSprintEdit(s: SprintSelection) {
+        console.log('startSprintEdit called with:', s);
+        setSprintEditing(s);
+        cancelSprintEditRef.current = false;
+    }
+    function stopSprintEdit() { setSprintEditing(null); }
+    function commitSprintEdit() { setSprintEditing(null); }
+
+    // Функция для форматирования даты в формат DD.MM.YYYY
+    function formatDate(dateString: string): string {
+        if (!dateString) return '';
+        const date = new Date(dateString + 'T00:00:00Z');
+        const day = date.getUTCDate().toString().padStart(2, '0');
+        const month = (date.getUTCMonth() + 1).toString().padStart(2, '0');
+        const year = date.getUTCFullYear();
+        return `${day}.${month}.${year}`;
+    }
+
+    // ====== Функции управления спринтами ======
+    function addSprint() {
+        const newSprint: Sprint = {
+            code: `Q3S${sprints.length + 1}`,
+            start: "",
+            end: ""
+        };
+        setSprints([...sprints, newSprint]);
+    }
+
+    function addSprintAbove(index: number) {
+        const newSprint: Sprint = {
+            code: `Q3S${sprints.length + 1}`,
+            start: "",
+            end: ""
+        };
+        const newSprints = [...sprints];
+        newSprints.splice(index, 0, newSprint);
+        setSprints(newSprints);
+    }
+
+    function addSprintBelow(index: number) {
+        const newSprint: Sprint = {
+            code: `Q3S${sprints.length + 1}`,
+            start: "",
+            end: ""
+        };
+        const newSprints = [...sprints];
+        newSprints.splice(index + 1, 0, newSprint);
+        setSprints(newSprints);
+    }
+
+    function deleteSprint(index: number) {
+        if (sprints.length > 1) {
+            const newSprints = sprints.filter((_, i) => i !== index);
+            setSprints(newSprints);
+        }
+    }
+
+    // ====== Функции управления командами ======
+    function addTeam() {
+        const newTeam: TeamData = {
+            name: `Team ${teamData.length + 1}`,
+            jiraProject: "",
+            featureTeam: "",
+            issueType: ""
+        };
+        setTeamData([...teamData, newTeam]);
+    }
+
+    function addTeamAbove(index: number) {
+        const newTeam: TeamData = {
+            name: `Team ${teamData.length + 1}`,
+            jiraProject: "",
+            featureTeam: "",
+            issueType: ""
+        };
+        const newTeams = [...teamData];
+        newTeams.splice(index, 0, newTeam);
+        setTeamData(newTeams);
+    }
+
+    function addTeamBelow(index: number) {
+        const newTeam: TeamData = {
+            name: `Team ${teamData.length + 1}`,
+            jiraProject: "",
+            featureTeam: "",
+            issueType: ""
+        };
+        const newTeams = [...teamData];
+        newTeams.splice(index + 1, 0, newTeam);
+        setTeamData(newTeams);
+    }
+
+    function deleteTeam(index: number) {
+        if (teamData.length > 1) {
+            const newTeams = teamData.filter((_, i) => i !== index);
+            setTeamData(newTeams);
+        }
+    }
+
+    // Функция для получения стиля границ ячейки спринта
+    function getSprintCellBorderStyle(isSelected: boolean | null = false): React.CSSProperties {
+        if (isSelected) {
+            return {
+                borderTop: '2px solid gray',
+                borderRight: '2px solid gray',
+                borderBottom: '2px solid gray',
+                borderLeft: '2px solid gray',
+                paddingRight: '0.5em',
+                paddingLeft: '0.5em'
+            };
+        }
+        return {
+            borderTop: '1px solid rgb(226, 232, 240)',
+            borderRight: '1px solid rgb(226, 232, 240)',
+            borderBottom: '1px solid rgb(226, 232, 240)',
+            borderLeft: '1px solid rgb(226, 232, 240)',
+            paddingRight: '0.5em',
+            paddingLeft: '0.5em'
+        };
+    }
+
+    // Функция для получения стиля границ ячейки команды
+    function getTeamCellBorderStyle(isSelected: boolean | null = false): React.CSSProperties {
+        if (isSelected) {
+            return {
+                borderTop: '2px solid gray',
+                borderRight: '2px solid gray',
+                borderBottom: '2px solid gray',
+                borderLeft: '2px solid gray',
+                paddingRight: '0.5em',
+                paddingLeft: '0.5em'
+            };
+        }
+        return {
+            borderTop: '1px solid rgb(226, 232, 240)',
+            borderRight: '1px solid rgb(226, 232, 240)',
+            borderBottom: '1px solid rgb(226, 232, 240)',
+            borderLeft: '1px solid rgb(226, 232, 240)',
+            paddingRight: '0.5em',
+            paddingLeft: '0.5em'
+        };
+    }
+
+    // Навигация по спринтам
+    function moveSprintSelection(delta: number) {
+        if (!sprintSel) return;
+        
+        const sprintCols: SprintColKey[] = ["code", "start", "end"];
+        const currentIdx = sprintCols.indexOf(sprintSel.col);
+        const nextIdx = currentIdx + delta;
+        
+        if (nextIdx >= 0 && nextIdx < sprintCols.length) {
+            setSprintSel({ rowId: sprintSel.rowId, col: sprintCols[nextIdx] });
+        }
+    }
+
+    function moveSprintSelectionRow(delta: number) {
+        if (!sprintSel) return;
+        const nextRowId = sprintSel.rowId + delta;
+        if (nextRowId >= 0 && nextRowId < sprints.length) {
+            setSprintSel({ rowId: nextRowId, col: sprintSel.col });
+            
+            // Прокручиваем таблицу, чтобы выделенная ячейка была видна
+            setTimeout(() => {
+                const tableContainer = document.querySelector('.sprint-table-container');
+                if (tableContainer) {
+                    const selectedRow = tableContainer.querySelector(`tr:nth-child(${nextRowId + 2})`); // +2 потому что есть заголовок
+                    if (selectedRow) {
+                        selectedRow.scrollIntoView({ 
+                            behavior: 'smooth', 
+                            block: 'nearest' 
+                        });
+                    }
+                }
+            }, 0);
+        }
+    }
+
+    // Навигация в режиме редактирования спринтов
+    function navigateSprintInEditMode(direction: 'next' | 'prev', currentRowId: number, currentCol: SprintColKey) {
+        const sprintCols: SprintColKey[] = ["code", "start", "end"];
+        const currentIdx = sprintCols.indexOf(currentCol);
+        const nextIdx = direction === 'next' ? currentIdx + 1 : currentIdx - 1;
+        
+        if (nextIdx >= 0 && nextIdx < sprintCols.length) {
+            // Есть следующая ячейка в той же строке
+            const nextSel: SprintSelection = { rowId: currentRowId, col: sprintCols[nextIdx] };
+            setSprintSel(nextSel);
+            startSprintEdit(nextSel);
+        } else {
+            // Нет следующей ячейки в строке - не переходим никуда
+            // Остаемся в текущей ячейке
+            return;
+        }
+    }
+
+    // ====== Функции редактирования команд ======
+    function startTeamEdit(s: TeamSelection) {
+        if (!s) return;
+        setTeamEditing(s);
+        cancelTeamEditRef.current = false;
+    }
+
+    function stopTeamEdit() {
+        setTeamEditing(null);
+    }
+
+    function commitTeamEdit() {
+        stopTeamEdit();
+    }
+
+    // Навигация по командам
+    function moveTeamSelection(delta: number) {
+        if (!teamSel) return;
+        const teamCols: TeamColKey[] = ["name", "jiraProject", "featureTeam", "issueType"];
+        const currentIdx = teamCols.indexOf(teamSel.col);
+        const nextIdx = currentIdx + delta;
+        
+        if (nextIdx >= 0 && nextIdx < teamCols.length) {
+            setTeamSel({ rowId: teamSel.rowId, col: teamCols[nextIdx] });
+        }
+    }
+
+    function moveTeamSelectionRow(delta: number) {
+        if (!teamSel) return;
+        const nextRowId = teamSel.rowId + delta;
+        if (nextRowId >= 0 && nextRowId < teamData.length) {
+            setTeamSel({ rowId: nextRowId, col: teamSel.col });
+            
+            // Прокручиваем таблицу, чтобы выделенная ячейка была видна
+            setTimeout(() => {
+                const tableContainer = document.querySelector('.team-table-container');
+                if (tableContainer) {
+                    const selectedRow = tableContainer.querySelector(`tr:nth-child(${nextRowId + 2})`); // +2 потому что есть заголовок
+                    if (selectedRow) {
+                        selectedRow.scrollIntoView({ 
+                            behavior: 'smooth', 
+                            block: 'nearest' 
+                        });
+                    }
+                }
+            }, 0);
+        }
+    }
+
+    // Навигация в режиме редактирования команд
+    function navigateTeamInEditMode(direction: 'next' | 'prev', currentRowId: number, currentCol: TeamColKey) {
+        const teamCols: TeamColKey[] = ["name", "jiraProject", "featureTeam", "issueType"];
+        const currentIdx = teamCols.indexOf(currentCol);
+        const nextIdx = direction === 'next' ? currentIdx + 1 : currentIdx - 1;
+        
+        if (nextIdx >= 0 && nextIdx < teamCols.length) {
+            // Есть следующая ячейка в той же строке
+            const nextSel: TeamSelection = { rowId: currentRowId, col: teamCols[nextIdx] };
+            setTeamSel(nextSel);
+            startTeamEdit(nextSel);
+        } else {
+            // Нет следующей ячейки в строке - не переходим никуда
+            // Остаемся в текущей ячейке
+            return;
+        }
+    }
 
     // ====== Контекстные меню ======
     type CtxMenu = { x:number; y:number; rowId:ID; kind:"task"|"resource"; field?:"fn"; draftColor?: string } | null;
+    type SprintCtxMenu = { x:number; y:number; index:number } | null;
+    type TeamCtxMenu = { x:number; y:number; index:number } | null;
     const [ctx, setCtx] = useState<CtxMenu>(null);
+    const [sprintCtx, setSprintCtx] = useState<SprintCtxMenu>(null);
+    const [teamCtx, setTeamCtx] = useState<TeamCtxMenu>(null);
 
     function onContextMenuRow(e: React.MouseEvent, r: Row) { e.preventDefault(); setCtx({ x: e.clientX, y: e.clientY, rowId: r.id, kind: r.kind }); }
+    function onContextMenuSprint(e: React.MouseEvent, index: number) { 
+        e.preventDefault(); 
+        setSprintCtx({ x: e.clientX, y: e.clientY, index }); 
+    }
+    function onContextMenuTeam(e: React.MouseEvent, index: number) { 
+        e.preventDefault(); 
+        setTeamCtx({ x: e.clientX, y: e.clientY, index }); 
+    }
     function onContextMenuCellColor(e: React.MouseEvent, r: ResourceRow | TaskRow, field: "fn", kind: "resource" | "task") {
         e.preventDefault();
         e.stopPropagation();
@@ -770,31 +1302,66 @@ export function RoadmapPlan() {
         x: number;
         y: number;
         task: TaskRow | null;
-    }>({ visible: false, x: 0, y: 0, task: null });
+        resource: ResourceRow | null;
+    }>({ visible: false, x: 0, y: 0, task: null, resource: null });
     
     const [highlightedRowId, setHighlightedRowId] = useState<ID | null>(null);
     const [dropPositionRowId, setDropPositionRowId] = useState<ID | null>(null);
+    const [dropPosition, setDropPosition] = useState<'top' | 'bottom'>('top');
 
-    function markDragAllowed() { dragAllowedRef.current = true; }
+    function markDragAllowed() { 
+        dragAllowedRef.current = true; 
+    }
     function clearDragAllowed() { dragAllowedRef.current = false; }
     
     // Вспомогательная функция для получения класса границ ячейки
-    function getCellBorderClass(rowId: ID): string {
-        if (highlightedRowId === rowId) {
-            return 'border-t-2 border-b-2 border-blue-500'; // Подсветка для Shift+drag (блокеры)
-        }
-        if (dropPositionRowId === rowId) {
-            return 'border-t-2 border-green-500'; // Подсветка верхней границы для обычного drag
-        }
+    function getCellBorderClass(_rowId: ID): string {
+        // Временно отключаем CSS классы, используем только inline стили
         return '';
     }
+    
+    // Вспомогательная функция для получения стиля границ ячейки для drag
+        function getCellBorderStyleForDrag(rowId: ID): React.CSSProperties {
+            // Если есть highlightedRowId (Shift+drag), показываем только красные рамки
+            if (highlightedRowId) {
+                if (highlightedRowId === rowId) {
+                    return { borderTop: '2px solid #f87171', borderBottom: '2px solid #f87171' }; // светло-красная рамка
+                }
+                return {}; // Не показываем никаких рамок для других строк при Shift+drag
+            }
+            
+            // Если нет highlightedRowId, показываем обычные серые рамки для dropPositionRowId
+            if (dropPositionRowId === rowId) {
+                if (dropPosition === 'top') {
+                    return { borderTop: '2px solid #6b7280' }; // серая рамка сверху
+                } else {
+                    return { borderBottom: '2px solid #6b7280' }; // серая рамка снизу
+                }
+            }
+            
+            return {};
+        }
     
     // Вспомогательная функция для получения стиля границ ячейки
     function getCellBorderStyle(isSelected: boolean | null = false): React.CSSProperties {
         if (isSelected) {
-            return { border: '2px solid gray' };
+            return { 
+                borderTop: '2px solid gray',
+                borderRight: '2px solid gray',
+                borderBottom: '2px solid gray',
+                borderLeft: '2px solid gray',
+                paddingRight: '0.5em',
+                paddingLeft: '0.5em'
+            };
         }
-        return { border: '1px solid rgb(226, 232, 240)' };
+        return { 
+            borderTop: '1px solid rgb(226, 232, 240)',
+            borderRight: '1px solid rgb(226, 232, 240)',
+            borderBottom: '1px solid rgb(226, 232, 240)',
+            borderLeft: '1px solid rgb(226, 232, 240)',
+            paddingRight: '0.5em',
+            paddingLeft: '0.5em'
+        };
     }
     
     
@@ -802,26 +1369,38 @@ export function RoadmapPlan() {
         if (!dragAllowedRef.current) return;
         if (e.button !== 0) return; // только левая кнопка мыши
         
+        
         dragRowRef.current = { id: r.id, kind: r.kind };
         isDraggingRef.current = true;
         
         // Очищаем предыдущие состояния подсветки
         setHighlightedRowId(null);
         setDropPositionRowId(null);
+        setDropPosition('top');
         
-        // Показываем тултип только для задач
+        // Показываем тултип для задач и ресурсов
         if (r.kind === "task") {
             setDragTooltip({
                 visible: true,
                 x: e.clientX + 10,
                 y: e.clientY - 10,
-                task: r as TaskRow
+                task: r as TaskRow,
+                resource: null
+            });
+        } else if (r.kind === "resource") {
+            setDragTooltip({
+                visible: true,
+                x: e.clientX + 10,
+                y: e.clientY - 10,
+                task: null,
+                resource: r as ResourceRow
             });
         }
         
         // Добавляем обработчики для отслеживания движения мыши
         const handleMouseMove = (e: MouseEvent) => {
             if (!isDraggingRef.current) return;
+            
             
             // Обновляем состояние клавиши Shift
             isShiftPressedRef.current = e.shiftKey;
@@ -835,29 +1414,118 @@ export function RoadmapPlan() {
             
             // Подсвечиваем строку под курсором при нажатом Shift (для блокеров)
             if (e.shiftKey) {
-                const element = document.elementFromPoint(e.clientX, e.clientY);
-                const targetRow = element?.closest('tr[data-row-id]');
-                if (targetRow) {
-                    const targetRowId = targetRow.getAttribute('data-row-id');
-                    if (targetRowId && targetRowId !== dragRowRef.current?.id) {
-                        setHighlightedRowId(targetRowId);
-                        setDropPositionRowId(null); // Очищаем позицию вставки
+                const draggedRow = dragRowRef.current;
+                
+                // Если это задача - показываем красные рамки для блокеров
+                if (draggedRow && draggedRow.kind === 'task') {
+                    // Сначала очищаем dropPositionRowId, чтобы избежать двойных рамок
+                    setDropPositionRowId(null);
+                    setDropPosition('top');
+                    
+                    const element = document.elementFromPoint(e.clientX, e.clientY);
+                    const targetRow = element?.closest('tr[data-row-id]');
+                    if (targetRow) {
+                        const targetRowId = targetRow.getAttribute('data-row-id');
+                        if (targetRowId) {
+                            // Проверяем, что перетаскиваемая строка и целевая строка одного типа
+                            const targetRowData = rows.find(r => r.id === targetRowId);
+                            
+                            if (targetRowData && draggedRow.kind === targetRowData.kind) {
+                                setHighlightedRowId(targetRowId);
+                            } else {
+                                setHighlightedRowId(null);
+                            }
+                        } else {
+                            setHighlightedRowId(null);
+                        }
                     } else {
                         setHighlightedRowId(null);
                     }
                 } else {
-                    setHighlightedRowId(null);
+                    // Если это ресурс - показываем обычные серые рамки (как без Shift)
+                    setHighlightedRowId(null); // Очищаем подсветку блокеров
+                    setDropPosition('top');
+                    
+                    const element = document.elementFromPoint(e.clientX, e.clientY);
+                    const targetRow = element?.closest('tr[data-row-id]') || (e.target as HTMLElement)?.closest('tr[data-row-id]');
+                    
+                    if (targetRow) {
+                        const targetRowId = targetRow.getAttribute('data-row-id');
+                        if (targetRowId && targetRowId !== dragRowRef.current?.id) {
+                            // Проверяем, что перетаскиваемая строка и целевая строка одного типа
+                            const targetRowData = rows.find(r => r.id === targetRowId);
+                            
+                            if (draggedRow && targetRowData && draggedRow.kind === targetRowData.kind) {
+                                // Определяем позицию рамки в зависимости от направления перетаскивания
+                                const draggedRowData = rows.find(r => r.id === draggedRow.id);
+                                if (draggedRowData && targetRowData) {
+                                    const draggedIndex = rows.findIndex(r => r.id === draggedRow.id);
+                                    const targetIndex = rows.findIndex(r => r.id === targetRowId);
+                                    
+                                    // Если перетаскиваем вверх, показываем верхнюю рамку целевой строки
+                                    // Если перетаскиваем вниз, показываем нижнюю рамку целевой строки
+                                    if (draggedIndex < targetIndex) {
+                                        // Перетаскиваем вниз - нижняя рамка целевой строки
+                                        setDropPosition('bottom');
+                                        setDropPositionRowId(targetRowId);
+                                    } else {
+                                        // Перетаскиваем вверх - верхняя рамка целевой строки
+                                        setDropPosition('top');
+                                        setDropPositionRowId(targetRowId);
+                                    }
+                                } else {
+                                    setDropPositionRowId(targetRowId);
+                                }
+                            } else {
+                                setDropPositionRowId(null);
+                            }
+                        } else {
+                            setDropPositionRowId(null);
+                        }
+                    } else {
+                        setDropPositionRowId(null);
+                    }
                 }
             } else {
                 // Обычное перетаскивание - показываем позицию вставки
                 setHighlightedRowId(null); // Очищаем подсветку блокеров
+                setDropPosition('top');
                 
+                // Попробуем использовать e.target и document.elementFromPoint
                 const element = document.elementFromPoint(e.clientX, e.clientY);
-                const targetRow = element?.closest('tr[data-row-id]');
+                const targetRow = element?.closest('tr[data-row-id]') || (e.target as HTMLElement)?.closest('tr[data-row-id]');
+                
                 if (targetRow) {
                     const targetRowId = targetRow.getAttribute('data-row-id');
                     if (targetRowId && targetRowId !== dragRowRef.current?.id) {
-                        setDropPositionRowId(targetRowId);
+                        // Проверяем, что перетаскиваемая строка и целевая строка одного типа
+                        const draggedRow = dragRowRef.current;
+                        const targetRowData = rows.find(r => r.id === targetRowId);
+                        
+                        if (draggedRow && targetRowData && draggedRow.kind === targetRowData.kind) {
+                            // Определяем позицию рамки в зависимости от направления перетаскивания
+                            const draggedRowData = rows.find(r => r.id === draggedRow.id);
+                            if (draggedRowData && targetRowData) {
+                                const draggedIndex = rows.findIndex(r => r.id === draggedRow.id);
+                                const targetIndex = rows.findIndex(r => r.id === targetRowId);
+                                
+                                // Если перетаскиваем вверх, показываем верхнюю рамку целевой строки
+                                // Если перетаскиваем вниз, показываем нижнюю рамку целевой строки
+                                if (draggedIndex < targetIndex) {
+                                    // Перетаскиваем вниз - нижняя рамка целевой строки
+                                    setDropPosition('bottom');
+                                    setDropPositionRowId(targetRowId);
+                                } else {
+                                    // Перетаскиваем вверх - верхняя рамка целевой строки
+                                    setDropPosition('top');
+                                    setDropPositionRowId(targetRowId);
+                                }
+                            } else {
+                                setDropPositionRowId(targetRowId);
+                            }
+                        } else {
+                            setDropPositionRowId(null);
+                        }
                     } else {
                         setDropPositionRowId(null);
                     }
@@ -912,9 +1580,10 @@ export function RoadmapPlan() {
             }
             
             // Очищаем состояние
-            setDragTooltip({ visible: false, x: 0, y: 0, task: null });
+            setDragTooltip({ visible: false, x: 0, y: 0, task: null, resource: null });
             setHighlightedRowId(null);
             setDropPositionRowId(null);
+            setDropPosition('top');
             dragRowRef.current = null;
             isDraggingRef.current = false;
             clearDragAllowed();
@@ -1017,14 +1686,14 @@ export function RoadmapPlan() {
     // ====== Колоночные ширины и синхронизация горизонтального скролла ======
     const COL_WIDTH: Partial<Record<ColumnId, string>> = {
         type: '6rem',
-        status: '6rem',
+        status: '32rem', // Объединенная ширина для Status/Sprints/Epic/Task
         sprintsAuto: '10rem',
         epic: '8rem',
         task: '14rem',
         team: '10rem',
         fn: '6rem',
         empl: '8rem',
-        planEmpl: '8rem',
+        planEmpl: '24rem', // Объединенная ширина для Plan empl/Plan weeks/Auto
         planWeeks: '8rem',
         autoplan: '6rem',
     };
@@ -1086,7 +1755,7 @@ export function RoadmapPlan() {
     }
 
     // ====== Редактор недель ======
-// ====== Помощники для недельного редактирования ======
+    // ====== Помощники для недельного редактирования ======
 function getComputedTaskByIdLocal(id: ID): TaskRow | undefined {
     return computedRows.find(r => r.kind === "task" && r.id === id) as TaskRow | undefined;
 }
@@ -1096,6 +1765,12 @@ function weeksBaseForTaskLocal(t: TaskRow): number[] {
         if (ct) return ct.weeks.slice();
     }
     return t.weeks.slice();
+}
+
+// Функция для сравнения массивов недель - проверяет, изменилось ли значение
+function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
+    if (weeks1.length !== weeks2.length) return false;
+    return weeks1.every((val, index) => Math.abs(val - weeks2[index]) < 0.001);
 }
     const paintRef = useRef<{ active:boolean; rowId:ID; originW:number; value:number; started:boolean } | null>(null);
     function onWeekCellMouseDown(_e: React.MouseEvent, r: Row, w: number) {
@@ -1120,14 +1795,25 @@ function weeksBaseForTaskLocal(t: TaskRow): number[] {
         if (r.kind === "task") {
             const t = r as TaskRow;
             const base = t.weeks.slice(); // используем прямую копию weeks как для ресурсов
+            const originalWeeks = t.weeks.slice();
+            
             if (!p.started && w !== p.originW) {
                 p.started = true;
                 base[p.originW] = p.value; // включаем исходную ячейку в мазок
             }
             base[w] = p.value;
+            
+            // Проверяем, изменилось ли значение
+            const hasChanged = !weeksArraysEqual(base, originalWeeks);
+            
             setRows(prev => prev.map(x =>
                 (x.kind === "task" && x.id === t.id)
-                    ? { ...(x as TaskRow), manualEdited: true, autoPlanEnabled: false, weeks: base }
+                    ? { 
+                        ...(x as TaskRow), 
+                        weeks: base,
+                        // Устанавливаем флаги только если значение изменилось
+                        ...(hasChanged ? { manualEdited: true, autoPlanEnabled: false } : {})
+                    }
                     : x
             ));
         } else {
@@ -1214,8 +1900,6 @@ function weeksBaseForTaskLocal(t: TaskRow): number[] {
     // ====== Локальное состояние меню добавления ======
     const [addMenuOpen, setAddMenuOpen] = useState<boolean>(false);
     
-    // ====== Управление командами ======
-    const [isTeamManagementOpen, setIsTeamManagementOpen] = useState(false);
     function addResourceBottom() { setRows(prev => { const split = splitRows(prev); return [...split.resources, newResource(), ...split.tasks]; }); setAddMenuOpen(false); }
     function addTaskBottom() { setRows(prev => { const split = splitRows(prev); return [...split.resources, ...split.tasks, newTask()]; }); setAddMenuOpen(false); }
 
@@ -1269,6 +1953,7 @@ function weeksBaseForTaskLocal(t: TaskRow): number[] {
             <div className="flex gap-2">
                 <button className={`px-3 py-1 rounded ${tab==='plan'? 'bg-black text-white':'border'}`} onClick={()=>setTab('plan')}>План</button>
                 <button className={`px-3 py-1 rounded ${tab==='sprints'? 'bg-black text-white':'border'}`} onClick={()=>setTab('sprints')}>Спринты</button>
+                <button className={`px-3 py-1 rounded ${tab==='teams'? 'bg-black text-white':'border'}`} onClick={()=>setTab('teams')}>Команды</button>
             </div>
     
             {tab === 'plan' ? (
@@ -1291,7 +1976,7 @@ function weeksBaseForTaskLocal(t: TaskRow): number[] {
                             {renderHeadWithFilter("Auto", "autoplan")}
                             {/* Заголовки для недель */}
                             {range(TOTAL_WEEKS).map(w => { const h = weekHeaderLabelLocal(w); return (
-                                <th key={w} className="px-2 py-2 text-center whitespace-nowrap align-middle" style={{width: '3.5rem', border: '1px solid rgb(226, 232, 240)'}}>
+                                <th key={w} className="px-2 py-2 text-center whitespace-nowrap align-middle" style={{width: '3.5rem', border: '1px solid rgb(226, 232, 240)', paddingRight: '0.5em', paddingLeft: '0.5em' }}>
                                     <div className="text-xs font-semibold">#{h.num}</div>
                                     <div className="text-[10px] text-gray-500">{h.sprint || ""}</div>
                                     <div className="text-[10px] text-gray-400">с {h.from}</div>
@@ -1309,22 +1994,15 @@ function weeksBaseForTaskLocal(t: TaskRow): number[] {
                                 onContextMenu={(e)=>onContextMenuRow(e,r)}
                             >
                                 {/* Тип */}
-                                <td className={`px-2 py-1 align-middle bg-gray-50`} style={getCellBorderStyle(isSel(r.id,'type'))} onMouseDown={markDragAllowed}>Ресурс</td>
+                                <td className={`px-2 py-1 align-middle bg-gray-50 draggable-cell`} style={{...getCellBorderStyle(isSel(r.id,'type')), ...getCellBorderStyleForDrag(r.id)}} onMouseDown={markDragAllowed}>Ресурс</td>
 
-                                {/* Status */}
-                                <td className={`px-2 py-1 align-middle bg-gray-50 text-center`} style={getCellBorderStyle(isSel(r.id,'status'))} onMouseDown={markDragAllowed}></td>
-
-                                {/* Sprints readonly */}
-                                <td className={`px-2 py-1 align-middle bg-gray-50`} style={getCellBorderStyle(isSel(r.id,'sprintsAuto'))} onMouseDown={markDragAllowed}></td>
-
-                                {/* Epic */}
-                                <td className={`px-2 py-1 align-middle bg-gray-50`} style={getCellBorderStyle(isSel(r.id,'epic'))} onMouseDown={markDragAllowed}></td>
-
-                                {/* Task */}
-                                <td className={`px-2 py-1 align-middle bg-gray-50`} style={getCellBorderStyle(isSel(r.id,'task'))} onMouseDown={markDragAllowed}></td>
+                                {/* Объединенная ячейка для Status/Sprints/Epic/Task (не используется для ресурсов) */}
+                                <td className={`px-2 py-1 align-middle bg-gray-50 text-center text-gray-400 draggable-cell`} style={{...getCellBorderStyle(isSel(r.id,'status')), ...getCellBorderStyleForDrag(r.id)}} onMouseDown={markDragAllowed}
+                                    colSpan={4}
+                                >—</td>
 
                                 {/* Team */}
-                                <td className={`px-2 py-1 align-middle bg-gray-50`} style={getCellBorderStyle(isSel(r.id,'team'))} onMouseDown={markDragAllowed} onDoubleClick={()=>{
+                                <td className={`px-2 py-1 align-middle bg-gray-50 draggable-cell`} style={{...getCellBorderStyle(isSel(r.id,'team')), ...getCellBorderStyleForDrag(r.id)}} onMouseDown={markDragAllowed} onDoubleClick={()=>{
                                     console.log('Resource team cell double clicked, starting edit');
                                     startEdit({rowId:r.id,col:"team"});
                                 }} onClick={()=>{
@@ -1332,26 +2010,33 @@ function weeksBaseForTaskLocal(t: TaskRow): number[] {
                                     setSel({rowId:r.id,col:"team"});
                                 }}>
                                     {editing?.rowId===r.id && editing?.col==="team" ? (
-                                        <TeamMultiSelect
-                                            teams={teams}
-                                            selectedTeams={(r as ResourceRow).team}
-                                            onSelect={(selected) => updateResource(r.id, { team: selected })}
-                                            onAddNewTeam={(newTeam) => {
-                                                setTeams(prev => [...prev, newTeam]);
-                                                updateResource(r.id, { team: [...(r as ResourceRow).team, newTeam] });
-                                            }}
-                                        />
+                                        <div className="w-full h-full">
+                                            <TeamMultiSelect
+                                                teams={teamNames}
+                                                selectedTeams={(r as ResourceRow).team}
+                                                onSelect={(selected) => {
+                                                    updateResource(r.id, { team: selected });
+                                                    stopEdit();
+                                                }}
+                                                onSaveValue={(selected) => {
+                                                    updateResource(r.id, { team: selected });
+                                                }}
+                                                onTabNext={() => focusNextRight(r.id, 'team')}
+                                                onTabPrev={() => focusPrevLeft(r.id, 'team')}
+                                                onEscape={() => stopEdit()}
+                                            />
+                                        </div>
                                     ) : (<span>{(r as ResourceRow).team.join(', ')}</span>)}
                                 </td>
 
                                 {/* Fn */}
-                                <td className={`px-2 py-1 align-middle text-center`} style={{ backgroundColor: getBg(teamFnColors[teamKeyFromResource(r as ResourceRow)]), color: getText(teamFnColors[teamKeyFromResource(r as ResourceRow)]), ...getCellBorderStyle(isSel(r.id,'fn')) }} onMouseDown={markDragAllowed} onDoubleClick={()=>startEdit({rowId:r.id,col:"fn"})} onClick={()=>setSel({rowId:r.id,col:"fn"})} onContextMenu={(e)=>onContextMenuCellColor(e, r as ResourceRow, 'fn', 'resource')}>
+                                <td className={`px-2 py-1 align-middle text-center draggable-cell`} style={{ backgroundColor: getBg(teamFnColors[teamKeyFromResource(r as ResourceRow)]), color: getText(teamFnColors[teamKeyFromResource(r as ResourceRow)]), ...getCellBorderStyle(isSel(r.id,'fn')), ...getCellBorderStyleForDrag(r.id) }} onMouseDown={markDragAllowed} onDoubleClick={()=>startEdit({rowId:r.id,col:"fn"})} onClick={()=>setSel({rowId:r.id,col:"fn"})} onContextMenu={(e)=>onContextMenuCellColor(e, r as ResourceRow, 'fn', 'resource')}>
                                     {editing?.rowId===r.id && editing?.col==="fn" ? (
-                                        <input autoFocus className="border rounded px-1 py-0.5 w-full h-8 box-border min-w-0" defaultValue={r.fn}
+                                        <input autoFocus className="w-full h-full box-border min-w-0 outline-none bg-transparent" style={{ border: 'none', padding: 0, margin: 0 }} defaultValue={r.fn}
                                                onKeyDown={(e)=>{
                                                     if(e.key==='Enter'){ updateResource(r.id,{fn:(e.target as HTMLInputElement).value as Fn}); commitEdit(); }
-                                                    if (e.key === 'Tab' && e.shiftKey) { e.preventDefault(); e.stopPropagation(); commitEdit(); if (sel) focusPrevLeft(sel.rowId, sel.col); return; }
-                                                    if(e.key==='Tab'){ e.preventDefault(); updateResource(r.id,{fn:(e.target as HTMLInputElement).value as Fn}); focusNextRight(r.id,'fn'); }
+                                                    if (e.key === 'Tab' && e.shiftKey) { e.preventDefault(); e.stopPropagation(); updateResource(r.id,{fn:(e.target as HTMLInputElement).value as Fn}); navigateInEditMode('prev', r.id, 'fn'); return; }
+                                                    if(e.key==='Tab'){ e.preventDefault(); updateResource(r.id,{fn:(e.target as HTMLInputElement).value as Fn}); navigateInEditMode('next', r.id, 'fn'); }
                                                     if(e.key==='Escape'){ cancelEditRef.current=true; stopEdit(); }
                                                }}
                                                onBlur={(e)=>{ if(!cancelEditRef.current){ updateResource(r.id,{fn:(e.target as HTMLInputElement).value as Fn}); } stopEdit(); }} />
@@ -1359,31 +2044,27 @@ function weeksBaseForTaskLocal(t: TaskRow): number[] {
                                 </td>
 
                                 {/* Empl */}
-                                <td className={`px-2 py-1 align-middle bg-gray-50 text-center`} style={getCellBorderStyle(isSel(r.id,'empl'))} onMouseDown={markDragAllowed} onDoubleClick={()=>startEdit({rowId:r.id,col:"empl"})} onClick={()=>setSel({rowId:r.id,col:"empl"})}>
+                                <td className={`px-2 py-1 align-middle bg-gray-50 text-center draggable-cell`} style={{...getCellBorderStyle(isSel(r.id,'empl')), ...getCellBorderStyleForDrag(r.id)}} onMouseDown={markDragAllowed} onDoubleClick={()=>startEdit({rowId:r.id,col:"empl"})} onClick={()=>setSel({rowId:r.id,col:"empl"})}>
                                     {editing?.rowId===r.id && editing?.col==="empl" ? (
-                                        <input autoFocus className="border rounded px-1 py-0.5 w-full h-8 box-border min-w-0" defaultValue={(r as ResourceRow).empl || ""}
+                                        <input autoFocus className="w-full h-full box-border min-w-0 outline-none bg-transparent" style={{ border: 'none', padding: 0, margin: 0 }} defaultValue={(r as ResourceRow).empl || ""}
                                                onKeyDown={(e)=>{
                                                    if(e.key==='Enter'){ updateResource(r.id,{empl:(e.target as HTMLInputElement).value || undefined}); commitEdit(); }
-                                                   if (e.key === 'Tab' && e.shiftKey) { e.preventDefault(); e.stopPropagation(); commitEdit(); if (sel) focusPrevLeft(sel.rowId, sel.col); return; }
-                                                   if(e.key==='Tab'){ e.preventDefault(); updateResource(r.id,{empl:(e.target as HTMLInputElement).value || undefined}); focusNextRight(r.id,'empl'); }
+                                                   if (e.key === 'Tab' && e.shiftKey) { e.preventDefault(); e.stopPropagation(); updateResource(r.id,{empl:(e.target as HTMLInputElement).value || undefined}); navigateInEditMode('prev', r.id, 'empl'); return; }
+                                                   if(e.key==='Tab'){ e.preventDefault(); updateResource(r.id,{empl:(e.target as HTMLInputElement).value || undefined}); navigateInEditMode('next', r.id, 'empl'); }
                                                    if(e.key==='Escape'){ cancelEditRef.current=true; stopEdit(); }
                                                }}
                                                onBlur={(e)=>{ if(!cancelEditRef.current){ updateResource(r.id,{empl:(e.target as HTMLInputElement).value || undefined}); } stopEdit(); }} />
                                     ) : (<span>{(r as ResourceRow).empl || ''}</span>)}
                                 </td>
 
-                                {/* Plan empl */}
-                                <td className={`px-2 py-1 align-middle bg-gray-50 text-center`} style={getCellBorderStyle(isSel(r.id,'planEmpl'))}></td>
-
-                                {/* Plan weeks */}
-                                <td className={`px-2 py-1 align-middle bg-gray-50 text-center`} style={getCellBorderStyle(isSel(r.id,'planWeeks'))}></td>
-
-                                {/* Автоплан чекбокс */}
-                                <td className={`px-2 py-1 align-middle bg-gray-50 text-center`} style={getCellBorderStyle(isSel(r.id,'autoplan'))}></td>
+                                {/* Объединенная ячейка для Plan empl/Plan weeks/Auto (не используется для ресурсов) */}
+                                <td className={`px-2 py-1 align-middle bg-gray-50 text-center text-gray-400 draggable-cell`} style={{...getCellBorderStyle(isSel(r.id,'planEmpl')), ...getCellBorderStyleForDrag(r.id)}} onMouseDown={markDragAllowed}
+                                    colSpan={3}
+                                >—</td>
 
                                 {/* Таймлайн недель ресурса */}
                                 {range(TOTAL_WEEKS).map(w => (
-                                    <td key={w} className={`px-0 py-0 align-middle`} style={{width: '3.5rem', background: resourceCellBg(r as ResourceRow, w), ...getCellBorderStyle(isSelWeek(r.id,w))}}>
+                                    <td key={w} className={`px-0 py-0 align-middle week-cell`} style={{width: '3.5rem', background: resourceCellBg(r as ResourceRow, w), ...getCellBorderStyle(isSelWeek(r.id,w)), ...getCellBorderStyleForDrag(r.id)}}>
                                         <div
                                             onMouseDown={(e)=>onWeekCellMouseDown(e,r,w)}
                                             onMouseEnter={(e)=>onWeekCellMouseEnter(e,r,w)}
@@ -1396,7 +2077,8 @@ function weeksBaseForTaskLocal(t: TaskRow): number[] {
                                                 <input
                                                     autoFocus
                                                     type="number"
-                                                    className="w-full h-full box-border text-center outline-none p-0 m-0"
+                                                    className="w-full h-full box-border text-center outline-none bg-transparent"
+                                                    style={{ border: 'none', padding: 0, margin: 0 }}
                                                     defaultValue={(r as ResourceRow).weeks[w] ? String((r as ResourceRow).weeks[w]) : ""}
                                                     onKeyDown={(e)=>{
                                                         if(e.key==='Enter'){
@@ -1448,7 +2130,7 @@ function weeksBaseForTaskLocal(t: TaskRow): number[] {
                         {/* Задачи */}
                         {filteredRows.filter(r => r.kind === "task").map(r => (
                             <tr key={r.id}
-                                className={`border-b bg-white ${highlightedRowId === r.id ? 'ring-2 ring-blue-400' : ''}`}
+                                className="border-b bg-white"
                                 data-row-id={r.id}
                                 onMouseDown={(e)=>{ 
                                     if (r.kind==='task') onTaskMouseDown(e, r as TaskRow); 
@@ -1458,36 +2140,43 @@ function weeksBaseForTaskLocal(t: TaskRow): number[] {
                                 onContextMenu={(e)=>onContextMenuRow(e,r)}
                             >
                                 {/* Тип */}
-                                <td className={`px-2 py-1 align-middle bg-white ${getCellBorderClass(r.id)}`} style={getCellBorderStyle(isSel(r.id,'type'))} onMouseDown={markDragAllowed}>Задача</td>
+                                <td className={`px-2 py-1 align-middle bg-white ${getCellBorderClass(r.id)} draggable-cell`} style={{...getCellBorderStyle(isSel(r.id,'type')), ...getCellBorderStyleForDrag(r.id)}} onMouseDown={markDragAllowed}>Задача</td>
 
                                 {/* Status */}
-                                <td className={`px-2 py-1 align-middle text-center bg-white ${getCellBorderClass(r.id)}`} style={getCellBorderStyle(isSel(r.id,'status'))} onMouseDown={markDragAllowed} onDoubleClick={()=>startEdit({rowId:r.id,col:"status"})} onClick={()=>setSel({rowId:r.id,col:"status"})}>
+                                <td className={`px-2 py-1 align-middle text-center bg-white ${getCellBorderClass(r.id)} draggable-cell`} style={{...getCellBorderStyle(isSel(r.id,'status')), ...getCellBorderStyleForDrag(r.id)}} onMouseDown={markDragAllowed} onDoubleClick={()=>startEdit({rowId:r.id,col:"status"})} onClick={()=>setSel({rowId:r.id,col:"status"})}>
                                     {editing?.rowId===r.id && editing?.col==="status" ? (
-                                        <select autoFocus className="border rounded px-1 py-0.5 w-full h-8 box-border" value={(r as TaskRow).status}
-                                                onChange={(e)=>{ updateTask(r.id,{status:(e.target as HTMLSelectElement).value as Status}); }}
-                                                onKeyDown={(e)=>{
-                                                    if(e.key==='Enter'){ updateTask(r.id,{status:(e.target as HTMLSelectElement).value as Status}); commitEdit(); }
-                                                    if (e.key === 'Tab' && e.shiftKey) { e.preventDefault(); e.stopPropagation(); commitEdit(); if (sel) focusPrevLeft(sel.rowId, sel.col); return; }
-                                                    if(e.key==='Tab'){ e.preventDefault(); updateTask(r.id,{status:(e.target as HTMLSelectElement).value as Status}); focusNextRight(r.id,'status'); }
-                                                    if(e.key==='Escape'){cancelEditRef.current=true; stopEdit();}
+                                        <div className="w-full h-full">
+                                            <Select
+                                                options={["Todo", "Backlog", "Cancelled"]}
+                                                selectedValue={(r as TaskRow).status}
+                                                onSelect={(selected) => {
+                                                    updateTask(r.id, { status: selected as Status });
+                                                    stopEdit();
                                                 }}
-                                                onBlur={(e)=>{ if(!cancelEditRef.current){ updateTask(r.id,{status:(e.target as HTMLSelectElement).value as Status}); } stopEdit(); }}>
-                                            <option>Todo</option><option>Backlog</option><option>Cancelled</option>
-                                        </select>
+                                                onSaveValue={(selected) => {
+                                                    updateTask(r.id, { status: selected as Status });
+                                                }}
+                                                onTabNext={() => navigateInEditMode('next', r.id, 'status')}
+                                                onTabPrev={() => navigateInEditMode('prev', r.id, 'status')}
+                                                onEscape={() => stopEdit()}
+                                                placeholder="Выберите статус..."
+                                                searchPlaceholder="Поиск статусов..."
+                                            />
+                                        </div>
                                     ) : (<span>{(r as TaskRow).status || ""}</span>)}
                                </td>
 
                                 {/* Sprints readonly */}
-                                <td className={`px-2 py-1 align-middle bg-white ${getCellBorderClass(r.id)}`} style={getCellBorderStyle(isSel(r.id,'sprintsAuto'))} onMouseDown={markDragAllowed} onClick={()=>setSel({rowId:r.id,col:"sprintsAuto"})}>{(r as TaskRow).sprintsAuto.join(", ")||""}</td>
+                                <td className={`px-2 py-1 align-middle bg-white ${getCellBorderClass(r.id)} draggable-cell`} style={{...getCellBorderStyle(isSel(r.id,'sprintsAuto')), ...getCellBorderStyleForDrag(r.id)}} onMouseDown={markDragAllowed}>{(r as TaskRow).sprintsAuto.join(", ")||""}</td>
 
                                 {/* Epic */}
-                                <td className={`px-2 py-1 align-middle bg-white ${getCellBorderClass(r.id)}`} style={getCellBorderStyle(isSel(r.id,'epic'))} onMouseDown={markDragAllowed} onDoubleClick={()=>startEdit({rowId:r.id,col:"epic"})} onClick={()=>setSel({rowId:r.id,col:"epic"})}>
+                                <td className={`px-2 py-1 align-middle bg-white ${getCellBorderClass(r.id)} draggable-cell`} style={{...getCellBorderStyle(isSel(r.id,'epic')), ...getCellBorderStyleForDrag(r.id)}} onMouseDown={markDragAllowed} onDoubleClick={()=>startEdit({rowId:r.id,col:"epic"})} onClick={()=>setSel({rowId:r.id,col:"epic"})}>
                                     {editing?.rowId===r.id && editing?.col==="epic" ? (
-                                        <input autoFocus className="border rounded px-1 py-0.5 w-full h-8 box-border min-w-0" defaultValue={(r as TaskRow).epic||""}
+                                        <input autoFocus className="w-full h-full box-border min-w-0 outline-none bg-transparent" style={{ border: 'none', padding: 0, margin: 0 }} defaultValue={(r as TaskRow).epic||""}
                                                onKeyDown={(e)=>{
                                                    if(e.key==='Enter'){ updateTask(r.id,{epic:(e.target as HTMLInputElement).value}); commitEdit(); }
-                                                   if (e.key === 'Tab' && e.shiftKey) { e.preventDefault(); e.stopPropagation(); commitEdit(); if (sel) focusPrevLeft(sel.rowId, sel.col); return; }
-                                                   if(e.key==='Tab'){ e.preventDefault(); updateTask(r.id,{epic:(e.target as HTMLInputElement).value}); focusNextRight(r.id,'epic'); }
+                                                   if (e.key === 'Tab' && e.shiftKey) { e.preventDefault(); e.stopPropagation(); updateTask(r.id,{epic:(e.target as HTMLInputElement).value}); navigateInEditMode('prev', r.id, 'epic'); return; }
+                                                   if(e.key==='Tab'){ e.preventDefault(); updateTask(r.id,{epic:(e.target as HTMLInputElement).value}); navigateInEditMode('next', r.id, 'epic'); }
                                                    if(e.key==='Escape'){ cancelEditRef.current=true; stopEdit(); }
                                               }}
                                                onBlur={(e)=>{ if(!cancelEditRef.current){ updateTask(r.id,{epic:(e.target as HTMLInputElement).value}); } stopEdit(); }} />
@@ -1495,13 +2184,13 @@ function weeksBaseForTaskLocal(t: TaskRow): number[] {
                                 </td>
 
                                 {/* Task */}
-                                <td className={`px-2 py-1 align-middle bg-white ${getCellBorderClass(r.id)}`} style={getCellBorderStyle(isSel(r.id,'task'))} onMouseDown={markDragAllowed} onDoubleClick={()=>startEdit({rowId:r.id,col:"task"})} onClick={()=>setSel({rowId:r.id,col:"task"})}>
+                                <td className={`px-2 py-1 align-middle bg-white ${getCellBorderClass(r.id)} draggable-cell`} style={{...getCellBorderStyle(isSel(r.id,'task')), ...getCellBorderStyleForDrag(r.id)}} onMouseDown={markDragAllowed} onDoubleClick={()=>startEdit({rowId:r.id,col:"task"})} onClick={()=>setSel({rowId:r.id,col:"task"})}>
                                     {editing?.rowId===r.id && editing?.col==="task" ? (
-                                        <input autoFocus className="border rounded px-1 py-0.5 w-full h-8 box-border min-w-0" defaultValue={(r as TaskRow).task}
+                                        <input autoFocus className="w-full h-full box-border min-w-0 outline-none bg-transparent" style={{ border: 'none', padding: 0, margin: 0 }} defaultValue={(r as TaskRow).task}
                                                onKeyDown={(e)=>{
                                                    if(e.key==='Enter'){ updateTask(r.id,{task:(e.target as HTMLInputElement).value}); commitEdit(); }
-                                                   if (e.key === 'Tab' && e.shiftKey) { e.preventDefault(); e.stopPropagation(); commitEdit(); if (sel) focusPrevLeft(sel.rowId, sel.col); return; }
-                                                   if(e.key==='Tab'){ e.preventDefault(); updateTask(r.id,{task:(e.target as HTMLInputElement).value}); focusNextRight(r.id,'task'); }
+                                                   if (e.key === 'Tab' && e.shiftKey) { e.preventDefault(); e.stopPropagation(); updateTask(r.id,{task:(e.target as HTMLInputElement).value}); navigateInEditMode('prev', r.id, 'task'); return; }
+                                                   if(e.key==='Tab'){ e.preventDefault(); updateTask(r.id,{task:(e.target as HTMLInputElement).value}); navigateInEditMode('next', r.id, 'task'); }
                                                    if(e.key==='Escape'){ cancelEditRef.current=true; stopEdit(); }
                                               }}
                                                onBlur={(e)=>{ if(!cancelEditRef.current){ updateTask(r.id,{task:(e.target as HTMLInputElement).value}); } stopEdit(); }} />
@@ -1509,7 +2198,7 @@ function weeksBaseForTaskLocal(t: TaskRow): number[] {
                                 </td>
 
                                 {/* Team */}
-                                <td className={`px-2 py-1 align-middle bg-white ${getCellBorderClass(r.id)}`} style={getCellBorderStyle(isSel(r.id,'team'))} onMouseDown={markDragAllowed} onDoubleClick={()=>{
+                                <td className={`px-2 py-1 align-middle bg-white ${getCellBorderClass(r.id)} draggable-cell`} style={{...getCellBorderStyle(isSel(r.id,'team')), ...getCellBorderStyleForDrag(r.id)}} onMouseDown={markDragAllowed} onDoubleClick={()=>{
                                     console.log('Task team cell double clicked, starting edit');
                                     startEdit({rowId:r.id,col:"team"});
                                 }} onClick={()=>{
@@ -1517,26 +2206,35 @@ function weeksBaseForTaskLocal(t: TaskRow): number[] {
                                     setSel({rowId:r.id,col:"team"});
                                 }}>
                                     {editing?.rowId===r.id && editing?.col==="team" ? (
-                                        <TeamSelect
-                                            teams={teams}
-                                            selectedTeam={r.team}
-                                            onSelect={(selected) => updateTask(r.id, { team: selected })}
-                                            onAddNewTeam={(newTeam) => {
-                                                setTeams(prev => [...prev, newTeam]);
-                                                updateTask(r.id, { team: newTeam });
-                                            }}
-                                        />
+                                        <div className="w-full h-full">
+                                            <Select
+                                                options={teamNames}
+                                                selectedValue={r.team}
+                                                onSelect={(selected) => {
+                                                    updateTask(r.id, { team: selected });
+                                                    stopEdit();
+                                                }}
+                                                onSaveValue={(selected) => {
+                                                    updateTask(r.id, { team: selected });
+                                                }}
+                                                onTabNext={() => focusNextRight(r.id, 'team')}
+                                                onTabPrev={() => focusPrevLeft(r.id, 'team')}
+                                                onEscape={() => stopEdit()}
+                                                placeholder="Выберите команду..."
+                                                searchPlaceholder="Поиск команд..."
+                                            />
+                                        </div>
                                     ) : (<span>{r.team}</span>)}
                                 </td>
 
                                 {/* Fn */}
-                                <td className={`px-2 py-1 align-middle text-center`} style={{ backgroundColor: getBg(teamFnColors[teamKeyFromTask(r as TaskRow)]), color: getText(teamFnColors[teamKeyFromTask(r as TaskRow)]), ...getCellBorderStyle(isSel(r.id,'fn')) }} onMouseDown={markDragAllowed} onDoubleClick={()=>startEdit({rowId:r.id,col:"fn"})} onClick={()=>setSel({rowId:r.id,col:"fn"})} onContextMenu={(e)=>onContextMenuCellColor(e, r as TaskRow, 'fn', 'task')}>
+                                <td className={`px-2 py-1 align-middle text-center draggable-cell`} style={{ backgroundColor: getBg(teamFnColors[teamKeyFromTask(r as TaskRow)]), color: getText(teamFnColors[teamKeyFromTask(r as TaskRow)]), ...getCellBorderStyle(isSel(r.id,'fn')), ...getCellBorderStyleForDrag(r.id) }} onMouseDown={markDragAllowed} onDoubleClick={()=>startEdit({rowId:r.id,col:"fn"})} onClick={()=>setSel({rowId:r.id,col:"fn"})} onContextMenu={(e)=>onContextMenuCellColor(e, r as TaskRow, 'fn', 'task')}>
                                     {editing?.rowId===r.id && editing?.col==="fn" ? (
-                                        <input autoFocus className="border rounded px-1 py-0.5 w-full h-8 box-border min-w-0" defaultValue={r.fn}
+                                        <input autoFocus className="w-full h-full box-border min-w-0 outline-none bg-transparent" style={{ border: 'none', padding: 0, margin: 0 }} defaultValue={r.fn}
                                                onKeyDown={(e)=>{
                                                    if(e.key==='Enter'){ updateTask(r.id,{fn:(e.target as HTMLInputElement).value as Fn}); commitEdit(); }
-                                                   if (e.key === 'Tab' && e.shiftKey) { e.preventDefault(); e.stopPropagation(); commitEdit(); if (sel) focusPrevLeft(sel.rowId, sel.col); return; }
-                                                   if(e.key==='Tab'){ e.preventDefault(); updateTask(r.id,{fn:(e.target as HTMLInputElement).value as Fn}); focusNextRight(r.id,'fn'); }
+                                                   if (e.key === 'Tab' && e.shiftKey) { e.preventDefault(); e.stopPropagation(); updateTask(r.id,{fn:(e.target as HTMLInputElement).value as Fn}); navigateInEditMode('prev', r.id, 'fn'); return; }
+                                                   if(e.key==='Tab'){ e.preventDefault(); updateTask(r.id,{fn:(e.target as HTMLInputElement).value as Fn}); navigateInEditMode('next', r.id, 'fn'); }
                                                    if(e.key==='Escape'){ cancelEditRef.current=true; stopEdit(); }
                                               }}
                                                onBlur={(e)=>{ if(!cancelEditRef.current){ updateTask(r.id,{fn:(e.target as HTMLInputElement).value as Fn}); } stopEdit(); }} />
@@ -1544,13 +2242,13 @@ function weeksBaseForTaskLocal(t: TaskRow): number[] {
                                 </td>
 
                                 {/* Empl */}
-                                <td className={`px-2 py-1 align-middle text-center bg-white ${getCellBorderClass(r.id)}`} style={getCellBorderStyle(isSel(r.id,'empl'))} onMouseDown={markDragAllowed} onDoubleClick={()=>startEdit({rowId:r.id,col:"empl"})} onClick={()=>setSel({rowId:r.id,col:"empl"})}>
+                                <td className={`px-2 py-1 align-middle text-center bg-white ${getCellBorderClass(r.id)} draggable-cell`} style={{...getCellBorderStyle(isSel(r.id,'empl')), ...getCellBorderStyleForDrag(r.id)}} onMouseDown={markDragAllowed} onDoubleClick={()=>startEdit({rowId:r.id,col:"empl"})} onClick={()=>setSel({rowId:r.id,col:"empl"})}>
                                     {editing?.rowId===r.id && editing?.col==="empl" ? (
-                                        <input autoFocus className="border rounded px-1 py-0.5 w-full h-8 box-border min-w-0" defaultValue={(r as TaskRow).empl || ""}
+                                        <input autoFocus className="w-full h-full box-border min-w-0 outline-none bg-transparent" style={{ border: 'none', padding: 0, margin: 0 }} defaultValue={(r as TaskRow).empl || ""}
                                                onKeyDown={(e)=>{
                                                    if(e.key==='Enter'){ updateTask(r.id,{empl:(e.target as HTMLInputElement).value || undefined}); commitEdit(); }
-                                                   if (e.key === 'Tab' && e.shiftKey) { e.preventDefault(); e.stopPropagation(); commitEdit(); if (sel) focusPrevLeft(sel.rowId, sel.col); return; }
-                                                   if(e.key==='Tab'){ e.preventDefault(); updateTask(r.id,{empl:(e.target as HTMLInputElement).value || undefined}); focusNextRight(r.id,'empl'); }
+                                                   if (e.key === 'Tab' && e.shiftKey) { e.preventDefault(); e.stopPropagation(); updateTask(r.id,{empl:(e.target as HTMLInputElement).value || undefined}); navigateInEditMode('prev', r.id, 'empl'); return; }
+                                                   if(e.key==='Tab'){ e.preventDefault(); updateTask(r.id,{empl:(e.target as HTMLInputElement).value || undefined}); navigateInEditMode('next', r.id, 'empl'); }
                                                    if(e.key==='Escape'){ cancelEditRef.current=true; stopEdit(); }
                                               }}
                                                onBlur={(e)=>{ if(!cancelEditRef.current){ updateTask(r.id,{empl:(e.target as HTMLInputElement).value || undefined}); } stopEdit(); }} />
@@ -1558,13 +2256,13 @@ function weeksBaseForTaskLocal(t: TaskRow): number[] {
                                 </td>
 
                                 {/* Plan empl */}
-                                <td className={`px-2 py-1 align-middle text-center bg-white ${getCellBorderClass(r.id)}`} style={getCellBorderStyle(isSel(r.id,'planEmpl'))} onMouseDown={markDragAllowed} onDoubleClick={()=>startEdit({rowId:r.id,col:"planEmpl"})} onClick={()=>setSel({rowId:r.id,col:"planEmpl"})}>
+                                <td className={`px-2 py-1 align-middle text-center bg-white ${getCellBorderClass(r.id)} draggable-cell`} style={{...getCellBorderStyle(isSel(r.id,'planEmpl')), ...getCellBorderStyleForDrag(r.id)}} onMouseDown={markDragAllowed} onDoubleClick={()=>startEdit({rowId:r.id,col:"planEmpl"})} onClick={()=>setSel({rowId:r.id,col:"planEmpl"})}>
                                     {editing?.rowId===r.id && editing?.col==="planEmpl" ? (
-                                        <input autoFocus type="number" className="border rounded px-1 py-0.5 w-full h-8 box-border min-w-0" defaultValue={(r as TaskRow).planEmpl}
+                                        <input autoFocus type="number" className="w-full h-full box-border min-w-0 outline-none bg-transparent" style={{ border: 'none', padding: 0, margin: 0 }} defaultValue={(r as TaskRow).planEmpl}
                                                onKeyDown={(e)=>{
                                                    if(e.key==='Enter'){ updateTask(r.id,{planEmpl: clamp(parseFloat((e.target as HTMLInputElement).value||"0"),0,99)}); commitEdit(); }
-                                                   if (e.key === 'Tab' && e.shiftKey) { e.preventDefault(); e.stopPropagation(); commitEdit(); if (sel) focusPrevLeft(sel.rowId, sel.col); return; }
-                                                   if(e.key==='Tab'){ e.preventDefault(); updateTask(r.id,{planEmpl: clamp(parseFloat((e.target as HTMLInputElement).value||"0"),0,99)}); focusNextRight(r.id,'planEmpl'); }
+                                                   if (e.key === 'Tab' && e.shiftKey) { e.preventDefault(); e.stopPropagation(); updateTask(r.id,{planEmpl: clamp(parseFloat((e.target as HTMLInputElement).value||"0"),0,99)}); navigateInEditMode('prev', r.id, 'planEmpl'); return; }
+                                                   if(e.key==='Tab'){ e.preventDefault(); updateTask(r.id,{planEmpl: clamp(parseFloat((e.target as HTMLInputElement).value||"0"),0,99)}); navigateInEditMode('next', r.id, 'planEmpl'); }
                                                    if(e.key==='Escape'){ cancelEditRef.current=true; stopEdit(); }
                                               }}
                                                onBlur={(e)=>{ if(!cancelEditRef.current){ updateTask(r.id,{planEmpl: clamp(parseFloat((e.target as HTMLInputElement).value||"0"),0,99)}); } stopEdit(); }} />
@@ -1572,13 +2270,13 @@ function weeksBaseForTaskLocal(t: TaskRow): number[] {
                                 </td>
 
                                 {/* Plan weeks */}
-                                <td className={`px-2 py-1 align-middle text-center bg-white ${getCellBorderClass(r.id)}`} style={getCellBorderStyle(isSel(r.id,'planWeeks'))} onMouseDown={markDragAllowed} onDoubleClick={()=>startEdit({rowId:r.id,col:"planWeeks"})} onClick={()=>setSel({rowId:r.id,col:"planWeeks"})}>
+                                <td className={`px-2 py-1 align-middle text-center bg-white ${getCellBorderClass(r.id)} draggable-cell`} style={{...getCellBorderStyle(isSel(r.id,'planWeeks')), ...getCellBorderStyleForDrag(r.id)}} onMouseDown={markDragAllowed} onDoubleClick={()=>startEdit({rowId:r.id,col:"planWeeks"})} onClick={()=>setSel({rowId:r.id,col:"planWeeks"})}>
                                     {editing?.rowId===r.id && editing?.col==="planWeeks" ? (
-                                        <input autoFocus type="number" className="border rounded px-1 py-0.5 w-full h-8 box-border min-w-0" defaultValue={(r as TaskRow).planWeeks}
+                                        <input autoFocus type="number" className="w-full h-full box-border min-w-0 outline-none bg-transparent" style={{ border: 'none', padding: 0, margin: 0 }} defaultValue={(r as TaskRow).planWeeks}
                                                onKeyDown={(e)=>{
                                                    if(e.key==='Enter'){ updateTask(r.id,{planWeeks: clamp(parseInt((e.target as HTMLInputElement).value||"0"),0,TOTAL_WEEKS)}); commitEdit(); }
-                                                   if (e.key === 'Tab' && e.shiftKey) { e.preventDefault(); e.stopPropagation(); commitEdit(); if (sel) focusPrevLeft(sel.rowId, sel.col); return; }
-                                                   if(e.key==='Tab'){ e.preventDefault(); updateTask(r.id,{planWeeks: clamp(parseInt((e.target as HTMLInputElement).value||"0"),0,TOTAL_WEEKS)}); focusNextRight(r.id,'planWeeks'); }
+                                                   if (e.key === 'Tab' && e.shiftKey) { e.preventDefault(); e.stopPropagation(); updateTask(r.id,{planWeeks: clamp(parseInt((e.target as HTMLInputElement).value||"0"),0,TOTAL_WEEKS)}); navigateInEditMode('prev', r.id, 'planWeeks'); return; }
+                                                   if(e.key==='Tab'){ e.preventDefault(); updateTask(r.id,{planWeeks: clamp(parseInt((e.target as HTMLInputElement).value||"0"),0,TOTAL_WEEKS)}); navigateInEditMode('next', r.id, 'planWeeks'); }
                                                    if(e.key==='Escape'){ cancelEditRef.current=true; stopEdit(); }
                                               }}
                                                onBlur={(e)=>{ if(!cancelEditRef.current){ updateTask(r.id,{planWeeks: clamp(parseInt((e.target as HTMLInputElement).value||"0"),0,TOTAL_WEEKS)}); } stopEdit(); }} />
@@ -1586,44 +2284,94 @@ function weeksBaseForTaskLocal(t: TaskRow): number[] {
                                 </td>
 
                     {/* Автоплан чекбокс */}
-                    <td className={`px-2 py-1 align-middle text-center bg-white ${getCellBorderClass(r.id)}`} style={getCellBorderStyle(isSel(r.id,'autoplan'))} onMouseDown={markDragAllowed} onClick={()=>setSel({rowId:r.id,col:"autoplan"})}>
+                    <td className={`px-2 py-1 align-middle text-center bg-white ${getCellBorderClass(r.id)} draggable-cell`} style={{...getCellBorderStyle(isSel(r.id,'autoplan')), ...getCellBorderStyleForDrag(r.id)}} onMouseDown={markDragAllowed} onClick={()=>setSel({rowId:r.id,col:"autoplan"})}>
                         <label className="inline-flex items-center gap-2">
-                            <input type="checkbox" checked={(r as TaskRow).autoPlanEnabled} onChange={e=>toggleAutoPlan(r.id, e.currentTarget.checked)} />
+                            <input type="checkbox" checked={(r as TaskRow).autoPlanEnabled} onChange={e=>toggleAutoPlan(r.id, e.currentTarget.checked)} 
+                                   onKeyDown={(e)=>{
+                                       if (e.key === 'Tab' && e.shiftKey) { e.preventDefault(); e.stopPropagation(); navigateInEditMode('prev', r.id, 'autoplan'); return; }
+                                       if(e.key==='Tab'){ e.preventDefault(); navigateInEditMode('next', r.id, 'autoplan'); }
+                                   }} />
                         </label>
                     </td>
 
                     {/* Таймлайн с горизонтальным скроллом */}
                     {range(TOTAL_WEEKS).map(w => (
-                        <td key={w} id={cellId(r.id, w)} className={`px-0 py-0 align-middle ${getCellBorderClass(r.id)}`} style={{width: '3.5rem', background: ((r as TaskRow).weeks[w] || 0) > 0 ? cellBgForTask(r as TaskRow) : undefined, color: ((r as TaskRow).weeks[w] || 0) > 0 ? getText(teamFnColors[teamKeyFromTask(r as TaskRow)]) : undefined, ...getCellBorderStyle(isSelWeek(r.id,w))}} onMouseDown={(e)=>onWeekCellMouseDown(e,r,w)} onMouseEnter={(e)=>onWeekCellMouseEnter(e,r,w)}>
+                        <td key={w} id={cellId(r.id, w)} className={`px-0 py-0 align-middle ${getCellBorderClass(r.id)} week-cell`} style={{width: '3.5rem', background: ((r as TaskRow).weeks[w] || 0) > 0 ? cellBgForTask(r as TaskRow) : undefined, color: ((r as TaskRow).weeks[w] || 0) > 0 ? getText(teamFnColors[teamKeyFromTask(r as TaskRow)]) : undefined, ...getCellBorderStyle(isSelWeek(r.id,w)), ...getCellBorderStyleForDrag(r.id)}} onMouseDown={(e)=>onWeekCellMouseDown(e,r,w)} onMouseEnter={(e)=>onWeekCellMouseEnter(e,r,w)} onDoubleClick={(e)=>onWeekCellDoubleClick(e,r,w)}>
                             {editing?.rowId===r.id && typeof editing.col==='object' && editing.col.week===w ? (
                                 <input
                                     autoFocus
                                     type="number"
-                                    className="w-full h-full border text-sm text-center box-border outline-none p-0 m-0"
+                                    className="w-full h-full text-sm text-center box-border outline-none bg-transparent"
+                                    style={{ border: 'none', padding: 0, margin: 0 }}
                                     defaultValue={((r as TaskRow).weeks[w] || 0) === 0 ? "" : String((r as TaskRow).weeks[w])}
                                     onKeyDown={(e)=>{
                                         if(e.key==='Enter'){
                                             const raw = (e.target as HTMLInputElement).value;
                                             const val = Math.max(0, parseFloat(raw||"0"));
                                             const base = weeksBaseForTaskLocal(r as TaskRow);
+                                            const originalWeeks = (r as TaskRow).weeks.slice();
                                             base[w] = val;
+                                            
+                                            // Проверяем, изменилось ли значение
+                                            const hasChanged = !weeksArraysEqual(base, originalWeeks);
+                                            
                                             setRows(prev=>prev.map(x =>
                                                 (x.kind==='task' && x.id===r.id)
-                                                    ? { ...(x as TaskRow), manualEdited: true, autoPlanEnabled: false, weeks: base }
+                                                    ? { 
+                                                        ...(x as TaskRow), 
+                                                        weeks: base,
+                                                        // Устанавливаем флаги только если значение изменилось
+                                                        ...(hasChanged ? { manualEdited: true, autoPlanEnabled: false } : {})
+                                                    }
                                                     : x
                                             ));
                                             commitEdit();
                                         }
-                                        if (e.key === 'Tab' && e.shiftKey) { e.preventDefault(); e.stopPropagation(); commitEdit(); if (sel) focusPrevLeft(sel.rowId, sel.col); return; }
+                                        if (e.key === 'Tab' && e.shiftKey) { 
+                                            e.preventDefault(); 
+                                            e.stopPropagation(); 
+                                            const raw = (e.target as HTMLInputElement).value;
+                                            const val = Math.max(0, parseFloat(raw||"0"));
+                                            const base = weeksBaseForTaskLocal(r as TaskRow);
+                                            const originalWeeks = (r as TaskRow).weeks.slice();
+                                            base[w] = val;
+                                            
+                                            // Проверяем, изменилось ли значение
+                                            const hasChanged = !weeksArraysEqual(base, originalWeeks);
+                                            
+                                            setRows(prev=>prev.map(x =>
+                                                (x.kind==='task' && x.id===r.id)
+                                                    ? { 
+                                                        ...(x as TaskRow), 
+                                                        weeks: base,
+                                                        // Устанавливаем флаги только если значение изменилось
+                                                        ...(hasChanged ? { manualEdited: true, autoPlanEnabled: false } : {})
+                                                    }
+                                                    : x
+                                            ));
+                                            commitEdit(); 
+                                            if (sel) focusPrevLeft(sel.rowId, sel.col); 
+                                            return; 
+                                        }
                                         if(e.key==='Tab'){
                                             e.preventDefault();
                                             const raw = (e.target as HTMLInputElement).value;
                                             const val = Math.max(0, parseFloat(raw||"0"));
                                             const base = weeksBaseForTaskLocal(r as TaskRow);
+                                            const originalWeeks = (r as TaskRow).weeks.slice();
                                             base[w] = val;
+                                            
+                                            // Проверяем, изменилось ли значение
+                                            const hasChanged = !weeksArraysEqual(base, originalWeeks);
+                                            
                                             setRows(prev=>prev.map(x =>
                                                 (x.kind==='task' && x.id===r.id)
-                                                    ? { ...(x as TaskRow), manualEdited: true, autoPlanEnabled: false, weeks: base }
+                                                    ? { 
+                                                        ...(x as TaskRow), 
+                                                        weeks: base,
+                                                        // Устанавливаем флаги только если значение изменилось
+                                                        ...(hasChanged ? { manualEdited: true, autoPlanEnabled: false } : {})
+                                                    }
                                                     : x
                                             ));
                                             focusNextRight(r.id, {week:w});
@@ -1638,10 +2386,20 @@ function weeksBaseForTaskLocal(t: TaskRow): number[] {
                                             const raw = (e.target as HTMLInputElement).value;
                                             const val = Math.max(0, parseFloat(raw||"0"));
                                             const base = weeksBaseForTaskLocal(r as TaskRow);
+                                            const originalWeeks = (r as TaskRow).weeks.slice();
                                             base[w] = val;
+                                            
+                                            // Проверяем, изменилось ли значение
+                                            const hasChanged = !weeksArraysEqual(base, originalWeeks);
+                                            
                                             setRows(prev=>prev.map(x =>
                                                 (x.kind==='task' && x.id===r.id)
-                                                    ? { ...(x as TaskRow), manualEdited: true, autoPlanEnabled: false, weeks: base }
+                                                    ? { 
+                                                        ...(x as TaskRow), 
+                                                        weeks: base,
+                                                        // Устанавливаем флаги только если значение изменилось
+                                                        ...(hasChanged ? { manualEdited: true, autoPlanEnabled: false } : {})
+                                                    }
                                                     : x
                                             ));
                                         }
@@ -1688,29 +2446,315 @@ function weeksBaseForTaskLocal(t: TaskRow): number[] {
                 </div>
             </div>
         </>
-    ) : (
-        // ===== Вкладка «Спринты» =====
-        <div className="flex-grow border rounded-xl overflow-auto">
-            <table className="min-w-full text-sm h-full">
-                <thead className="bg-white border-b">
-                <tr>
-                    <th className="px-3 py-2 text-left">Код</th>
-                    <th className="px-3 py-2 text-left">Начало</th>
-                    <th className="px-3 py-2 text-left">Окончание</th>
-                    <th className="px-3 py-2 text-left">Недели (предпросмотр)</th>
+    ) : tab === 'sprints' ? (
+        <>
+        <div className="sprint-table-container flex-grow border rounded-xl overflow-auto" style={{ position: "relative" }}>
+            <table className="min-w-full text-sm select-none table-fixed border-collapse" style={{ border: '1px solid rgb(226, 232, 240)' }}>
+                <colgroup>
+                    <col style={{ width: '120px' }} />
+                    <col style={{ width: '150px' }} />
+                    <col style={{ width: '150px' }} />
+                </colgroup>
+                <thead className="sticky top-0 z-10" style={{ backgroundColor: 'rgb(249, 250, 251)' }}>
+                <tr style={{ borderBottom: '1px solid rgb(226, 232, 240)' }}>
+                    <th className="px-4 py-2 text-left" style={{ border: '1px solid rgb(226, 232, 240)', paddingRight: '0.5em', paddingLeft: '0.5em' }}>Код</th>
+                    <th className="px-4 py-2 text-left" style={{ border: '1px solid rgb(226, 232, 240)', paddingRight: '0.5em', paddingLeft: '0.5em' }}>Начало</th>
+                    <th className="px-4 py-2 text-left" style={{ border: '1px solid rgb(226, 232, 240)', paddingRight: '0.5em', paddingLeft: '0.5em' }}>Окончание</th>
                 </tr>
                 </thead>
-                <tbody>
+                <tbody className="divide-y divide-gray-200">
                 {sprints.map((s, i) => (
-                    <tr key={i} className="border-b">
-                        <td className="px-3 py-2"><input className="border rounded px-2 py-1" value={s.code} onChange={e=>setSprints(sp=>sp.map((x,idx)=> idx===i?{...x, code:e.target.value}:x))} /></td>
-                        <td className="px-3 py-2"><input type="date" className="border rounded px-2 py-1" value={s.start} onChange={e=>setSprints(sp=>sp.map((x,idx)=> idx===i?{...x, start:e.target.value}:x))} /></td>
-                        <td className="px-3 py-2"><input type="date" className="border rounded px-2 py-1" value={s.end} onChange={e=>setSprints(sp=>sp.map((x,idx)=> idx===i?{...x, end:e.target.value}:x))} /></td>
-                        <td className="px-3 py-2 text-xs text-gray-600">{previewWeeksForSprint(s)}</td>
+                    <tr key={i} className="border-b bg-white" onContextMenu={(e) => onContextMenuSprint(e, i)}>
+                        <td className="px-4 py-2 align-middle" 
+                            style={getSprintCellBorderStyle(sprintSel?.rowId === i && sprintSel?.col === 'code')}
+                            onDoubleClick={() => startSprintEdit({rowId: i, col: 'code'})} 
+                            onClick={() => setSprintSel({rowId: i, col: 'code'})}>
+                            {sprintEditing?.rowId === i && sprintEditing?.col === 'code' ? (
+                                <input 
+                                    autoFocus 
+                                    className="w-full h-8 box-border min-w-0 outline-none bg-transparent" 
+                                    style={{ border: 'none', padding: 0, margin: 0 }}
+                                    defaultValue={s.code} 
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter') { 
+                                            setSprints(sp => sp.map((x, idx) => idx === i ? {...x, code: (e.target as HTMLInputElement).value} : x)); 
+                                            commitSprintEdit(); 
+                                        }
+                                        if (e.key === 'Tab' && e.shiftKey) { 
+                                            e.preventDefault(); 
+                                            e.stopPropagation(); 
+                                            setSprints(sp => sp.map((x, idx) => idx === i ? {...x, code: (e.target as HTMLInputElement).value} : x)); 
+                                            navigateSprintInEditMode('prev', i, 'code'); 
+                                            return; 
+                                        }
+                                        if (e.key === 'Tab') { 
+                                            e.preventDefault(); 
+                                            setSprints(sp => sp.map((x, idx) => idx === i ? {...x, code: (e.target as HTMLInputElement).value} : x)); 
+                                            navigateSprintInEditMode('next', i, 'code'); 
+                                        }
+                                        if (e.key === 'Escape') { 
+                                            cancelSprintEditRef.current = true; 
+                                            stopSprintEdit(); 
+                                        }
+                                    }}
+                                    onBlur={(e) => { 
+                                        if (!cancelSprintEditRef.current) { 
+                                            setSprints(sp => sp.map((x, idx) => idx === i ? {...x, code: (e.target as HTMLInputElement).value} : x)); 
+                                        } 
+                                        stopSprintEdit(); 
+                                    }} 
+                                />
+                            ) : (
+                                <span>{s.code}</span>
+                            )}
+                        </td>
+                        <td className="px-4 py-2 align-middle" 
+                            style={getSprintCellBorderStyle(sprintSel?.rowId === i && sprintSel?.col === 'start')}
+                            onDoubleClick={() => startSprintEdit({rowId: i, col: 'start'})} 
+                            onClick={() => setSprintSel({rowId: i, col: 'start'})}>
+                            {sprintEditing?.rowId === i && sprintEditing?.col === 'start' ? (
+                                <input 
+                                    type="date" 
+                                    autoFocus 
+                                    className="w-full h-8 box-border min-w-0 outline-none bg-transparent" 
+                                    style={{ border: 'none', padding: 0, margin: 0 }}
+                                    defaultValue={s.start} 
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter') { 
+                                            setSprints(sp => sp.map((x, idx) => idx === i ? {...x, start: (e.target as HTMLInputElement).value} : x)); 
+                                            commitSprintEdit(); 
+                                        }
+                                        if (e.key === 'Tab' && e.shiftKey) { 
+                                            e.preventDefault(); 
+                                            e.stopPropagation(); 
+                                            setSprints(sp => sp.map((x, idx) => idx === i ? {...x, start: (e.target as HTMLInputElement).value} : x)); 
+                                            navigateSprintInEditMode('prev', i, 'start'); 
+                                            return; 
+                                        }
+                                        if (e.key === 'Tab') { 
+                                            e.preventDefault(); 
+                                            setSprints(sp => sp.map((x, idx) => idx === i ? {...x, start: (e.target as HTMLInputElement).value} : x)); 
+                                            navigateSprintInEditMode('next', i, 'start'); 
+                                        }
+                                        if (e.key === 'Escape') { 
+                                            cancelSprintEditRef.current = true; 
+                                            stopSprintEdit(); 
+                                        }
+                                    }}
+                                    onBlur={(e) => { 
+                                        if (!cancelSprintEditRef.current) { 
+                                            setSprints(sp => sp.map((x, idx) => idx === i ? {...x, start: (e.target as HTMLInputElement).value} : x)); 
+                                        } 
+                                        stopSprintEdit(); 
+                                    }} 
+                                />
+                            ) : (
+                                <span>{formatDate(s.start)}</span>
+                            )}
+                        </td>
+                        <td className="px-4 py-2 align-middle" 
+                            style={getSprintCellBorderStyle(sprintSel?.rowId === i && sprintSel?.col === 'end')}
+                            onDoubleClick={() => startSprintEdit({rowId: i, col: 'end'})} 
+                            onClick={() => setSprintSel({rowId: i, col: 'end'})}>
+                            {sprintEditing?.rowId === i && sprintEditing?.col === 'end' ? (
+                                <input 
+                                    type="date" 
+                                    autoFocus 
+                                    className="w-full h-8 box-border min-w-0 outline-none bg-transparent" 
+                                    style={{ border: 'none', padding: 0, margin: 0 }}
+                                    defaultValue={s.end} 
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter') { 
+                                            setSprints(sp => sp.map((x, idx) => idx === i ? {...x, end: (e.target as HTMLInputElement).value} : x)); 
+                                            commitSprintEdit(); 
+                                        }
+                                        if (e.key === 'Tab' && e.shiftKey) { 
+                                            e.preventDefault(); 
+                                            e.stopPropagation(); 
+                                            setSprints(sp => sp.map((x, idx) => idx === i ? {...x, end: (e.target as HTMLInputElement).value} : x)); 
+                                            navigateSprintInEditMode('prev', i, 'end'); 
+                                            return; 
+                                        }
+                                        if (e.key === 'Tab') { 
+                                            e.preventDefault(); 
+                                            setSprints(sp => sp.map((x, idx) => idx === i ? {...x, end: (e.target as HTMLInputElement).value} : x)); 
+                                            navigateSprintInEditMode('next', i, 'end'); 
+                                        }
+                                        if (e.key === 'Escape') { 
+                                            cancelSprintEditRef.current = true; 
+                                            stopSprintEdit(); 
+                                        }
+                                    }}
+                                    onBlur={(e) => { 
+                                        if (!cancelSprintEditRef.current) { 
+                                            setSprints(sp => sp.map((x, idx) => idx === i ? {...x, end: (e.target as HTMLInputElement).value} : x)); 
+                                        } 
+                                        stopSprintEdit(); 
+                                    }} 
+                                />
+                            ) : (
+                                <span>{formatDate(s.end)}</span>
+                            )}
+                        </td>
                     </tr>
                 ))}
                 </tbody>
             </table>
+        </div>
+
+        {/* Кнопка Добавить снизу */}
+        <div className="flex justify-start">
+            <button className="bg-black text-white rounded px-4 py-2" onClick={addSprint}>+ Добавить</button>
+        </div>
+        </>
+    ) : (
+        <>
+        <div className="team-table-container flex-grow border rounded-xl overflow-auto" style={{ position: "relative" }}>
+            <table className="min-w-full text-sm select-none table-fixed border-collapse" style={{ border: '1px solid rgb(226, 232, 240)' }}>
+                <colgroup>
+                    <col style={{ width: '200px' }} />
+                    <col style={{ width: '150px' }} />
+                    <col style={{ width: '150px' }} />
+                    <col style={{ width: '150px' }} />
+                </colgroup>
+                <thead className="sticky top-0 z-10" style={{ backgroundColor: 'rgb(249, 250, 251)' }}>
+                <tr style={{ borderBottom: '1px solid rgb(226, 232, 240)' }}>
+                    <th className="px-4 py-2 text-left" style={{ border: '1px solid rgb(226, 232, 240)', paddingRight: '0.5em', paddingLeft: '0.5em' }}>Название</th>
+                    <th className="px-4 py-2 text-left" style={{ border: '1px solid rgb(226, 232, 240)', paddingRight: '0.5em', paddingLeft: '0.5em' }}>Проект в JIRA</th>
+                    <th className="px-4 py-2 text-left" style={{ border: '1px solid rgb(226, 232, 240)', paddingRight: '0.5em', paddingLeft: '0.5em' }}>FeatureTeam</th>
+                    <th className="px-4 py-2 text-left" style={{ border: '1px solid rgb(226, 232, 240)', paddingRight: '0.5em', paddingLeft: '0.5em' }}>IssueType</th>
+                </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                {teamData.map((t, i) => (
+                    <tr key={i} className="border-b bg-white" onContextMenu={(e) => onContextMenuTeam(e, i)}>
+                        <td className="px-4 py-2 align-middle" 
+                            style={getTeamCellBorderStyle(teamSel?.rowId === i && teamSel?.col === 'name')}
+                            onDoubleClick={() => startTeamEdit({rowId: i, col: 'name'})} 
+                            onClick={() => setTeamSel({rowId: i, col: 'name'})}>
+                            {teamEditing?.rowId === i && teamEditing?.col === 'name' ? (
+                                <input 
+                                    autoFocus 
+                                    className="w-full h-8 box-border min-w-0 outline-none bg-transparent" 
+                                    style={{ border: 'none', padding: 0, margin: 0 }}
+                                    defaultValue={t.name} 
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter') { 
+                                            setTeamData(teams => teams.map((x, idx) => idx === i ? {...x, name: (e.target as HTMLInputElement).value} : x)); 
+                                            commitTeamEdit(); 
+                                        }
+                                        if (e.key === 'Tab' && e.shiftKey) { 
+                                            e.preventDefault(); 
+                                            e.stopPropagation(); 
+                                            setTeamData(teams => teams.map((x, idx) => idx === i ? {...x, name: (e.target as HTMLInputElement).value} : x)); 
+                                            navigateTeamInEditMode('prev', i, 'name'); 
+                                            return; 
+                                        }
+                                        if (e.key === 'Tab') { 
+                                            e.preventDefault(); 
+                                            setTeamData(teams => teams.map((x, idx) => idx === i ? {...x, name: (e.target as HTMLInputElement).value} : x)); 
+                                            navigateTeamInEditMode('next', i, 'name'); 
+                                        }
+                                        if (e.key === 'Escape') { 
+                                            cancelTeamEditRef.current = true; 
+                                            stopTeamEdit(); 
+                                        }
+                                    }}
+                                    onBlur={(e) => { 
+                                        if (!cancelTeamEditRef.current) { 
+                                            setTeamData(teams => teams.map((x, idx) => idx === i ? {...x, name: (e.target as HTMLInputElement).value} : x)); 
+                                        } 
+                                        stopTeamEdit(); 
+                                    }} 
+                                />
+                            ) : (
+                                <span>{t.name}</span>
+                            )}
+                        </td>
+                        <td className="px-4 py-2 align-middle" 
+                            style={getTeamCellBorderStyle(teamSel?.rowId === i && teamSel?.col === 'jiraProject')}
+                            onDoubleClick={() => startTeamEdit({rowId: i, col: 'jiraProject'})} 
+                            onClick={() => setTeamSel({rowId: i, col: 'jiraProject'})}>
+                            <span>{t.jiraProject}</span>
+                        </td>
+                        <td className="px-4 py-2 align-middle" 
+                            style={getTeamCellBorderStyle(teamSel?.rowId === i && teamSel?.col === 'featureTeam')}
+                            onDoubleClick={() => startTeamEdit({rowId: i, col: 'featureTeam'})} 
+                            onClick={() => setTeamSel({rowId: i, col: 'featureTeam'})}>
+                            <span>{t.featureTeam}</span>
+                        </td>
+                        <td className="px-4 py-2 align-middle" 
+                            style={getTeamCellBorderStyle(teamSel?.rowId === i && teamSel?.col === 'issueType')}
+                            onDoubleClick={() => startTeamEdit({rowId: i, col: 'issueType'})} 
+                            onClick={() => setTeamSel({rowId: i, col: 'issueType'})}>
+                            <span>{t.issueType}</span>
+                        </td>
+                    </tr>
+                ))}
+                </tbody>
+            </table>
+        </div>
+        <div className="flex justify-start">
+            <button className="bg-black text-white rounded px-4 py-2" onClick={addTeam}>+ Добавить</button>
+        </div>
+        </>
+    )}
+
+{/* Контекстное меню спринтов */}
+{sprintCtx && (
+    <div 
+        className="fixed bg-white border rounded shadow-lg z-50 py-1 min-w-32"
+        style={{ left: sprintCtx.x, top: sprintCtx.y }}
+        onMouseLeave={() => setSprintCtx(null)}
+    >
+        <button 
+            className="w-full text-left px-3 py-1 hover:bg-gray-100 text-sm"
+            onClick={() => { addSprintAbove(sprintCtx.index); setSprintCtx(null); }}
+        >
+            Добавить выше
+        </button>
+        <button 
+            className="w-full text-left px-3 py-1 hover:bg-gray-100 text-sm"
+            onClick={() => { addSprintBelow(sprintCtx.index); setSprintCtx(null); }}
+        >
+            Добавить ниже
+        </button>
+        <button 
+            className="w-full text-left px-3 py-1 hover:bg-gray-100 text-sm text-red-600"
+            onClick={() => { deleteSprint(sprintCtx.index); setSprintCtx(null); }}
+            disabled={sprints.length <= 1}
+        >
+            Удалить
+        </button>
+    </div>
+)}
+
+{/* Контекстное меню команд */}
+{teamCtx && (
+    <div 
+        className="fixed bg-white border rounded shadow-lg z-50 py-1 min-w-32"
+        style={{ left: teamCtx.x, top: teamCtx.y }}
+        onMouseLeave={() => setTeamCtx(null)}
+    >
+        <button 
+            className="w-full text-left px-3 py-1 hover:bg-gray-100 text-sm"
+            onClick={() => { addTeamAbove(teamCtx.index); setTeamCtx(null); }}
+        >
+            Добавить выше
+        </button>
+        <button 
+            className="w-full text-left px-3 py-1 hover:bg-gray-100 text-sm"
+            onClick={() => { addTeamBelow(teamCtx.index); setTeamCtx(null); }}
+        >
+            Добавить ниже
+        </button>
+        <button 
+            className="w-full text-left px-3 py-1 hover:bg-gray-100 text-sm text-red-600"
+            onClick={() => { deleteTeam(teamCtx.index); setTeamCtx(null); }}
+            disabled={teamData.length <= 1}
+        >
+            Удалить
+        </button>
         </div>
     )}
 
@@ -1764,15 +2808,6 @@ function weeksBaseForTaskLocal(t: TaskRow): number[] {
     />
 )}
 
-{/* Управление командами */}
-{isTeamManagementOpen && (
-    <TeamManagementModal
-        teams={teams}
-        setTeams={setTeams}
-        rows={rows}
-        onClose={() => setIsTeamManagementOpen(false)}
-    />
-)}
 
 {/* UI фильтров */}
 {filterUi && (
@@ -1796,8 +2831,8 @@ function weeksBaseForTaskLocal(t: TaskRow): number[] {
         </div>
     )}
 
-{/* Тултип при перетягивании задач */}
-{dragTooltip.visible && dragTooltip.task && (
+{/* Тултип при перетягивании задач и ресурсов */}
+{dragTooltip.visible && (dragTooltip.task || dragTooltip.resource) && (
     <div 
         className="fixed z-50 text-gray-800 text-sm rounded-lg shadow-lg border border-gray-300 pointer-events-none"
         style={{ 
@@ -1814,13 +2849,27 @@ function weeksBaseForTaskLocal(t: TaskRow): number[] {
         }}
     >
         <div className="font-semibold text-base mb-2 text-gray-900">
-            {dragTooltip.task.team} / {dragTooltip.task.task} / {dragTooltip.task.fn}
+            {dragTooltip.task && (
+                <>
+                    {dragTooltip.task.team} / {dragTooltip.task.task} / {dragTooltip.task.fn}
+                </>
+            )}
+            {dragTooltip.resource && (
+                <>
+                    {dragTooltip.resource.team.join(', ')} / {dragTooltip.resource.fn}
+                    {dragTooltip.resource.empl && ` / ${dragTooltip.resource.empl}`}
+                </>
+            )}
         </div>
         <div className="text-sm text-gray-600 leading-relaxed">
-            {isShiftPressedRef.current 
-                ? "Киньте задачу на ту которая блокирует текущую"
-                : "Нажмите Shift для задания блокирующей задачи"
-            }
+            {dragTooltip.task && (
+                <>
+                    {isShiftPressedRef.current 
+                        ? "Киньте задачу на ту, которая блокирует текущую"
+                        : "Нажмите Shift для выбора блокирующей задачи"
+                    }
+                </>
+            )}
         </div>
     </div>
 )}
@@ -1843,21 +2892,18 @@ function renderHeadWithFilter(label: string, col: ColumnId) {
         : { padding: '1px 2px' };
     
     return (
-        <th className="px-2 py-2 text-center align-middle" style={{ width: COL_WIDTH[col], border: '1px solid rgb(226, 232, 240)' }}>
+        <th className="px-2 py-2 text-center align-middle" style={{ width: COL_WIDTH[col], border: '1px solid rgb(226, 232, 240)', paddingRight: '0.5em', paddingLeft: '0.5em' }}>
             <div className="flex items-center justify-between">
                 <span>{label}</span>
                 {col === "team" ? (
-                    <div className="flex items-center gap-1">
-                        <button 
-                            className={buttonClass} 
-                            style={buttonStyle}
-                            title={filterActive ? "Фильтр применен" : "Открыть фильтр"}
-                            onClick={(e)=>openFilter(col, (e.currentTarget as HTMLElement).getBoundingClientRect().left, (e.currentTarget as HTMLElement).getBoundingClientRect().bottom+4)}
-                        >
-                            ▾
-                        </button>
-                        <button className="text-xs text-gray-500" onClick={() => setIsTeamManagementOpen(true)}>⚙️</button>
-                    </div>
+                    <button 
+                        className={buttonClass} 
+                        style={buttonStyle}
+                        title={filterActive ? "Фильтр применен" : "Открыть фильтр"}
+                        onClick={(e)=>openFilter(col, (e.currentTarget as HTMLElement).getBoundingClientRect().left, (e.currentTarget as HTMLElement).getBoundingClientRect().bottom+4)}
+                    >
+                        ▾
+                    </button>
                 ) : (
                     <button 
                         className={buttonClass} 
@@ -1875,6 +2921,5 @@ function renderHeadWithFilter(label: string, col: ColumnId) {
 function filteredValuesForColumn(list: Row[], col: ColumnId): string[] { return list.map(r => valueForCol(r, col)).filter(v => v !== undefined); }
 function isSel(rowId:ID, col:Exclude<ColKey, {week:number}>|"type") { return sel && sel.rowId===rowId && sel.col===col; }
 function isSelWeek(rowId:ID, w:number) { return sel && sel.rowId===rowId && typeof sel.col==='object' && sel.col.week===w; }
-function previewWeeksForSprint(s:Sprint) { const start = new Date(s.start+"T00:00:00Z"); const end = new Date(s.end+"T00:00:00Z"); const days = Math.round((end.getTime()-start.getTime())/86400000)+1; const weeks = Math.ceil(days/7); return `${weeks} нед.`; }
 // self-tests hook removed to satisfy eslint rules-of-hooks
 }
