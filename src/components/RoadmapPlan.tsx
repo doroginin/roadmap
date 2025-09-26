@@ -494,6 +494,9 @@ export function RoadmapPlan() {
 
         // Рекурсивное вычисление максимального времени завершения блокеров
         function computeBlockerEndTime(taskId: ID, currentTaskId: ID): number {
+            if (import.meta.env.DEV) {
+                console.log(`  → Вычисляем время завершения блокера ${taskId} для задачи ${currentTaskId}`);
+            }
             // Проверка на циклическую зависимость
             if (computationStack.has(taskId)) {
                 console.warn(`Обнаружена циклическая зависимость при вычислении блокера ${taskId} для задачи ${currentTaskId}`);
@@ -502,7 +505,11 @@ export function RoadmapPlan() {
 
             // Проверяем кэш фактических результатов
             if (blockerCache.has(taskId)) {
-                return blockerCache.get(taskId)!;
+                const cachedResult = blockerCache.get(taskId)!;
+                if (import.meta.env.DEV) {
+                    console.log(`  → Найден в кэше: ${cachedResult}`);
+                }
+                return cachedResult;
             }
             
             // Для предварительных оценок проверяем только в рамках текущего вычисления
@@ -520,10 +527,19 @@ export function RoadmapPlan() {
                 return endTime;
             }
 
-            // Ищем задачу среди необработанных
-            const originalTask = list.find(r => r.id === taskId && r.kind === 'task') as TaskRow | undefined;
+            // Ищем задачу сначала среди обработанных, затем среди исходных
+            let originalTask = findTaskByIdInOut(taskId);
+            if (import.meta.env.DEV) {
+                console.log(`  → Поиск в обработанных: ${originalTask ? 'найдена' : 'не найдена'}`);
+            }
             if (!originalTask) {
-                console.warn(`Блокирующая задача ${taskId} не найдена`);
+                originalTask = list.find(r => r.id === taskId && r.kind === 'task') as TaskRow | undefined;
+                if (import.meta.env.DEV) {
+                    console.log(`  → Поиск в исходных: ${originalTask ? 'найдена' : 'не найдена'}`);
+                }
+            }
+            if (!originalTask) {
+                console.warn(`Блокирующая задача ${taskId} не найдена ни в обработанных, ни в исходных задачах`);
                 blockerCache.set(taskId, 0);
                 return 0;
             }
@@ -590,9 +606,15 @@ export function RoadmapPlan() {
                     // Если задача уже обработана, кэшируем как фактический результат
                     if (findTaskByIdInOut(taskId)) {
                         blockerCache.set(taskId, endTime);
+                        if (import.meta.env.DEV) {
+                            console.log(`  → Результат (обработанная): ${endTime}`);
+                        }
                     } else {
                         // Если задача не обработана, кэшируем как предварительную оценку
                         estimateCache.set(taskId, endTime);
+                        if (import.meta.env.DEV) {
+                            console.log(`  → Результат (предварительная оценка): ${endTime}`);
+                        }
                     }
                     return endTime;
                 } finally {
@@ -672,6 +694,14 @@ export function RoadmapPlan() {
             const blocker = (t.blockerIds || [])
                 .map(id => computeBlockerEndTime(id, t.id))
                 .reduce((a, b) => Math.max(a, b), 0);
+            
+            // ДИАГНОСТИКА: Логируем информацию о планировании
+            if (import.meta.env.DEV) {
+                console.log(`\n=== Планирование задачи ${t.task} (${t.id}) ===`);
+                console.log(`Блокеры: ${t.blockerIds.join(', ') || 'нет'}`);
+                console.log(`Время завершения блокеров: ${blocker}`);
+                console.log(`Требуется ресурсов: ${need}, недель: ${dur}`);
+            }
 
             // режим: ручной план при отключённом Auto → просто учитываем загрузку
             if (!t.autoPlanEnabled && t.manualEdited) {
@@ -700,7 +730,15 @@ export function RoadmapPlan() {
                 const free = result.free;
                 if (need > 0 && dur > 0 && matched.length > 0) {
                     const maxStart = TOTAL_WEEKS - dur + 1;
-                    for (let s = Math.max(1, blocker + 1); s <= maxStart; s++) {
+                    // ИСПРАВЛЕНИЕ: Начинаем поиск строго после завершения всех блокеров
+                    const minStart = Math.max(1, blocker + 1);
+                    
+                    if (import.meta.env.DEV) {
+                        console.log(`Поиск стартового окна: minStart=${minStart}, maxStart=${maxStart}`);
+                        console.log(`Свободные ресурсы (первые 10 недель): ${free.slice(0, 10).join(', ')}`);
+                    }
+                    
+                    for (let s = minStart; s <= maxStart; s++) {
                         let ok = true;
                         for (let off = 0; off < dur; off++) {
                             if (free[s - 1 + off] < need) { 
@@ -709,9 +747,16 @@ export function RoadmapPlan() {
                             }
                         }
                         if (ok) { 
-                            start = s; 
+                            start = s;
+                            if (import.meta.env.DEV) {
+                                console.log(`Найдено стартовое окно: неделя ${start}`);
+                            }
                             break; 
                         }
+                    }
+                    
+                    if (import.meta.env.DEV && start === 0) {
+                        console.log(`Не найдено подходящего стартового окна`);
                     }
                 }
             } finally {
@@ -731,6 +776,12 @@ export function RoadmapPlan() {
             t.endWeek = nz.length ? Math.max(...nz) : null;
             t.fact = weeks.reduce((a, b) => a + b, 0);
             t.sprintsAuto = listSprintsBetweenLocal(t.startWeek, t.endWeek);
+            
+            if (import.meta.env.DEV) {
+                console.log(`Результат планирования: недели ${t.startWeek}-${t.endWeek}`);
+                console.log(`Распределение: ${weeks.slice(0, 10).join(', ')} (первые 10 недель)`);
+            }
+            
             return t;
         }
 
@@ -753,19 +804,30 @@ export function RoadmapPlan() {
 
         // Повторяем до тех пор, пока не обработаем все задачи
         while (taskOrder.length < tasks.length) {
-            let foundTask = false;
+            let foundTasks: TaskRow[] = [];
             
+            // Собираем все задачи, которые можно обработать на этом шаге
             for (const task of tasks) {
                 if (!processedTaskIds.has(task.id) && canProcessTask(task)) {
-                    taskOrder.push(task);
-                    processedTaskIds.add(task.id);
-                    foundTask = true;
-                    break; // Начинаем поиск заново, чтобы сохранить приоритет (порядок в списке)
+                    foundTasks.push(task);
                 }
             }
             
-            // Если не нашли ни одной задачи для обработки, значит есть циклические зависимости
-            if (!foundTask) {
+            if (foundTasks.length > 0) {
+                // Сортируем найденные задачи ТОЛЬКО по исходному порядку
+                // Это гарантирует стабильность и правильное планирование параллельных задач
+                foundTasks.sort((a, b) => {
+                    const aIndex = tasks.indexOf(a);
+                    const bIndex = tasks.indexOf(b);
+                    return aIndex - bIndex;
+                });
+                
+                // Обрабатываем первую задачу из отсортированного списка
+                const taskToProcess = foundTasks[0];
+                taskOrder.push(taskToProcess);
+                processedTaskIds.add(taskToProcess.id);
+            } else {
+                // Если не нашли ни одной задачи для обработки, значит есть циклические зависимости
                 console.warn("Обнаружены циклические зависимости в задачах. Обрабатываем оставшиеся задачи в исходном порядке.");
                 for (const task of tasks) {
                     if (!processedTaskIds.has(task.id)) {
@@ -777,16 +839,28 @@ export function RoadmapPlan() {
             }
         }
 
-        // Обрабатываем задачи в правильном порядке
+        // Обрабатываем задачи в топологическом порядке для правильного планирования ресурсов,
+        // но сохраняем результаты в Map для последующего добавления в исходном порядке
+        const processedTasks = new Map<ID, TaskRow>();
+        
         for (const task of taskOrder) {
             const processedTask = computeAutoForTask(task);
-            out.push(processedTask);
+            processedTasks.set(processedTask.id, processedTask);
             
             // После обработки задачи очищаем предварительные оценки
             // Теперь у нас есть фактический результат
             if (processedTask.endWeek !== null) {
                 estimateCache.delete(processedTask.id);
                 blockerCache.set(processedTask.id, processedTask.endWeek);
+            }
+        }
+
+        // Добавляем задачи в исходном порядке, используя обработанные версии
+        // Это предотвращает "телепортацию" задач при назначении блокеров
+        for (const task of tasks) {
+            const processedTask = processedTasks.get(task.id);
+            if (processedTask) {
+                out.push(processedTask);
             }
         }
 
@@ -1740,29 +1814,38 @@ export function RoadmapPlan() {
             if (targetRow && draggedRow) {
                 const targetRowId = targetRow.getAttribute('data-row-id');
                 if (targetRowId) {
-                    const targetRowData = computedRows.find(row => row.id === targetRowId);
+                    const targetRowData = rows.find(row => row.id === targetRowId);
                     if (targetRowData && targetRowData.kind === draggedRow.kind) {
                         // Выполняем операцию перестановки или назначения блокера
                         if (isShiftPressed && draggedRow.kind === "task" && targetRowData.kind === "task") {
                             // Назначение блокера
+                            console.log(`Попытка создать блокер: ${draggedRow.id} -> ${targetRowData.id}`);
                             if (canSetBlocker(draggedRow.id, targetRowData.id)) {
+                                console.log("Блокер разрешен, создаем");
                                 setRows(prev => prev.map(row => 
                                     (row.kind === "task" && row.id === draggedRow.id) 
                                         ? { ...row, blockerIds: Array.from(new Set([...(row as TaskRow).blockerIds, targetRowData.id])) } 
                                         : row
                                 ));
                             } else {
-                                alert("Нельзя создать блокер: обнаружен цикл или неверный порядок (нельзя блокироваться на задачу ниже текущей).");
+                                console.log("Блокер запрещен");
+                                alert("Нельзя создать блокер: обнаружен цикл или неверный порядок.");
                             }
                         } else {
                             // Перестановка строк
+                            console.log(`Перестановка строк: ${draggedRow.id} -> ${targetRowData.id}, Shift: ${isShiftPressed}`);
                             setRows(prev => {
                                 const list = prev.slice();
                                 const from = list.findIndex(x => x.id === draggedRow.id);
                                 const to = list.findIndex(x => x.id === targetRowData.id);
-                                if (from<0 || to<0 || from===to) return prev;
+                                console.log(`Индексы: from=${from}, to=${to}`);
+                                if (from<0 || to<0 || from===to) {
+                                    console.log(`Перестановка отменена: from=${from}, to=${to}, from===to=${from===to}`);
+                                    return prev;
+                                }
                                 const [m] = list.splice(from, 1);
                                 list.splice(to, 0, m);
+                                console.log(`Перестановка выполнена: ${draggedRow.id} перемещен с позиции ${from} на позицию ${to}`);
                                 return list;
                             });
                         }
@@ -1915,12 +1998,19 @@ export function RoadmapPlan() {
             const endWeek = task.endWeek || 0;
             const blockerText = task.blockerIds.length > 0 ? ` (блокируется: ${task.blockerIds.join(', ')})` : ' (не блокируется)';
             const autoText = task.autoPlanEnabled ? ' [AUTO]' : ' [MANUAL]';
-            console.log(`- ${task.task}: недели ${startWeek}-${endWeek}${blockerText}${autoText}`);
+            const needText = ` (нужно: ${task.planEmpl}, недель: ${task.planWeeks})`;
+            console.log(`- ${task.task}: недели ${startWeek}-${endWeek}${blockerText}${autoText}${needText}`);
+        });
+        
+        console.log("\nДиагностика ресурсов:");
+        const resourceRows = computedRows.filter(r => r.kind === 'resource') as ResourceRow[];
+        resourceRows.forEach(res => {
+            console.log(`Ресурс ${res.fn}: ${res.weeks.slice(0, 10).join(', ')} (первые 10 недель)`);
         });
         
         console.log("\nДетальная диагностика:");
         console.log("Исправлены ключевые проблемы:");
-        console.log("1. Топологическая сортировка - задачи обрабатываются в правильном порядке зависимостей");
+        console.log("1. Исправлена топологическая сортировка - сохраняется исходный порядок для стабильности");
         console.log("2. Двухуровневое кэширование - фактические результаты vs предварительные оценки");
         console.log("3. Убрана логика учета задач выше - теперь используются только прямые блокеры");
         console.log("4. Исправлено переключение автопланирования:");
