@@ -276,6 +276,80 @@ function ArrowOverlay({
         const measure = () => {
             const wrapRect = container.getBoundingClientRect();
             const result: typeof paths = [];
+            
+            // Функция для проверки, пересекается ли стрелка с занятой ячейкой
+            const getArrowOffset = (x1: number, y1: number, x2: number, y2: number): {offsetX: number, offsetY: number} => {
+                const isHorizontal = Math.abs(x2 - x1) > Math.abs(y2 - y1);
+                let offsetX = 0;
+                let offsetY = 0;
+                
+                if (isHorizontal) {
+                    // Для горизонтальных стрелок проверяем пересечения с занятыми ячейками
+                    const startX = Math.min(x1, x2);
+                    const endX = Math.max(x1, x2);
+                    const arrowY = (y1 + y2) / 2;
+                    
+                    // Проверяем пересечения с занятыми ячейками
+                    let hasIntersection = false;
+                    tasks.forEach(task => {
+                        for (let weekIdx = 0; weekIdx < task.weeks.length; weekIdx++) {
+                            if ((task.weeks[weekIdx] || 0) > 0) {
+                                const cellElement = document.getElementById(cellId(task.id, weekIdx));
+                                if (cellElement) {
+                                    const cellRect = cellElement.getBoundingClientRect();
+                                    const cellX = cellRect.left + cellRect.width / 2 - wrapRect.left + container.scrollLeft;
+                                    const cellY = cellRect.top + cellRect.height / 2 - wrapRect.top + container.scrollTop;
+                                    
+                                    // Проверяем пересечение
+                                    if (Math.abs(arrowY - cellY) < 15 && cellX >= startX && cellX <= endX) {
+                                        hasIntersection = true;
+                                    }
+                                }
+                            }
+                        }
+                    });
+                    
+                    if (hasIntersection) {
+                        offsetY = 6; // Смещаем на 6px от верхней границы ячейки
+                    }
+                } else {
+                    // Для вертикальных стрелок проверяем пересечения и смещаем к левой границе
+                    const startY = Math.min(y1, y2);
+                    const endY = Math.max(y1, y2);
+                    const arrowX = (x1 + x2) / 2;
+                    
+                    // Проверяем пересечения с занятыми ячейками
+                    let hasIntersection = false;
+                    let targetCellLeft = null;
+                    
+                    tasks.forEach(task => {
+                        for (let weekIdx = 0; weekIdx < task.weeks.length; weekIdx++) {
+                            if ((task.weeks[weekIdx] || 0) > 0) {
+                                const cellElement = document.getElementById(cellId(task.id, weekIdx));
+                                if (cellElement) {
+                                    const cellRect = cellElement.getBoundingClientRect();
+                                    const cellX = cellRect.left + cellRect.width / 2 - wrapRect.left + container.scrollLeft;
+                                    const cellY = cellRect.top + cellRect.height / 2 - wrapRect.top + container.scrollTop;
+                                    
+                                    // Проверяем пересечение
+                                    if (Math.abs(arrowX - cellX) < 25 && cellY >= startY && cellY <= endY) {
+                                        hasIntersection = true;
+                                        // Запоминаем левую границу ячейки для точного позиционирования
+                                        targetCellLeft = cellRect.left - wrapRect.left + container.scrollLeft;
+                                    }
+                                }
+                            }
+                        }
+                    });
+                    
+                    if (hasIntersection && targetCellLeft !== null) {
+                        // Смещаем к позиции 6px от левой границы ячейки
+                        offsetX = (targetCellLeft + 6) - arrowX;
+                    }
+                }
+                
+                return {offsetX, offsetY};
+            };
 
             links.forEach((link, i) => {
                 let a: HTMLElement | null, b: HTMLElement | null;
@@ -298,153 +372,42 @@ function ArrowOverlay({
                 let x1: number, y1: number, x2: number, y2: number, d: string;
 
                 if (link.type === 'week') {
-                    // Для блокеров недель
-                    if (link.isConflict) {
-                        // Конфликтный блокер: L-образная красная стрелка из соседней строки
-                        // Находим свободную соседнюю строку (выше или ниже)
-                        const taskRowIndex = tasks.findIndex(t => t.id === link.from.taskId);
-                        let alternativeRowId: string | null = null;
-                        let useUpperRow = false;
-                        
-                        // Функция для проверки, свободна ли ячейка в определенной строке
-                        const isCellFree = (taskId: string, weekIdx: number): boolean => {
-                            const task = tasks.find(t => t.id === taskId);
-                            if (!task) return false;
-                            return (task.weeks[weekIdx] || 0) === 0;
-                        };
-                        
-                        // Функция для подсчета занятых ячеек по пути L-образной стрелки
-                        const countOccupiedCellsInPath = (alternativeTaskId: string, fromWeek: number, toWeek: number): number => {
-                            let occupiedCount = 0;
-                            
-                            // L-образная стрелка состоит из двух сегментов:
-                            // 1. Горизонтальный: от fromWeek до toWeek по альтернативной строке
-                            // 2. Вертикальный: только в toWeek от альтернативной строки к целевой строке
-                            
-                            // Проверяем только горизонтальный сегмент по альтернативной строке
-                            if (fromWeek !== toWeek) {
-                                const startWeek = Math.min(fromWeek, toWeek);
-                                const endWeek = Math.max(fromWeek, toWeek);
-                                
-                                // Проверяем все ячейки горизонтального сегмента
-                                for (let week = startWeek; week <= endWeek; week++) {
-                                    if (!isCellFree(alternativeTaskId, week)) {
-                                        occupiedCount++;
-                                    }
-                                }
-                            } else {
-                                // Если fromWeek === toWeek, проверяем только исходную ячейку
-                                if (!isCellFree(alternativeTaskId, fromWeek)) {
-                                    occupiedCount++;
-                                }
-                            }
-                            
-                            // Примечание: вертикальный сегмент не проверяем, так как он идет по воздуху
-                            // между строками и не пересекается с ячейками задач
-                            
-                            return occupiedCount;
-                        };
-                        
-                        // Используем целевую неделю из данных link
-                        const targetWeekForPath = link.to.weekIdx;
-                        
-                        let bestAlternativeId: string | null = null;
-                        let bestUseUpperRow = false;
-                        let minOccupiedCells = Infinity;
-                        
-                        // Проверяем строку выше
-                        if (taskRowIndex > 0) {
-                            const upperTaskId = tasks[taskRowIndex - 1].id;
-                            const occupiedCells = countOccupiedCellsInPath(upperTaskId, link.from.weekIdx, targetWeekForPath);
-                            if (import.meta.env.DEV) {
-                                console.log(`Верхняя строка (${upperTaskId}): ${occupiedCells} занятых ячеек по пути ${link.from.weekIdx} -> ${targetWeekForPath}`);
-                            }
-                            if (occupiedCells < minOccupiedCells) {
-                                minOccupiedCells = occupiedCells;
-                                bestAlternativeId = upperTaskId;
-                                bestUseUpperRow = true;
-                            }
-                        }
-                        
-                        // Проверяем строку ниже
-                        if (taskRowIndex < tasks.length - 1) {
-                            const lowerTaskId = tasks[taskRowIndex + 1].id;
-                            const occupiedCells = countOccupiedCellsInPath(lowerTaskId, link.from.weekIdx, targetWeekForPath);
-                            if (import.meta.env.DEV) {
-                                console.log(`Нижняя строка (${lowerTaskId}): ${occupiedCells} занятых ячеек по пути ${link.from.weekIdx} -> ${targetWeekForPath}`);
-                            }
-                            if (occupiedCells < minOccupiedCells) {
-                                minOccupiedCells = occupiedCells;
-                                bestAlternativeId = lowerTaskId;
-                                bestUseUpperRow = false;
-                            }
-                        }
-                        
-                        // Используем лучший вариант
-                        alternativeRowId = bestAlternativeId;
-                        useUpperRow = bestUseUpperRow;
-                        
-                        if (import.meta.env.DEV && alternativeRowId) {
-                            console.log(`Выбран путь через ${useUpperRow ? 'верхнюю' : 'нижнюю'} строку (${alternativeRowId}) с ${minOccupiedCells} коллизиями`);
-                        }
-                        
-                        // Fallback: если нет соседних строк, используем любую доступную
-                        if (!alternativeRowId) {
-                            if (taskRowIndex > 0) {
-                                alternativeRowId = tasks[taskRowIndex - 1].id;
-                                useUpperRow = true;
-                            } else if (taskRowIndex < tasks.length - 1) {
-                                alternativeRowId = tasks[taskRowIndex + 1].id;
-                                useUpperRow = false;
-                            }
-                        }
-                        
-                        if (alternativeRowId) {
-                            const altCell = document.getElementById(cellId(alternativeRowId, link.from.weekIdx));
-                            if (altCell) {
-                                const altRect = altCell.getBoundingClientRect();
-                                const verticalLineLength = 8; // Длина вертикальной палочки
-                                
-                                // Начинаем из середины альтернативной ячейки
-                                x1 = altRect.left + altRect.width / 2 - wrapRect.left + container.scrollLeft;
-                                y1 = altRect.top + altRect.height / 2 - wrapRect.top + container.scrollTop;
-                                // Идем к границе целевой ячейки
-                                x2 = rb.left + rb.width / 2 - wrapRect.left + container.scrollLeft;
-                                y2 = useUpperRow ? rb.top - wrapRect.top + container.scrollTop : rb.bottom - wrapRect.top + container.scrollTop;
-                                
-                                // Создаем путь с вертикальной палочкой в начале, потом горизонтально, потом вертикально: |->|
-                                const verticalStart = y1 - verticalLineLength / 2;
-                                const verticalEnd = y1 + verticalLineLength / 2;
-                                d = `M ${x1} ${verticalStart} L ${x1} ${verticalEnd} M ${x1} ${y1} L ${x2} ${y1} L ${x2} ${y2}`;
-                            } else {
-                                // Fallback: обычная стрелка
-                                x1 = ra.left + ra.width / 2 - wrapRect.left + container.scrollLeft;
-                                y1 = ra.top + ra.height / 2 - wrapRect.top + container.scrollTop;
-                                x2 = rb.left + rb.width / 2 - wrapRect.left + container.scrollLeft;
-                                y2 = rb.top + rb.height / 2 - wrapRect.top + container.scrollTop;
-                                d = `M ${x1} ${y1} L ${x2} ${y2}`;
-                            }
-                        } else {
-                            // Fallback: обычная стрелка
-                            x1 = ra.left + ra.width / 2 - wrapRect.left + container.scrollLeft;
-                            y1 = ra.top + ra.height / 2 - wrapRect.top + container.scrollTop;
-                            x2 = rb.left + rb.width / 2 - wrapRect.left + container.scrollLeft;
-                            y2 = rb.top + rb.height / 2 - wrapRect.top + container.scrollTop;
-                            d = `M ${x1} ${y1} L ${x2} ${y2}`;
+                    // Для блокеров недель: простая прямая стрелка, по центру или со смещением
+                    const verticalLineLength = 8; // Длина вертикальной палочки
+                    
+                    // Начинаем из середины исходной ячейки
+                    x1 = ra.left + ra.width / 2 - wrapRect.left + container.scrollLeft;
+                    // Идем к левой границе целевой ячейки
+                    x2 = rb.left - wrapRect.left + container.scrollLeft;
+                    
+                    // Сначала пробуем разместить по центру ячейки
+                    const centerY1 = ra.top + ra.height / 2 - wrapRect.top + container.scrollTop;
+                    const centerY2 = rb.top + rb.height / 2 - wrapRect.top + container.scrollTop;
+                    
+                    // Проверяем, есть ли пересечения при размещении по центру
+                    const centerOffset = getArrowOffset(x1, centerY1, x2, centerY2);
+                    
+                    if (centerOffset.offsetY === 0) {
+                        // Нет пересечений - размещаем по центру
+                        y1 = centerY1;
+                        y2 = centerY2;
+                        if (import.meta.env.DEV) {
+                            console.log(`Стрелка блокера недели ${link.blockerId} размещена по центру ячейки`);
                         }
                     } else {
-                        // Обычный блокер недели: стрелка |-> из середины ячейки
-                        const verticalLineLength = 8; // Длина вертикальной палочки
-                        x1 = ra.left + ra.width / 2 - wrapRect.left + container.scrollLeft;
-                        y1 = ra.top + ra.height / 2 - wrapRect.top + container.scrollTop;
-                        x2 = rb.left - wrapRect.left + container.scrollLeft;
-                        y2 = rb.top + rb.height / 2 - wrapRect.top + container.scrollTop;
-                        
-                        // Создаем путь с вертикальной палочкой в начале: |->
-                        const verticalStart = y1 - verticalLineLength / 2;
-                        const verticalEnd = y1 + verticalLineLength / 2;
-                        d = `M ${x1} ${verticalStart} L ${x1} ${verticalEnd} M ${x1} ${y1} L ${x2} ${y2}`;
+                        // Есть пересечения - размещаем на 6px от верхней границы ячейки
+                        const fixedOffset = 6; // Фиксированное смещение от верхней границы
+                        y1 = ra.top + fixedOffset - wrapRect.top + container.scrollTop;
+                        y2 = rb.top + fixedOffset - wrapRect.top + container.scrollTop;
+                        if (import.meta.env.DEV) {
+                            console.log(`Стрелка блокера недели ${link.blockerId} размещена на ${fixedOffset}px от верхней границы ячейки`);
+                        }
                     }
+                    
+                    // Создаем путь с вертикальной палочкой в начале: |->
+                    const verticalStart = y1 - verticalLineLength / 2;
+                    const verticalEnd = y1 + verticalLineLength / 2;
+                    d = `M ${x1} ${verticalStart} L ${x1} ${verticalEnd} M ${x1} ${y1} L ${x2} ${y2}`;
                 } else {
                     // Для блокеров задач: умная маршрутизация
                 const routeType = chooseBestRoute(
@@ -458,22 +421,38 @@ function ArrowOverlay({
                 // Определяем, идет ли стрелка снизу вверх
                 const isUpward = ra.top > rb.top;
                 
-                if (routeType === 'top') {
-                    // Маршрут: правая граница источника → верх/низ цели
-                    x1 = ra.right - wrapRect.left + container.scrollLeft;
-                    y1 = ra.top + ra.height / 2 - wrapRect.top + container.scrollTop;
-                    x2 = rb.left + rb.width / 2 - wrapRect.left + container.scrollLeft;
-                    // Если стрелка идет снизу вверх, направляем в нижний край ячейки
-                    y2 = isUpward ? rb.bottom - wrapRect.top + container.scrollTop : rb.top - wrapRect.top + container.scrollTop;
-                    d = `M ${x1} ${y1} L ${x2} ${y1} L ${x2} ${y2}`;
-                } else {
-                    // Маршрут: низ источника → левая граница цели
-                    x1 = ra.left + ra.width / 2 - wrapRect.left + container.scrollLeft;
-                    y1 = ra.bottom - wrapRect.top + container.scrollTop;
-                    x2 = rb.left - wrapRect.left + container.scrollLeft;
-                    y2 = rb.top + rb.height / 2 - wrapRect.top + container.scrollTop;
-                    d = `M ${x1} ${y1} L ${x1} ${y2} L ${x2} ${y2}`;
-                }
+                    if (routeType === 'top') {
+                        // Маршрут: правая граница источника → верх/низ цели
+                        x1 = ra.right - wrapRect.left + container.scrollLeft;
+                        y1 = ra.top + ra.height / 2 - wrapRect.top + container.scrollTop;
+                        x2 = rb.left + rb.width / 2 - wrapRect.left + container.scrollLeft;
+                        // Если стрелка идет снизу вверх, направляем в нижний край ячейки
+                        y2 = isUpward ? rb.bottom - wrapRect.top + container.scrollTop : rb.top - wrapRect.top + container.scrollTop;
+                        
+                        // Применяем смещение для избежания пересечений
+                        const horizontalOffset = getArrowOffset(x1, y1, x2, y1); // Проверяем горизонтальный сегмент
+                        const verticalOffset = getArrowOffset(x2, y1, x2, y2); // Проверяем вертикальный сегмент
+                        
+                        const horizontalY = y1 + horizontalOffset.offsetY;
+                        const adjustedX2 = x2 + verticalOffset.offsetX;
+                        
+                        d = `M ${x1} ${horizontalY} L ${adjustedX2} ${horizontalY} L ${adjustedX2} ${y2}`;
+                    } else {
+                        // Маршрут: низ источника → левая граница цели
+                        x1 = ra.left + ra.width / 2 - wrapRect.left + container.scrollLeft;
+                        y1 = ra.bottom - wrapRect.top + container.scrollTop;
+                        x2 = rb.left - wrapRect.left + container.scrollLeft;
+                        y2 = rb.top + rb.height / 2 - wrapRect.top + container.scrollTop;
+                        
+                        // Применяем смещение для избежания пересечений
+                        const verticalOffset = getArrowOffset(x1, y1, x1, y2); // Проверяем вертикальный сегмент
+                        const horizontalOffset = getArrowOffset(x1, y2, x2, y2); // Проверяем горизонтальный сегмент
+                        
+                        const adjustedX1 = x1 + verticalOffset.offsetX;
+                        const horizontalY = y2 + horizontalOffset.offsetY;
+                        
+                        d = `M ${adjustedX1} ${y1} L ${adjustedX1} ${horizontalY} L ${x2} ${horizontalY}`;
+                    }
                 }
                 
                 result.push({ 
@@ -574,7 +553,7 @@ function ArrowOverlay({
                 }
                 
                 const stroke = active ? hoverStroke : baseStroke;
-                const strokeWidth = 3; // постоянная толщина
+                const strokeWidth = 2; // постоянная толщина
                 return (
                     <g key={p.id}>
                         {/* Hitbox for hover/click (wide invisible stroke with pointer events) */}
@@ -710,10 +689,10 @@ export function RoadmapPlan() {
         partialBusyWeeks[2] = 1; // Только неделя 3 занята
         const t8: TaskRow = { id: "t8", kind: "task", status: "Todo", sprintsAuto: [], epic: "Эпик 3", task: "Задача 8 (мало занято)", team: "Demo", fn: "BE", planEmpl: 1, planWeeks: 1, blockerIds: [], weekBlockers: [], fact: 1, startWeek: 3, endWeek: 3, manualEdited: true, autoPlanEnabled: false, weeks: partialBusyWeeks };
         
-        // Добавляем задачу с конфликтным блокером, которая будет выбирать между t7 и t8
+        // Добавляем задачу с конфликтным блокером для демонстрации упрощенной красной стрелки
         const conflictTestWeeks = Array(TOTAL_WEEKS).fill(0);
         conflictTestWeeks[2] = 1; // Неделя 3
-        const t9: TaskRow = { id: "t9", kind: "task", status: "Todo", sprintsAuto: [], epic: "Эпик 3", task: "Задача 9 (тест выбора пути)", team: "Demo", fn: "FE", planEmpl: 1, planWeeks: 1, blockerIds: [], weekBlockers: [4], fact: 1, startWeek: 3, endWeek: 3, manualEdited: true, autoPlanEnabled: false, weeks: conflictTestWeeks };
+        const t9: TaskRow = { id: "t9", kind: "task", status: "Todo", sprintsAuto: [], epic: "Эпик 3", task: "Задача 9 (упрощенная красная стрелка)", team: "Demo", fn: "FE", planEmpl: 1, planWeeks: 1, blockerIds: [], weekBlockers: [4], fact: 1, startWeek: 3, endWeek: 3, manualEdited: true, autoPlanEnabled: false, weeks: conflictTestWeeks };
         return [res1, res2, res3, t1, t2, t3, t4, t5, t6, t7, t8, t9];
     });
 
@@ -1881,18 +1860,14 @@ export function RoadmapPlan() {
                 borderTop: '2px solid gray',
                 borderRight: '2px solid gray',
                 borderBottom: '2px solid gray',
-                borderLeft: '2px solid gray',
-                paddingRight: '0.5em',
-                paddingLeft: '0.5em'
+                borderLeft: '2px solid gray'
             };
         }
         return { 
             borderTop: '1px solid rgb(226, 232, 240)',
             borderRight: '1px solid rgb(226, 232, 240)',
             borderBottom: '1px solid rgb(226, 232, 240)',
-            borderLeft: '1px solid rgb(226, 232, 240)',
-            paddingRight: '0.5em',
-            paddingLeft: '0.5em'
+            borderLeft: '1px solid rgb(226, 232, 240)'
         };
     }
     
@@ -2769,7 +2744,7 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
                             {renderHeadWithFilter("Auto", "autoplan")}
                             {/* Заголовки для недель */}
                             {range(TOTAL_WEEKS).map(w => { const h = weekHeaderLabelLocal(w); return (
-                                <th key={w} className="px-2 py-2 text-center whitespace-nowrap align-middle" style={{width: '3.5rem', border: '1px solid rgb(226, 232, 240)', paddingRight: '0.5em', paddingLeft: '0.5em' }}>
+                                <th key={w} className="px-2 py-2 text-center whitespace-nowrap align-middle" style={{width: '3.5rem', border: '1px solid rgb(226, 232, 240)' }}>
                                     <div className="text-xs font-semibold">#{h.num}</div>
                                     <div className="text-[10px] text-gray-500">{h.sprint || ""}</div>
                                     <div className="text-[10px] text-gray-400">с {h.from}</div>
