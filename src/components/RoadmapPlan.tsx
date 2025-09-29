@@ -66,6 +66,7 @@ type TaskRow = {
     fact: number; // auto: sum of weeks values
     startWeek: number | null; // auto
     endWeek: number | null;   // auto
+    expectedStartWeek?: number | null; // скрытое поле для ожидаемой недели начала
     manualEdited: boolean; // ✏️ flag
     autoPlanEnabled: boolean; // чекбокс автоплана
     weeks: number[]; // actual placed amounts by week
@@ -81,6 +82,28 @@ function fmtDM(dateISO: string) {
     const dd = String(d.getUTCDate()).padStart(2, "0");
     const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
     return `${dd}.${mm}`;
+}
+
+// Функция для проверки несоответствия expectedStartWeek и startWeek
+function hasExpectedStartWeekMismatch(task: TaskRow): boolean {
+    const result = task.expectedStartWeek !== null && 
+           task.expectedStartWeek !== undefined && 
+           task.startWeek !== null && 
+           task.startWeek !== undefined && 
+           task.expectedStartWeek !== task.startWeek;
+    
+    
+    return result;
+}
+
+// Функция для получения класса фона ячейки с учетом несоответствия
+function getCellBgClass(hasMismatch: boolean): string {
+    return hasMismatch ? 'bg-red-100' : 'bg-white';
+}
+
+// Функция для получения inline стилей фона ячейки с учетом несоответствия
+function getCellBgStyle(hasMismatch: boolean): React.CSSProperties {
+    return hasMismatch ? { backgroundColor: '#fee2e2' } : {};
 }
 
 // ---- Функции для стрелок блокеров ----
@@ -660,40 +683,46 @@ export function RoadmapPlan() {
         const res1: ResourceRow = { id: "r1", kind: "resource", team: ["Demo"], fn: "BE", empl: "Ivan", weeks: Array(TOTAL_WEEKS).fill(1) };
         const res2: ResourceRow = { id: "r2", kind: "resource", team: ["Demo"], fn: "FE", weeks: Array(TOTAL_WEEKS).fill(1) };
         const res3: ResourceRow = { id: "r3", kind: "resource", team: ["Demo"], fn: "PO", weeks: Array(TOTAL_WEEKS).fill(1) };
-        const t1: TaskRow = { id: "t1", kind: "task", status: "Todo", sprintsAuto: [], epic: "Эпик 1", task: "Задача 1", team: "Demo", fn: "BE", empl: "Ivan", planEmpl: 1, planWeeks: 3, blockerIds: [], weekBlockers: [], fact: 0, startWeek: null, endWeek: null, manualEdited: false, autoPlanEnabled: true, weeks: Array(TOTAL_WEEKS).fill(0) };
-        const t2: TaskRow = { id: "t2", kind: "task", status: "Todo", sprintsAuto: [], epic: "Эпик 1", task: "Задача 2", team: "Demo", fn: "BE", planEmpl: 1, planWeeks: 2, blockerIds: ["t1"], weekBlockers: [], fact: 0, startWeek: null, endWeek: null, manualEdited: false, autoPlanEnabled: true, weeks: Array(TOTAL_WEEKS).fill(0) };
-        const t3: TaskRow = { id: "t3", kind: "task", status: "Backlog", sprintsAuto: [], epic: "Эпик 2", task: "Задача 3", team: "Demo", fn: "FE", planEmpl: 1, planWeeks: 4, blockerIds: [], weekBlockers: [5], fact: 0, startWeek: null, endWeek: null, manualEdited: false, autoPlanEnabled: true, weeks: Array(TOTAL_WEEKS).fill(0) };
+        const t1: TaskRow = { id: "t1", kind: "task", status: "Todo", sprintsAuto: [], epic: "Эпик 1", task: "Задача 1", team: "Demo", fn: "BE", empl: "Ivan", planEmpl: 1, planWeeks: 3, blockerIds: [], weekBlockers: [], fact: 0, startWeek: null, endWeek: null, expectedStartWeek: null, manualEdited: false, autoPlanEnabled: true, weeks: Array(TOTAL_WEEKS).fill(0) };
+        const t2: TaskRow = { id: "t2", kind: "task", status: "Todo", sprintsAuto: [], epic: "Эпик 1", task: "Задача 2", team: "Demo", fn: "BE", planEmpl: 1, planWeeks: 2, blockerIds: ["t1"], weekBlockers: [], fact: 0, startWeek: null, endWeek: null, expectedStartWeek: null, manualEdited: false, autoPlanEnabled: true, weeks: Array(TOTAL_WEEKS).fill(0) };
+        const t3: TaskRow = { id: "t3", kind: "task", status: "Backlog", sprintsAuto: [], epic: "Эпик 2", task: "Задача 3", team: "Demo", fn: "FE", planEmpl: 1, planWeeks: 4, blockerIds: [], weekBlockers: [5], fact: 0, startWeek: null, endWeek: null, expectedStartWeek: null, manualEdited: false, autoPlanEnabled: true, weeks: Array(TOTAL_WEEKS).fill(0) };
         // Добавляем задачу с блокером недели 2 - задача начинается с недели 3 (должна быть серая стрелка)
         const normalWeeks = Array(TOTAL_WEEKS).fill(0);
         normalWeeks[2] = 1; // Неделя 3
         normalWeeks[3] = 1; // Неделя 4
-        const t4: TaskRow = { id: "t4", kind: "task", status: "Todo", sprintsAuto: [], epic: "Эпик 2", task: "Задача 4 (блокер нед.2)", team: "Demo", fn: "FE", planEmpl: 1, planWeeks: 2, blockerIds: [], weekBlockers: [2], fact: 2, startWeek: 3, endWeek: 4, manualEdited: true, autoPlanEnabled: false, weeks: normalWeeks };
+        const t4: TaskRow = { id: "t4", kind: "task", status: "Todo", sprintsAuto: [], epic: "Эпик 2", task: "Задача 4 (блокер нед.2)", team: "Demo", fn: "FE", planEmpl: 1, planWeeks: 2, blockerIds: [], weekBlockers: [2], fact: 2, startWeek: 3, endWeek: 4, expectedStartWeek: null, manualEdited: true, autoPlanEnabled: false, weeks: normalWeeks };
         
         // Добавляем задачу с конфликтным блокером недели 3 - задача начинается с недели 2 (должна быть красная стрелка)
         const conflictWeeks = Array(TOTAL_WEEKS).fill(0);
         conflictWeeks[1] = 1; // Неделя 2
         conflictWeeks[2] = 1; // Неделя 3
-        const t5: TaskRow = { id: "t5", kind: "task", status: "Todo", sprintsAuto: [], epic: "Эпик 2", task: "Задача 5 (конфликт)", team: "Demo", fn: "FE", planEmpl: 1, planWeeks: 2, blockerIds: [], weekBlockers: [3], fact: 2, startWeek: 2, endWeek: 3, manualEdited: true, autoPlanEnabled: false, weeks: conflictWeeks };
+        const t5: TaskRow = { id: "t5", kind: "task", status: "Todo", sprintsAuto: [], epic: "Эпик 2", task: "Задача 5 (конфликт)", team: "Demo", fn: "FE", planEmpl: 1, planWeeks: 2, blockerIds: [], weekBlockers: [3], fact: 2, startWeek: 2, endWeek: 3, expectedStartWeek: null, manualEdited: true, autoPlanEnabled: false, weeks: conflictWeeks };
         
         // Добавляем задачу с блокером недели 1 - задача должна начинаться с недели 2
-        const t6: TaskRow = { id: "t6", kind: "task", status: "Todo", sprintsAuto: [], epic: "Эпик 3", task: "Задача 6 (блокер нед.1)", team: "Demo", fn: "PO", planEmpl: 1, planWeeks: 2, blockerIds: [], weekBlockers: [1], fact: 0, startWeek: null, endWeek: null, manualEdited: false, autoPlanEnabled: true, weeks: Array(TOTAL_WEEKS).fill(0) };
+        const t6: TaskRow = { id: "t6", kind: "task", status: "Todo", sprintsAuto: [], epic: "Эпик 3", task: "Задача 6 (блокер нед.1)", team: "Demo", fn: "PO", planEmpl: 1, planWeeks: 2, blockerIds: [], weekBlockers: [1], fact: 0, startWeek: null, endWeek: null, expectedStartWeek: null, manualEdited: false, autoPlanEnabled: true, weeks: Array(TOTAL_WEEKS).fill(0) };
         
         // Добавляем задачу для создания "занятости" в соседних строках
         const busyWeeks = Array(TOTAL_WEEKS).fill(0);
         busyWeeks[2] = 1; // Неделя 3 - занята
         busyWeeks[3] = 1; // Неделя 4 - занята
-        const t7: TaskRow = { id: "t7", kind: "task", status: "Todo", sprintsAuto: [], epic: "Эпик 3", task: "Задача 7 (много занято)", team: "Demo", fn: "PO", planEmpl: 1, planWeeks: 2, blockerIds: [], weekBlockers: [], fact: 2, startWeek: 3, endWeek: 4, manualEdited: true, autoPlanEnabled: false, weeks: busyWeeks };
+        const t7: TaskRow = { id: "t7", kind: "task", status: "Todo", sprintsAuto: [], epic: "Эпик 3", task: "Задача 7 (много занято)", team: "Demo", fn: "PO", planEmpl: 1, planWeeks: 2, blockerIds: [], weekBlockers: [], fact: 2, startWeek: 3, endWeek: 4, expectedStartWeek: null, manualEdited: true, autoPlanEnabled: false, weeks: busyWeeks };
         
         // Добавляем задачу с частичной занятостью для сравнения
         const partialBusyWeeks = Array(TOTAL_WEEKS).fill(0);
         partialBusyWeeks[2] = 1; // Только неделя 3 занята
-        const t8: TaskRow = { id: "t8", kind: "task", status: "Todo", sprintsAuto: [], epic: "Эпик 3", task: "Задача 8 (мало занято)", team: "Demo", fn: "BE", planEmpl: 1, planWeeks: 1, blockerIds: [], weekBlockers: [], fact: 1, startWeek: 3, endWeek: 3, manualEdited: true, autoPlanEnabled: false, weeks: partialBusyWeeks };
+        const t8: TaskRow = { id: "t8", kind: "task", status: "Todo", sprintsAuto: [], epic: "Эпик 3", task: "Задача 8 (мало занято)", team: "Demo", fn: "BE", planEmpl: 1, planWeeks: 1, blockerIds: [], weekBlockers: [], fact: 1, startWeek: 3, endWeek: 3, expectedStartWeek: null, manualEdited: true, autoPlanEnabled: false, weeks: partialBusyWeeks };
         
         // Добавляем задачу с конфликтным блокером для демонстрации упрощенной красной стрелки
         const conflictTestWeeks = Array(TOTAL_WEEKS).fill(0);
         conflictTestWeeks[2] = 1; // Неделя 3
-        const t9: TaskRow = { id: "t9", kind: "task", status: "Todo", sprintsAuto: [], epic: "Эпик 3", task: "Задача 9 (упрощенная красная стрелка)", team: "Demo", fn: "FE", planEmpl: 1, planWeeks: 1, blockerIds: [], weekBlockers: [4], fact: 1, startWeek: 3, endWeek: 3, manualEdited: true, autoPlanEnabled: false, weeks: conflictTestWeeks };
-        return [res1, res2, res3, t1, t2, t3, t4, t5, t6, t7, t8, t9];
+        const t9: TaskRow = { id: "t9", kind: "task", status: "Todo", sprintsAuto: [], epic: "Эпик 3", task: "Задача 9 (упрощенная красная стрелка)", team: "Demo", fn: "FE", planEmpl: 1, planWeeks: 1, blockerIds: [], weekBlockers: [4], fact: 1, startWeek: 3, endWeek: 3, expectedStartWeek: null, manualEdited: true, autoPlanEnabled: false, weeks: conflictTestWeeks };
+        
+        // Добавляем тестовую задачу с несоответствием expectedStartWeek и startWeek
+        const testWeeks = Array(TOTAL_WEEKS).fill(0);
+        testWeeks[4] = 1; // Неделя 5
+        const t10: TaskRow = { id: "t10", kind: "task", status: "Todo", sprintsAuto: [], epic: "Эпик 3", task: "Задача 10 (тест несоответствия)", team: "Demo", fn: "BE", planEmpl: 1, planWeeks: 1, blockerIds: [], weekBlockers: [], fact: 1, startWeek: 5, endWeek: 5, expectedStartWeek: 3, manualEdited: true, autoPlanEnabled: false, weeks: testWeeks };
+        
+        return [res1, res2, res3, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10];
     });
 
     // ===== Последовательный пересчёт (как в формуле roadmap.js) =====
@@ -2364,22 +2393,27 @@ export function RoadmapPlan() {
             case "autoplan": return r.kind === "task" ? (t.autoPlanEnabled ? "on" : "off") : "";
         }
     }
-    const filteredRows = useMemo(() => computedRows.filter(r => {
-        for (const col of Object.keys(filters) as ColumnId[]) {
-            const f = filters[col]!; const val = valueForCol(r, col); if (!f) continue;
-            const tokens = Array.from(f.selected || []); if (tokens.length === 0) continue;
-            // Fix filtering logic: proper OR logic for empty and non-empty values
-            const hit = tokens.some(s => {
-                // Handle empty values: both "" and "(пусто)" should match empty fields
-                if (s === "" || s === "(пусто)") {
-                    return !val || val.trim() === "";
-                }
-                // Handle non-empty values: exact match to avoid substring issues
-                return val === s;
-            });
-            if (!hit) return false;
-        } return true;
-    }), [computedRows, filters]);
+    const filteredRows = useMemo(() => {
+        const result = computedRows.filter(r => {
+            for (const col of Object.keys(filters) as ColumnId[]) {
+                const f = filters[col]!; const val = valueForCol(r, col); if (!f) continue;
+                const tokens = Array.from(f.selected || []); if (tokens.length === 0) continue;
+                // Fix filtering logic: proper OR logic for empty and non-empty values
+                const hit = tokens.some(s => {
+                    // Handle empty values: both "" and "(пусто)" should match empty fields
+                    if (s === "" || s === "(пусто)") {
+                        return !val || val.trim() === "";
+                    }
+                    // Handle non-empty values: exact match to avoid substring issues
+                    return val === s;
+                });
+                if (!hit) return false;
+            } return true;
+        });
+        
+        
+        return result;
+    }, [computedRows, filters]);
 
     const links = useMemo(() => {
         const tasks = filteredRows.filter(r => r.kind === "task") as TaskRow[];
@@ -2658,6 +2692,7 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
             fact: 0,
             startWeek: null,
             endWeek: null,
+            expectedStartWeek: null,
             manualEdited: false,
             autoPlanEnabled: true,
             weeks: Array(TOTAL_WEEKS).fill(0)
@@ -2678,7 +2713,7 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
             if (idx < 0) return prev;
             const row = prev[idx];
             const copy: Row = row.kind === 'task'
-                ? { ...(row as TaskRow), id: rid(), blockerIds: [...(row as TaskRow).blockerIds], weekBlockers: [...(row as TaskRow).weekBlockers] }
+                ? { ...(row as TaskRow), id: rid(), blockerIds: [...(row as TaskRow).blockerIds], weekBlockers: [...(row as TaskRow).weekBlockers], expectedStartWeek: (row as TaskRow).expectedStartWeek }
         : { ...(row as ResourceRow), id: rid(), weeks: [...(row as ResourceRow).weeks] };
             const next = prev.slice();
             next.splice(idx + 1, 0, copy);
@@ -2896,9 +2931,15 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
                         ))}
 
                         {/* Задачи */}
-                        {filteredRows.filter(r => r.kind === "task").map(r => (
+                        {filteredRows.filter(r => r.kind === "task").map(r => {
+                            const task = r as TaskRow;
+                            const hasMismatch = hasExpectedStartWeekMismatch(task);
+                            
+                            
+                            return (
                             <tr key={r.id}
-                                className="border-b bg-white"
+                                className={`border-b ${hasMismatch ? 'bg-red-100' : 'bg-white'}`}
+                                style={hasMismatch ? { backgroundColor: '#fee2e2' } : {}}
                                 data-row-id={r.id}
                                 onMouseDown={(e)=>{ 
                                     if (r.kind==='task') onTaskMouseDown(e, r as TaskRow); 
@@ -2908,10 +2949,10 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
                                 onContextMenu={(e)=>onContextMenuRow(e,r)}
                             >
                                 {/* Тип */}
-                                <td className={`px-2 py-1 align-middle bg-white ${getCellBorderClass(r.id)} draggable-cell`} style={{...getCellBorderStyle(isSel(r.id,'type')), ...getCellBorderStyleForDrag(r.id)}} onMouseDown={markDragAllowed}>Задача</td>
+                                <td className={`px-2 py-1 align-middle ${getCellBgClass(hasMismatch)} ${getCellBorderClass(r.id)} draggable-cell`} style={{...getCellBorderStyle(isSel(r.id,'type')), ...getCellBorderStyleForDrag(r.id), ...getCellBgStyle(hasMismatch)}} onMouseDown={markDragAllowed}>Задача</td>
 
                                 {/* Status */}
-                                <td className={`px-2 py-1 align-middle text-center bg-white ${getCellBorderClass(r.id)} draggable-cell`} style={{...getCellBorderStyle(isSel(r.id,'status')), ...getCellBorderStyleForDrag(r.id)}} onMouseDown={markDragAllowed} onDoubleClick={()=>startEdit({rowId:r.id,col:"status"})} onClick={()=>setSel({rowId:r.id,col:"status"})}>
+                                <td className={`px-2 py-1 align-middle text-center ${getCellBgClass(hasMismatch)} ${getCellBorderClass(r.id)} draggable-cell`} style={{...getCellBorderStyle(isSel(r.id,'status')), ...getCellBorderStyleForDrag(r.id), ...getCellBgStyle(hasMismatch)}} onMouseDown={markDragAllowed} onDoubleClick={()=>startEdit({rowId:r.id,col:"status"})} onClick={()=>setSel({rowId:r.id,col:"status"})}>
                                     {editing?.rowId===r.id && editing?.col==="status" ? (
                                         <div className="w-full h-full">
                                             <Select
@@ -2935,10 +2976,10 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
                                </td>
 
                                 {/* Sprints readonly */}
-                                <td className={`px-2 py-1 align-middle bg-white ${getCellBorderClass(r.id)} draggable-cell`} style={{...getCellBorderStyle(isSel(r.id,'sprintsAuto')), ...getCellBorderStyleForDrag(r.id)}} onMouseDown={markDragAllowed}>{(r as TaskRow).sprintsAuto.join(", ")||""}</td>
+                                <td className={`px-2 py-1 align-middle ${getCellBgClass(hasMismatch)} ${getCellBorderClass(r.id)} draggable-cell`} style={{...getCellBorderStyle(isSel(r.id,'sprintsAuto')), ...getCellBorderStyleForDrag(r.id), ...getCellBgStyle(hasMismatch)}} onMouseDown={markDragAllowed}>{(r as TaskRow).sprintsAuto.join(", ")||""}</td>
 
                                 {/* Epic */}
-                                <td className={`px-2 py-1 align-middle bg-white ${getCellBorderClass(r.id)} draggable-cell`} style={{...getCellBorderStyle(isSel(r.id,'epic')), ...getCellBorderStyleForDrag(r.id)}} onMouseDown={markDragAllowed} onDoubleClick={()=>startEdit({rowId:r.id,col:"epic"})} onClick={()=>setSel({rowId:r.id,col:"epic"})}>
+                                <td className={`px-2 py-1 align-middle ${getCellBgClass(hasMismatch)} ${getCellBorderClass(r.id)} draggable-cell`} style={{...getCellBorderStyle(isSel(r.id,'epic')), ...getCellBorderStyleForDrag(r.id), ...getCellBgStyle(hasMismatch)}} onMouseDown={markDragAllowed} onDoubleClick={()=>startEdit({rowId:r.id,col:"epic"})} onClick={()=>setSel({rowId:r.id,col:"epic"})}>
                                     {editing?.rowId===r.id && editing?.col==="epic" ? (
                                         <input autoFocus className="w-full h-full box-border min-w-0 outline-none bg-transparent" style={{ border: 'none', padding: 0, margin: 0 }} defaultValue={(r as TaskRow).epic||""}
                                                onKeyDown={(e)=>{
@@ -2952,7 +2993,7 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
                                 </td>
 
                                 {/* Task */}
-                                <td className={`px-2 py-1 align-middle bg-white ${getCellBorderClass(r.id)} draggable-cell`} style={{...getCellBorderStyle(isSel(r.id,'task')), ...getCellBorderStyleForDrag(r.id)}} onMouseDown={markDragAllowed} onDoubleClick={()=>startEdit({rowId:r.id,col:"task"})} onClick={()=>setSel({rowId:r.id,col:"task"})}>
+                                <td className={`px-2 py-1 align-middle ${getCellBgClass(hasMismatch)} ${getCellBorderClass(r.id)} draggable-cell`} style={{...getCellBorderStyle(isSel(r.id,'task')), ...getCellBorderStyleForDrag(r.id), ...getCellBgStyle(hasMismatch)}} onMouseDown={markDragAllowed} onDoubleClick={()=>startEdit({rowId:r.id,col:"task"})} onClick={()=>setSel({rowId:r.id,col:"task"})}>
                                     {editing?.rowId===r.id && editing?.col==="task" ? (
                                         <input autoFocus className="w-full h-full box-border min-w-0 outline-none bg-transparent" style={{ border: 'none', padding: 0, margin: 0 }} defaultValue={(r as TaskRow).task}
                                                onKeyDown={(e)=>{
@@ -2966,7 +3007,7 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
                                 </td>
 
                                 {/* Team */}
-                                <td className={`px-2 py-1 align-middle bg-white ${getCellBorderClass(r.id)} draggable-cell`} style={{...getCellBorderStyle(isSel(r.id,'team')), ...getCellBorderStyleForDrag(r.id)}} onMouseDown={markDragAllowed} onDoubleClick={()=>{
+                                <td className={`px-2 py-1 align-middle ${getCellBgClass(hasMismatch)} ${getCellBorderClass(r.id)} draggable-cell`} style={{...getCellBorderStyle(isSel(r.id,'team')), ...getCellBorderStyleForDrag(r.id), ...getCellBgStyle(hasMismatch)}} onMouseDown={markDragAllowed} onDoubleClick={()=>{
                                     console.log('Task team cell double clicked, starting edit');
                                     startEdit({rowId:r.id,col:"team"});
                                 }} onClick={()=>{
@@ -3010,7 +3051,7 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
                                 </td>
 
                                 {/* Empl */}
-                                <td className={`px-2 py-1 align-middle text-center bg-white ${getCellBorderClass(r.id)} draggable-cell`} style={{...getCellBorderStyle(isSel(r.id,'empl')), ...getCellBorderStyleForDrag(r.id)}} onMouseDown={markDragAllowed} onDoubleClick={()=>startEdit({rowId:r.id,col:"empl"})} onClick={()=>setSel({rowId:r.id,col:"empl"})}>
+                                <td className={`px-2 py-1 align-middle text-center ${getCellBgClass(hasMismatch)} ${getCellBorderClass(r.id)} draggable-cell`} style={{...getCellBorderStyle(isSel(r.id,'empl')), ...getCellBorderStyleForDrag(r.id), ...getCellBgStyle(hasMismatch)}} onMouseDown={markDragAllowed} onDoubleClick={()=>startEdit({rowId:r.id,col:"empl"})} onClick={()=>setSel({rowId:r.id,col:"empl"})}>
                                     {editing?.rowId===r.id && editing?.col==="empl" ? (
                                         <input autoFocus className="w-full h-full box-border min-w-0 outline-none bg-transparent" style={{ border: 'none', padding: 0, margin: 0 }} defaultValue={(r as TaskRow).empl || ""}
                                                onKeyDown={(e)=>{
@@ -3024,7 +3065,7 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
                                 </td>
 
                                 {/* Plan empl */}
-                                <td className={`px-2 py-1 align-middle text-center bg-white ${getCellBorderClass(r.id)} draggable-cell`} style={{...getCellBorderStyle(isSel(r.id,'planEmpl')), ...getCellBorderStyleForDrag(r.id)}} onMouseDown={markDragAllowed} onDoubleClick={()=>startEdit({rowId:r.id,col:"planEmpl"})} onClick={()=>setSel({rowId:r.id,col:"planEmpl"})}>
+                                <td className={`px-2 py-1 align-middle text-center ${getCellBgClass(hasMismatch)} ${getCellBorderClass(r.id)} draggable-cell`} style={{...getCellBorderStyle(isSel(r.id,'planEmpl')), ...getCellBorderStyleForDrag(r.id), ...getCellBgStyle(hasMismatch)}} onMouseDown={markDragAllowed} onDoubleClick={()=>startEdit({rowId:r.id,col:"planEmpl"})} onClick={()=>setSel({rowId:r.id,col:"planEmpl"})}>
                                     {editing?.rowId===r.id && editing?.col==="planEmpl" ? (
                                         <input autoFocus type="number" className="w-full h-full box-border min-w-0 outline-none bg-transparent" style={{ border: 'none', padding: 0, margin: 0 }} defaultValue={(r as TaskRow).planEmpl}
                                                onKeyDown={(e)=>{
@@ -3038,7 +3079,7 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
                                 </td>
 
                                 {/* Plan weeks */}
-                                <td className={`px-2 py-1 align-middle text-center bg-white ${getCellBorderClass(r.id)} draggable-cell`} style={{...getCellBorderStyle(isSel(r.id,'planWeeks')), ...getCellBorderStyleForDrag(r.id)}} onMouseDown={markDragAllowed} onDoubleClick={()=>startEdit({rowId:r.id,col:"planWeeks"})} onClick={()=>setSel({rowId:r.id,col:"planWeeks"})}>
+                                <td className={`px-2 py-1 align-middle text-center ${getCellBgClass(hasMismatch)} ${getCellBorderClass(r.id)} draggable-cell`} style={{...getCellBorderStyle(isSel(r.id,'planWeeks')), ...getCellBorderStyleForDrag(r.id), ...getCellBgStyle(hasMismatch)}} onMouseDown={markDragAllowed} onDoubleClick={()=>startEdit({rowId:r.id,col:"planWeeks"})} onClick={()=>setSel({rowId:r.id,col:"planWeeks"})}>
                                     {editing?.rowId===r.id && editing?.col==="planWeeks" ? (
                                         <input autoFocus type="number" className="w-full h-full box-border min-w-0 outline-none bg-transparent" style={{ border: 'none', padding: 0, margin: 0 }} defaultValue={(r as TaskRow).planWeeks}
                                                onKeyDown={(e)=>{
@@ -3052,7 +3093,7 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
                                 </td>
 
                     {/* Автоплан чекбокс */}
-                    <td className={`px-2 py-1 align-middle text-center bg-white ${getCellBorderClass(r.id)} draggable-cell`} style={{...getCellBorderStyle(isSel(r.id,'autoplan')), ...getCellBorderStyleForDrag(r.id)}} onMouseDown={markDragAllowed} onClick={()=>setSel({rowId:r.id,col:"autoplan"})}>
+                    <td className={`px-2 py-1 align-middle text-center ${getCellBgClass(hasMismatch)} ${getCellBorderClass(r.id)} draggable-cell`} style={{...getCellBorderStyle(isSel(r.id,'autoplan')), ...getCellBorderStyleForDrag(r.id), ...getCellBgStyle(hasMismatch)}} onMouseDown={markDragAllowed} onClick={()=>setSel({rowId:r.id,col:"autoplan"})}>
                         <label className="inline-flex items-center gap-2">
                             <input type="checkbox" checked={(r as TaskRow).autoPlanEnabled} onChange={e=>toggleAutoPlan(r.id, e.currentTarget.checked)} 
                                    onKeyDown={(e)=>{
@@ -3187,7 +3228,8 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
                         </td>
                     ))}
                 </tr>
-            ))}
+                            );
+                        })}
             </tbody>
         </table>
         
