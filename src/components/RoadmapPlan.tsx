@@ -31,6 +31,7 @@ type Link = {
     isConflict: boolean; // true если есть конфликт планирования
     blockerId: string; // ID задачи-блокера
     blockedTaskId: string; // ID заблокированной задачи
+    type: 'task' | 'week'; // тип блокера: задача или неделя
 };
 
 type Sprint = {
@@ -61,6 +62,7 @@ type TaskRow = {
     planEmpl: number; // concurrent capacity needed per week
     planWeeks: number; // continuous duration in weeks
     blockerIds: ID[]; // blockers referencing other tasks
+    weekBlockers: number[]; // week numbers that block this task (1-based)
     fact: number; // auto: sum of weeks values
     startWeek: number | null; // auto
     endWeek: number | null;   // auto
@@ -107,6 +109,7 @@ function buildLinks(tasks: TaskRow[]): Link[] {
     const taskMap = new Map(tasks.map(t => [t.id, t]));
     
     for (const task of tasks) {
+        // Обрабатываем блокеры задач
         for (const blockerId of task.blockerIds) {
             const blocker = taskMap.get(blockerId);
             if (!blocker) continue;
@@ -128,7 +131,35 @@ function buildLinks(tasks: TaskRow[]): Link[] {
                         to: { taskId: task.id, weekIdx: targetWeek },
                         isConflict,
                         blockerId,
-                        blockedTaskId: task.id
+                        blockedTaskId: task.id,
+                        type: 'task'
+                    });
+                }
+            }
+        }
+        
+        // Обрабатываем блокеры недель
+        for (const weekNumber of task.weekBlockers || []) {
+            const weekIdx = weekNumber - 1; // Преобразуем в 0-based
+            const taskFirstW = firstAllocatedWeek(task);
+            
+            if (weekIdx >= 0 && weekIdx < 16) { // проверяем что неделя в пределах таблицы
+                // Определяем есть ли конфликт планирования (если первая неделя <= блокирующей недели)
+                const isConflict = taskFirstW != null && taskFirstW <= weekIdx;
+                
+                // Если конфликт, стрелка ведет на правильную неделю (следующую после блокера)
+                // Если нет конфликта, стрелка ведет на первую неделю задачи
+                const targetWeek = isConflict ? weekIdx + 1 : taskFirstW;
+                
+                if (targetWeek != null && targetWeek < 16) {
+                    // Стрелка выходит из самой блокирующей недели
+                    links.push({
+                        from: { taskId: task.id, weekIdx: weekIdx },
+                        to: { taskId: task.id, weekIdx: targetWeek },
+                        isConflict,
+                        blockerId: `week-${weekNumber}`, // Специальный ID для блокера недели
+                        blockedTaskId: task.id,
+                        type: 'week'
                     });
                 }
             }
@@ -234,6 +265,7 @@ function ArrowOverlay({
         isConflict: boolean; // конфликт планирования
         blockerId: string;
         blockedTaskId: string;
+        type: 'task' | 'week'; // тип блокера
     }>>([]);
     const [hoverId, setHoverId] = useState<string | null>(null);
 
@@ -246,14 +278,175 @@ function ArrowOverlay({
             const result: typeof paths = [];
 
             links.forEach((link, i) => {
-                const a = document.getElementById(cellId(link.from.taskId, link.from.weekIdx));
-                const b = document.getElementById(cellId(link.to.taskId, link.to.weekIdx));
+                let a: HTMLElement | null, b: HTMLElement | null;
+                
+                if (link.type === 'week') {
+                    // Для блокеров недель: стрелка выходит из ячейки R:M-1 (где M - номер недели блокера)
+                    a = document.getElementById(cellId(link.from.taskId, link.from.weekIdx));
+                    b = document.getElementById(cellId(link.to.taskId, link.to.weekIdx));
+                } else {
+                    // Для блокеров задач: обычная логика
+                    a = document.getElementById(cellId(link.from.taskId, link.from.weekIdx));
+                    b = document.getElementById(cellId(link.to.taskId, link.to.weekIdx));
+                }
+                
                 if (!a || !b) return;
                 
                 const ra = a.getBoundingClientRect();
                 const rb = b.getBoundingClientRect();
 
-                // Умная маршрутизация стрелки
+                let x1: number, y1: number, x2: number, y2: number, d: string;
+
+                if (link.type === 'week') {
+                    // Для блокеров недель
+                    if (link.isConflict) {
+                        // Конфликтный блокер: L-образная красная стрелка из соседней строки
+                        // Находим свободную соседнюю строку (выше или ниже)
+                        const taskRowIndex = tasks.findIndex(t => t.id === link.from.taskId);
+                        let alternativeRowId: string | null = null;
+                        let useUpperRow = false;
+                        
+                        // Функция для проверки, свободна ли ячейка в определенной строке
+                        const isCellFree = (taskId: string, weekIdx: number): boolean => {
+                            const task = tasks.find(t => t.id === taskId);
+                            if (!task) return false;
+                            return (task.weeks[weekIdx] || 0) === 0;
+                        };
+                        
+                        // Функция для подсчета занятых ячеек по пути L-образной стрелки
+                        const countOccupiedCellsInPath = (alternativeTaskId: string, fromWeek: number, toWeek: number): number => {
+                            let occupiedCount = 0;
+                            
+                            // L-образная стрелка состоит из двух сегментов:
+                            // 1. Горизонтальный: от fromWeek до toWeek по альтернативной строке
+                            // 2. Вертикальный: только в toWeek от альтернативной строки к целевой строке
+                            
+                            // Проверяем только горизонтальный сегмент по альтернативной строке
+                            if (fromWeek !== toWeek) {
+                                const startWeek = Math.min(fromWeek, toWeek);
+                                const endWeek = Math.max(fromWeek, toWeek);
+                                
+                                // Проверяем все ячейки горизонтального сегмента
+                                for (let week = startWeek; week <= endWeek; week++) {
+                                    if (!isCellFree(alternativeTaskId, week)) {
+                                        occupiedCount++;
+                                    }
+                                }
+                            } else {
+                                // Если fromWeek === toWeek, проверяем только исходную ячейку
+                                if (!isCellFree(alternativeTaskId, fromWeek)) {
+                                    occupiedCount++;
+                                }
+                            }
+                            
+                            // Примечание: вертикальный сегмент не проверяем, так как он идет по воздуху
+                            // между строками и не пересекается с ячейками задач
+                            
+                            return occupiedCount;
+                        };
+                        
+                        // Используем целевую неделю из данных link
+                        const targetWeekForPath = link.to.weekIdx;
+                        
+                        let bestAlternativeId: string | null = null;
+                        let bestUseUpperRow = false;
+                        let minOccupiedCells = Infinity;
+                        
+                        // Проверяем строку выше
+                        if (taskRowIndex > 0) {
+                            const upperTaskId = tasks[taskRowIndex - 1].id;
+                            const occupiedCells = countOccupiedCellsInPath(upperTaskId, link.from.weekIdx, targetWeekForPath);
+                            if (import.meta.env.DEV) {
+                                console.log(`Верхняя строка (${upperTaskId}): ${occupiedCells} занятых ячеек по пути ${link.from.weekIdx} -> ${targetWeekForPath}`);
+                            }
+                            if (occupiedCells < minOccupiedCells) {
+                                minOccupiedCells = occupiedCells;
+                                bestAlternativeId = upperTaskId;
+                                bestUseUpperRow = true;
+                            }
+                        }
+                        
+                        // Проверяем строку ниже
+                        if (taskRowIndex < tasks.length - 1) {
+                            const lowerTaskId = tasks[taskRowIndex + 1].id;
+                            const occupiedCells = countOccupiedCellsInPath(lowerTaskId, link.from.weekIdx, targetWeekForPath);
+                            if (import.meta.env.DEV) {
+                                console.log(`Нижняя строка (${lowerTaskId}): ${occupiedCells} занятых ячеек по пути ${link.from.weekIdx} -> ${targetWeekForPath}`);
+                            }
+                            if (occupiedCells < minOccupiedCells) {
+                                minOccupiedCells = occupiedCells;
+                                bestAlternativeId = lowerTaskId;
+                                bestUseUpperRow = false;
+                            }
+                        }
+                        
+                        // Используем лучший вариант
+                        alternativeRowId = bestAlternativeId;
+                        useUpperRow = bestUseUpperRow;
+                        
+                        if (import.meta.env.DEV && alternativeRowId) {
+                            console.log(`Выбран путь через ${useUpperRow ? 'верхнюю' : 'нижнюю'} строку (${alternativeRowId}) с ${minOccupiedCells} коллизиями`);
+                        }
+                        
+                        // Fallback: если нет соседних строк, используем любую доступную
+                        if (!alternativeRowId) {
+                            if (taskRowIndex > 0) {
+                                alternativeRowId = tasks[taskRowIndex - 1].id;
+                                useUpperRow = true;
+                            } else if (taskRowIndex < tasks.length - 1) {
+                                alternativeRowId = tasks[taskRowIndex + 1].id;
+                                useUpperRow = false;
+                            }
+                        }
+                        
+                        if (alternativeRowId) {
+                            const altCell = document.getElementById(cellId(alternativeRowId, link.from.weekIdx));
+                            if (altCell) {
+                                const altRect = altCell.getBoundingClientRect();
+                                const verticalLineLength = 8; // Длина вертикальной палочки
+                                
+                                // Начинаем из середины альтернативной ячейки
+                                x1 = altRect.left + altRect.width / 2 - wrapRect.left + container.scrollLeft;
+                                y1 = altRect.top + altRect.height / 2 - wrapRect.top + container.scrollTop;
+                                // Идем к границе целевой ячейки
+                                x2 = rb.left + rb.width / 2 - wrapRect.left + container.scrollLeft;
+                                y2 = useUpperRow ? rb.top - wrapRect.top + container.scrollTop : rb.bottom - wrapRect.top + container.scrollTop;
+                                
+                                // Создаем путь с вертикальной палочкой в начале, потом горизонтально, потом вертикально: |->|
+                                const verticalStart = y1 - verticalLineLength / 2;
+                                const verticalEnd = y1 + verticalLineLength / 2;
+                                d = `M ${x1} ${verticalStart} L ${x1} ${verticalEnd} M ${x1} ${y1} L ${x2} ${y1} L ${x2} ${y2}`;
+                            } else {
+                                // Fallback: обычная стрелка
+                                x1 = ra.left + ra.width / 2 - wrapRect.left + container.scrollLeft;
+                                y1 = ra.top + ra.height / 2 - wrapRect.top + container.scrollTop;
+                                x2 = rb.left + rb.width / 2 - wrapRect.left + container.scrollLeft;
+                                y2 = rb.top + rb.height / 2 - wrapRect.top + container.scrollTop;
+                                d = `M ${x1} ${y1} L ${x2} ${y2}`;
+                            }
+                        } else {
+                            // Fallback: обычная стрелка
+                            x1 = ra.left + ra.width / 2 - wrapRect.left + container.scrollLeft;
+                            y1 = ra.top + ra.height / 2 - wrapRect.top + container.scrollTop;
+                            x2 = rb.left + rb.width / 2 - wrapRect.left + container.scrollLeft;
+                            y2 = rb.top + rb.height / 2 - wrapRect.top + container.scrollTop;
+                            d = `M ${x1} ${y1} L ${x2} ${y2}`;
+                        }
+                    } else {
+                        // Обычный блокер недели: стрелка |-> из середины ячейки
+                        const verticalLineLength = 8; // Длина вертикальной палочки
+                        x1 = ra.left + ra.width / 2 - wrapRect.left + container.scrollLeft;
+                        y1 = ra.top + ra.height / 2 - wrapRect.top + container.scrollTop;
+                        x2 = rb.left - wrapRect.left + container.scrollLeft;
+                        y2 = rb.top + rb.height / 2 - wrapRect.top + container.scrollTop;
+                        
+                        // Создаем путь с вертикальной палочкой в начале: |->
+                        const verticalStart = y1 - verticalLineLength / 2;
+                        const verticalEnd = y1 + verticalLineLength / 2;
+                        d = `M ${x1} ${verticalStart} L ${x1} ${verticalEnd} M ${x1} ${y1} L ${x2} ${y2}`;
+                    }
+                } else {
+                    // Для блокеров задач: умная маршрутизация
                 const routeType = chooseBestRoute(
                     tasks,
                     link.from.taskId,
@@ -261,8 +454,6 @@ function ArrowOverlay({
                     link.to.taskId,
                     link.to.weekIdx
                 );
-
-                let x1: number, y1: number, x2: number, y2: number, d: string;
 
                 // Определяем, идет ли стрелка снизу вверх
                 const isUpward = ra.top > rb.top;
@@ -283,12 +474,15 @@ function ArrowOverlay({
                     y2 = rb.top + rb.height / 2 - wrapRect.top + container.scrollTop;
                     d = `M ${x1} ${y1} L ${x1} ${y2} L ${x2} ${y2}`;
                 }
+                }
+                
                 result.push({ 
                     id: String(i), 
                     d, 
                     isConflict: link.isConflict,
                     blockerId: link.blockerId,
-                    blockedTaskId: link.blockedTaskId
+                    blockedTaskId: link.blockedTaskId,
+                    type: link.type
                 });
             });
 
@@ -341,23 +535,46 @@ function ArrowOverlay({
                 <marker id="arrow-head-conflict-hover" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="3" markerHeight="3" orient="auto-start-reverse">
                     <path d="M 0 0 L 10 5 L 0 10 z" fill="#b91c1c" />
                 </marker>
+                <marker id="arrow-head-week" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="3" markerHeight="3" orient="auto-start-reverse">
+                    <path d="M 0 0 L 10 5 L 0 10 z" fill="#000000" />
+                </marker>
+                <marker id="arrow-head-week-hover" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="3" markerHeight="3" orient="auto-start-reverse">
+                    <path d="M 0 0 L 10 5 L 0 10 z" fill="#374151" />
+                </marker>
             </defs>
 
             {paths.map((p) => {
                 const active = hoverId === p.id;
-                // Hover colors: серые становятся черными, красные - более красными
-                const baseStroke = p.isConflict ? "#dc2626" : "#6b7280";
-                const hoverStroke = p.isConflict ? "#b91c1c" : "#111827";
-                const stroke = active ? hoverStroke : baseStroke;
-                const strokeWidth = 3; // постоянная толщина
                 
-                // Выбираем маркер в зависимости от состояния
-                let markerId: string;
+                // Определяем цвет и маркер в зависимости от типа блокера
+                let baseStroke: string, hoverStroke: string, markerId: string;
+                
+                if (p.type === 'week') {
+                    // Блокеры недель: серые стрелки (красные при конфликте)
                 if (p.isConflict) {
+                        baseStroke = "#dc2626";
+                        hoverStroke = "#b91c1c";
                     markerId = active ? "arrow-head-conflict-hover" : "arrow-head-conflict";
                 } else {
+                        baseStroke = "#6b7280";
+                        hoverStroke = "#111827";
                     markerId = active ? "arrow-head-normal-hover" : "arrow-head-normal";
                 }
+                } else {
+                    // Блокеры задач: серые стрелки (красные при конфликте)
+                    if (p.isConflict) {
+                        baseStroke = "#dc2626";
+                        hoverStroke = "#b91c1c";
+                        markerId = active ? "arrow-head-conflict-hover" : "arrow-head-conflict";
+                    } else {
+                        baseStroke = "#6b7280";
+                        hoverStroke = "#111827";
+                        markerId = active ? "arrow-head-normal-hover" : "arrow-head-normal";
+                    }
+                }
+                
+                const stroke = active ? hoverStroke : baseStroke;
+                const strokeWidth = 3; // постоянная толщина
                 return (
                     <g key={p.id}>
                         {/* Hitbox for hover/click (wide invisible stroke with pointer events) */}
@@ -464,10 +681,40 @@ export function RoadmapPlan() {
         const res1: ResourceRow = { id: "r1", kind: "resource", team: ["Demo"], fn: "BE", empl: "Ivan", weeks: Array(TOTAL_WEEKS).fill(1) };
         const res2: ResourceRow = { id: "r2", kind: "resource", team: ["Demo"], fn: "FE", weeks: Array(TOTAL_WEEKS).fill(1) };
         const res3: ResourceRow = { id: "r3", kind: "resource", team: ["Demo"], fn: "PO", weeks: Array(TOTAL_WEEKS).fill(1) };
-        const t1: TaskRow = { id: "t1", kind: "task", status: "Todo", sprintsAuto: [], epic: "Эпик 1", task: "Задача 1", team: "Demo", fn: "BE", empl: "Ivan", planEmpl: 1, planWeeks: 3, blockerIds: [], fact: 0, startWeek: null, endWeek: null, manualEdited: false, autoPlanEnabled: true, weeks: Array(TOTAL_WEEKS).fill(0) };
-        const t2: TaskRow = { id: "t2", kind: "task", status: "Todo", sprintsAuto: [], epic: "Эпик 1", task: "Задача 2", team: "Demo", fn: "BE", planEmpl: 1, planWeeks: 2, blockerIds: ["t1"], fact: 0, startWeek: null, endWeek: null, manualEdited: false, autoPlanEnabled: true, weeks: Array(TOTAL_WEEKS).fill(0) };
-        const t3: TaskRow = { id: "t3", kind: "task", status: "Backlog", sprintsAuto: [], epic: "Эпик 2", task: "Задача 3", team: "Demo", fn: "FE", planEmpl: 1, planWeeks: 4, blockerIds: [], fact: 0, startWeek: null, endWeek: null, manualEdited: false, autoPlanEnabled: true, weeks: Array(TOTAL_WEEKS).fill(0) };
-        return [res1, res2, res3, t1, t2, t3];
+        const t1: TaskRow = { id: "t1", kind: "task", status: "Todo", sprintsAuto: [], epic: "Эпик 1", task: "Задача 1", team: "Demo", fn: "BE", empl: "Ivan", planEmpl: 1, planWeeks: 3, blockerIds: [], weekBlockers: [], fact: 0, startWeek: null, endWeek: null, manualEdited: false, autoPlanEnabled: true, weeks: Array(TOTAL_WEEKS).fill(0) };
+        const t2: TaskRow = { id: "t2", kind: "task", status: "Todo", sprintsAuto: [], epic: "Эпик 1", task: "Задача 2", team: "Demo", fn: "BE", planEmpl: 1, planWeeks: 2, blockerIds: ["t1"], weekBlockers: [], fact: 0, startWeek: null, endWeek: null, manualEdited: false, autoPlanEnabled: true, weeks: Array(TOTAL_WEEKS).fill(0) };
+        const t3: TaskRow = { id: "t3", kind: "task", status: "Backlog", sprintsAuto: [], epic: "Эпик 2", task: "Задача 3", team: "Demo", fn: "FE", planEmpl: 1, planWeeks: 4, blockerIds: [], weekBlockers: [5], fact: 0, startWeek: null, endWeek: null, manualEdited: false, autoPlanEnabled: true, weeks: Array(TOTAL_WEEKS).fill(0) };
+        // Добавляем задачу с блокером недели 2 - задача начинается с недели 3 (должна быть серая стрелка)
+        const normalWeeks = Array(TOTAL_WEEKS).fill(0);
+        normalWeeks[2] = 1; // Неделя 3
+        normalWeeks[3] = 1; // Неделя 4
+        const t4: TaskRow = { id: "t4", kind: "task", status: "Todo", sprintsAuto: [], epic: "Эпик 2", task: "Задача 4 (блокер нед.2)", team: "Demo", fn: "FE", planEmpl: 1, planWeeks: 2, blockerIds: [], weekBlockers: [2], fact: 2, startWeek: 3, endWeek: 4, manualEdited: true, autoPlanEnabled: false, weeks: normalWeeks };
+        
+        // Добавляем задачу с конфликтным блокером недели 3 - задача начинается с недели 2 (должна быть красная стрелка)
+        const conflictWeeks = Array(TOTAL_WEEKS).fill(0);
+        conflictWeeks[1] = 1; // Неделя 2
+        conflictWeeks[2] = 1; // Неделя 3
+        const t5: TaskRow = { id: "t5", kind: "task", status: "Todo", sprintsAuto: [], epic: "Эпик 2", task: "Задача 5 (конфликт)", team: "Demo", fn: "FE", planEmpl: 1, planWeeks: 2, blockerIds: [], weekBlockers: [3], fact: 2, startWeek: 2, endWeek: 3, manualEdited: true, autoPlanEnabled: false, weeks: conflictWeeks };
+        
+        // Добавляем задачу с блокером недели 1 - задача должна начинаться с недели 2
+        const t6: TaskRow = { id: "t6", kind: "task", status: "Todo", sprintsAuto: [], epic: "Эпик 3", task: "Задача 6 (блокер нед.1)", team: "Demo", fn: "PO", planEmpl: 1, planWeeks: 2, blockerIds: [], weekBlockers: [1], fact: 0, startWeek: null, endWeek: null, manualEdited: false, autoPlanEnabled: true, weeks: Array(TOTAL_WEEKS).fill(0) };
+        
+        // Добавляем задачу для создания "занятости" в соседних строках
+        const busyWeeks = Array(TOTAL_WEEKS).fill(0);
+        busyWeeks[2] = 1; // Неделя 3 - занята
+        busyWeeks[3] = 1; // Неделя 4 - занята
+        const t7: TaskRow = { id: "t7", kind: "task", status: "Todo", sprintsAuto: [], epic: "Эпик 3", task: "Задача 7 (много занято)", team: "Demo", fn: "PO", planEmpl: 1, planWeeks: 2, blockerIds: [], weekBlockers: [], fact: 2, startWeek: 3, endWeek: 4, manualEdited: true, autoPlanEnabled: false, weeks: busyWeeks };
+        
+        // Добавляем задачу с частичной занятостью для сравнения
+        const partialBusyWeeks = Array(TOTAL_WEEKS).fill(0);
+        partialBusyWeeks[2] = 1; // Только неделя 3 занята
+        const t8: TaskRow = { id: "t8", kind: "task", status: "Todo", sprintsAuto: [], epic: "Эпик 3", task: "Задача 8 (мало занято)", team: "Demo", fn: "BE", planEmpl: 1, planWeeks: 1, blockerIds: [], weekBlockers: [], fact: 1, startWeek: 3, endWeek: 3, manualEdited: true, autoPlanEnabled: false, weeks: partialBusyWeeks };
+        
+        // Добавляем задачу с конфликтным блокером, которая будет выбирать между t7 и t8
+        const conflictTestWeeks = Array(TOTAL_WEEKS).fill(0);
+        conflictTestWeeks[2] = 1; // Неделя 3
+        const t9: TaskRow = { id: "t9", kind: "task", status: "Todo", sprintsAuto: [], epic: "Эпик 3", task: "Задача 9 (тест выбора пути)", team: "Demo", fn: "FE", planEmpl: 1, planWeeks: 1, blockerIds: [], weekBlockers: [4], fact: 1, startWeek: 3, endWeek: 3, manualEdited: true, autoPlanEnabled: false, weeks: conflictTestWeeks };
+        return [res1, res2, res3, t1, t2, t3, t4, t5, t6, t7, t8, t9];
     });
 
     // ===== Последовательный пересчёт (как в формуле roadmap.js) =====
@@ -691,15 +938,26 @@ export function RoadmapPlan() {
             }
 
             // Вычисляем максимальное время завершения блокеров с учетом рекурсивного планирования
-            const blocker = (t.blockerIds || [])
+            const taskBlocker = (t.blockerIds || [])
                 .map(id => computeBlockerEndTime(id, t.id))
                 .reduce((a, b) => Math.max(a, b), 0);
+            
+            // Вычисляем максимальную неделю из блокеров на неделю (задача может начинаться только ПОСЛЕ блокирующей недели)
+            const weekBlocker = (t.weekBlockers || [])
+                .map(weekNum => weekNum) // Блокирующая неделя в 1-based, задача начинается после неё
+                .reduce((a, b) => Math.max(a, b), 0);
+            
+            // Итоговый блокер - максимум из блокеров задач и блокеров недель
+            const blocker = Math.max(taskBlocker, weekBlocker);
             
             // ДИАГНОСТИКА: Логируем информацию о планировании
             if (import.meta.env.DEV) {
                 console.log(`\n=== Планирование задачи ${t.task} (${t.id}) ===`);
-                console.log(`Блокеры: ${t.blockerIds.join(', ') || 'нет'}`);
-                console.log(`Время завершения блокеров: ${blocker}`);
+                console.log(`Блокеры задач: ${t.blockerIds.join(', ') || 'нет'}`);
+                console.log(`Блокеры недель: ${t.weekBlockers.join(', ') || 'нет'}`);
+                console.log(`Время завершения блокеров задач: ${taskBlocker}`);
+                console.log(`Максимальная блокирующая неделя: ${weekBlocker} (задача может начинаться с недели ${weekBlocker + 1})`);
+                console.log(`Итоговое время блокера: ${blocker}`);
                 console.log(`Требуется ресурсов: ${need}, недель: ${dur}`);
             }
 
@@ -1573,6 +1831,7 @@ export function RoadmapPlan() {
     const [highlightedRowId, setHighlightedRowId] = useState<ID | null>(null);
     const [dropPositionRowId, setDropPositionRowId] = useState<ID | null>(null);
     const [dropPosition, setDropPosition] = useState<'top' | 'bottom'>('top');
+    const [highlightedWeekIdx, setHighlightedWeekIdx] = useState<number | null>(null);
 
     function markDragAllowed() { 
         dragAllowedRef.current = true; 
@@ -1604,6 +1863,14 @@ export function RoadmapPlan() {
                 }
             }
             
+            return {};
+        }
+    
+    // Вспомогательная функция для получения стиля подсветки колонки недели
+    function getWeekColumnHighlightStyle(weekIdx: number): React.CSSProperties {
+        if (highlightedWeekIdx === weekIdx) {
+            return { borderLeft: '2px solid #f87171', borderRight: '2px solid #f87171' }; // красная рамка для колонки
+        }
             return {};
         }
     
@@ -1688,6 +1955,20 @@ export function RoadmapPlan() {
                     setDropPosition('top');
                     
                     const element = document.elementFromPoint(e.clientX, e.clientY);
+                    
+                    // Проверяем, находится ли курсор над колонкой недели
+                    const weekCell = element?.closest('td[data-week-idx]');
+                    if (weekCell) {
+                        const weekIdx = parseInt(weekCell.getAttribute('data-week-idx') || '-1');
+                        if (weekIdx >= 0) {
+                            setHighlightedWeekIdx(weekIdx);
+                            setHighlightedRowId(null);
+                            return;
+                        }
+                    }
+                    
+                    // Если не над колонкой недели, проверяем строки задач
+                    setHighlightedWeekIdx(null);
                     const targetRow = element?.closest('tr[data-row-id]');
                     if (targetRow) {
                         const targetRowId = targetRow.getAttribute('data-row-id');
@@ -1695,7 +1976,8 @@ export function RoadmapPlan() {
                             // Проверяем, что перетаскиваемая строка и целевая строка одного типа
                             const targetRowData = rows.find(r => r.id === targetRowId);
                             
-                            if (targetRowData && draggedRow.kind === targetRowData.kind) {
+                            // Не показываем красные рамки, если это та же задача которую перетаскиваем
+                            if (targetRowData && draggedRow.kind === targetRowData.kind && draggedRow.id !== targetRowId) {
                                 setHighlightedRowId(targetRowId);
                             } else {
                                 setHighlightedRowId(null);
@@ -1809,6 +2091,39 @@ export function RoadmapPlan() {
             
             // Находим элемент под курсором
             const element = document.elementFromPoint(e.clientX, e.clientY);
+            
+            // Проверяем, был ли drop на колонку недели при Shift+drag задачи
+            if (isShiftPressed && draggedRow && draggedRow.kind === "task") {
+                const weekCell = element?.closest('td[data-week-idx]');
+                if (weekCell) {
+                    const weekIdx = parseInt(weekCell.getAttribute('data-week-idx') || '-1');
+                    if (weekIdx >= 0) {
+                        const weekNumber = weekIdx + 1; // Преобразуем в 1-based
+                        console.log(`Создание блокера на неделю ${weekNumber} для задачи ${draggedRow.id}`);
+                        
+                        setRows(prev => prev.map(row => 
+                            (row.kind === "task" && row.id === draggedRow.id) 
+                                ? { ...row, weekBlockers: Array.from(new Set([...(row as TaskRow).weekBlockers, weekNumber])) } 
+                                : row
+                        ));
+                        
+                        // Очищаем состояние и выходим
+                        setDragTooltip({ visible: false, x: 0, y: 0, task: null, resource: null });
+                        setHighlightedRowId(null);
+                        setHighlightedWeekIdx(null);
+                        setDropPositionRowId(null);
+                        setDropPosition('top');
+                        dragRowRef.current = null;
+                        isDraggingRef.current = false;
+                        clearDragAllowed();
+                        
+                        document.removeEventListener('mousemove', handleMouseMove);
+                        document.removeEventListener('mouseup', handleMouseUp);
+                        return;
+                    }
+                }
+            }
+            
             const targetRow = element?.closest('tr');
             
             if (targetRow && draggedRow) {
@@ -1818,7 +2133,11 @@ export function RoadmapPlan() {
                     if (targetRowData && targetRowData.kind === draggedRow.kind) {
                         // Выполняем операцию перестановки или назначения блокера
                         if (isShiftPressed && draggedRow.kind === "task" && targetRowData.kind === "task") {
-                            // Назначение блокера
+                            // Назначение блокера - проверяем, что это не та же задача
+                            if (draggedRow.id === targetRowData.id) {
+                                console.log("Попытка создать блокер на саму себя - игнорируем");
+                                // Не делаем ничего, просто игнорируем
+                            } else {
                             console.log(`Попытка создать блокер: ${draggedRow.id} -> ${targetRowData.id}`);
                             if (canSetBlocker(draggedRow.id, targetRowData.id)) {
                                 console.log("Блокер разрешен, создаем");
@@ -1830,6 +2149,7 @@ export function RoadmapPlan() {
                             } else {
                                 console.log("Блокер запрещен");
                                 alert("Нельзя создать блокер: обнаружен цикл или неверный порядок.");
+                                }
                             }
                         } else {
                             // Перестановка строк
@@ -1856,6 +2176,7 @@ export function RoadmapPlan() {
             // Очищаем состояние
             setDragTooltip({ visible: false, x: 0, y: 0, task: null, resource: null });
             setHighlightedRowId(null);
+            setHighlightedWeekIdx(null);
             setDropPositionRowId(null);
             setDropPosition('top');
             dragRowRef.current = null;
@@ -1953,7 +2274,18 @@ export function RoadmapPlan() {
     
     // Функция для удаления блокера через стрелку
     function handleRemoveBlocker(blockerId: string, blockedTaskId: string) {
+        if (blockerId.startsWith('week-')) {
+            // Удаляем блокер недели
+            const weekNumber = parseInt(blockerId.replace('week-', ''));
+            setRows(prev => prev.map(row => 
+                (row.kind === "task" && row.id === blockedTaskId) 
+                    ? { ...row, weekBlockers: (row as TaskRow).weekBlockers.filter(w => w !== weekNumber) } 
+                    : row
+            ));
+        } else {
+            // Удаляем блокер задачи
         removeBlocker(blockedTaskId, blockerId);
+        }
     }
 
     // Функция для тестирования новой логики блокеров
@@ -2347,6 +2679,7 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
             planEmpl: 0,
             planWeeks: 0,
             blockerIds: [],
+            weekBlockers: [],
             fact: 0,
             startWeek: null,
             endWeek: null,
@@ -2370,7 +2703,7 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
             if (idx < 0) return prev;
             const row = prev[idx];
             const copy: Row = row.kind === 'task'
-                ? { ...(row as TaskRow), id: rid(), blockerIds: [...(row as TaskRow).blockerIds] }
+                ? { ...(row as TaskRow), id: rid(), blockerIds: [...(row as TaskRow).blockerIds], weekBlockers: [...(row as TaskRow).weekBlockers] }
         : { ...(row as ResourceRow), id: rid(), weeks: [...(row as ResourceRow).weeks] };
             const next = prev.slice();
             next.splice(idx + 1, 0, copy);
@@ -2524,7 +2857,7 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
 
                                 {/* Таймлайн недель ресурса */}
                                 {range(TOTAL_WEEKS).map(w => (
-                                    <td key={w} className={`px-0 py-0 align-middle week-cell`} style={{width: '3.5rem', background: resourceCellBg(r as ResourceRow, w), ...getCellBorderStyle(isSelWeek(r.id,w)), ...getCellBorderStyleForDrag(r.id)}}>
+                                    <td key={w} data-week-idx={w} className={`px-0 py-0 align-middle week-cell`} style={{width: '3.5rem', background: resourceCellBg(r as ResourceRow, w), ...getCellBorderStyle(isSelWeek(r.id,w)), ...getCellBorderStyleForDrag(r.id), ...getWeekColumnHighlightStyle(w)}}>
                                         <div
                                             onMouseDown={(e)=>onWeekCellMouseDown(e,r,w)}
                                             onMouseEnter={(e)=>onWeekCellMouseEnter(e,r,w)}
@@ -2756,7 +3089,7 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
 
                     {/* Таймлайн с горизонтальным скроллом */}
                     {range(TOTAL_WEEKS).map(w => (
-                        <td key={w} id={cellId(r.id, w)} className={`px-0 py-0 align-middle ${getCellBorderClass(r.id)} week-cell`} style={{width: '3.5rem', background: ((r as TaskRow).weeks[w] || 0) > 0 ? cellBgForTask(r as TaskRow) : undefined, color: ((r as TaskRow).weeks[w] || 0) > 0 ? getText(teamFnColors[teamKeyFromTask(r as TaskRow)]) : undefined, ...getCellBorderStyle(isSelWeek(r.id,w)), ...getCellBorderStyleForDrag(r.id)}} onMouseDown={(e)=>onWeekCellMouseDown(e,r,w)} onMouseEnter={(e)=>onWeekCellMouseEnter(e,r,w)} onDoubleClick={(e)=>onWeekCellDoubleClick(e,r,w)}>
+                        <td key={w} id={cellId(r.id, w)} data-week-idx={w} className={`px-0 py-0 align-middle ${getCellBorderClass(r.id)} week-cell`} style={{width: '3.5rem', background: ((r as TaskRow).weeks[w] || 0) > 0 ? cellBgForTask(r as TaskRow) : undefined, color: ((r as TaskRow).weeks[w] || 0) > 0 ? getText(teamFnColors[teamKeyFromTask(r as TaskRow)]) : undefined, ...getCellBorderStyle(isSelWeek(r.id,w)), ...getCellBorderStyleForDrag(r.id), ...getWeekColumnHighlightStyle(w)}} onMouseDown={(e)=>onWeekCellMouseDown(e,r,w)} onMouseEnter={(e)=>onWeekCellMouseEnter(e,r,w)} onDoubleClick={(e)=>onWeekCellDoubleClick(e,r,w)}>
                             {editing?.rowId===r.id && typeof editing.col==='object' && editing.col.week===w ? (
                                 <input
                                     autoFocus
@@ -3383,3 +3716,4 @@ function isSel(rowId:ID, col:Exclude<ColKey, {week:number}>|"type") { return sel
 function isSelWeek(rowId:ID, w:number) { return sel && sel.rowId===rowId && typeof sel.col==='object' && sel.col.week===w; }
 // self-tests hook removed to satisfy eslint rules-of-hooks
 }
+
