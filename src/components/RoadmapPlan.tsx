@@ -5,6 +5,7 @@ import { TeamMultiSelect } from "./TeamMultiSelect";
 import { ColorPickerPanel } from "./ColorPickerPanel";
 import { normalizeColorValue, getBg, getText } from "./colorUtils";
 import { DEFAULT_BG } from "./colorDefaults";
+import { fetchRoadmapData } from "../api/roadmapApi";
 
 // =============================
 // Roadmap "План" — интерактивный прототип (v3.2)
@@ -47,6 +48,7 @@ type ResourceRow = {
     fn: Fn;
     empl?: string; // optional binding to a specific person
     weeks: number[]; // capacity per week
+    displayOrder?: number; // order for display
 };
 
 type TaskRow = {
@@ -70,6 +72,7 @@ type TaskRow = {
     manualEdited: boolean; // ✏️ flag
     autoPlanEnabled: boolean; // чекбокс автоплана
     weeks: number[]; // actual placed amounts by week
+    displayOrder?: number; // order for display
 };
 
 type Row = ResourceRow | TaskRow;
@@ -78,10 +81,27 @@ type Row = ResourceRow | TaskRow;
 function range(n: number): number[] { return Array.from({ length: n }, (_, i) => i); }
 function clamp(n: number, a: number, b: number) { return Math.max(a, Math.min(b, n)); }
 function fmtDM(dateISO: string) {
+    if (!dateISO || dateISO === "Invalid Date") {
+        return "??.??.????";
+    }
+    
     const d = new Date(dateISO + "T00:00:00Z");
+    
+    if (isNaN(d.getTime())) {
+        return "??.??.????";
+    }
+    
     const dd = String(d.getUTCDate()).padStart(2, "0");
     const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
-    return `${dd}.${mm}`;
+    const yyyy = String(d.getUTCFullYear());
+    const result = `${dd}.${mm}.${yyyy}`;
+    
+    // Проверяем, что результат не содержит NaN
+    if (result.includes('NaN') || isNaN(Number(dd)) || isNaN(Number(mm)) || isNaN(Number(yyyy))) {
+        return "??.??.????";
+    }
+    
+    return result;
 }
 
 // Функция для проверки несоответствия expectedStartWeek и startWeek
@@ -632,7 +652,13 @@ export function RoadmapPlan() {
 
     // Преобразуем данные команд в массив имен для совместимости с существующими компонентами
     const teamNames = useMemo(() => teamData.map(t => t.name), [teamData]);
-    const WEEK0 = sprints[0]?.start || "2025-06-02";
+    const WEEK0 = useMemo(() => {
+        if (sprints.length > 0 && sprints[0].start) {
+            const dateStr = sprints[0].start.split('T')[0];
+            return dateStr;
+        }
+        return "2025-06-02";
+    }, [sprints]);
 
     function mapWeekToSprintLocal(weekIndex0: number): string | null {
         const startDate = new Date(WEEK0 + "T00:00:00Z");
@@ -640,20 +666,36 @@ export function RoadmapPlan() {
         const iso = startDate.toISOString().slice(0, 10);
         const d = new Date(iso + "T00:00:00Z");
         for (const s of sprints) {
-            const s0 = new Date(s.start + "T00:00:00Z");
-            const s1 = new Date(s.end + "T00:00:00Z");
+            const s0 = new Date(s.start);
+            const s1 = new Date(s.end);
             if (d >= s0 && d <= s1) return s.code;
         }
         return null;
     }
     function weekHeaderLabelLocal(idx0: number) {
-        const startDate = new Date(WEEK0 + "T00:00:00Z");
-        startDate.setUTCDate(startDate.getUTCDate() + 7 * idx0);
-        const startISO = startDate.toISOString().slice(0, 10);
-        const endDate = new Date(startDate.getTime());
-        endDate.setUTCDate(endDate.getUTCDate() + 6);
-        const endISO = endDate.toISOString().slice(0, 10);
-        return { num: idx0 + 1, sprint: mapWeekToSprintLocal(idx0), from: fmtDM(startISO), to: fmtDM(endISO) };
+        if (!WEEK0 || WEEK0 === "Invalid Date" || !WEEK0.includes('-')) {
+            return { num: idx0 + 1, sprint: null, from: "??.??.????", to: "??.??.????" };
+        }
+        
+        try {
+            const startDate = new Date(WEEK0 + "T00:00:00Z");
+            
+            if (isNaN(startDate.getTime())) {
+                return { num: idx0 + 1, sprint: null, from: "??.??.????", to: "??.??.????" };
+            }
+            
+            startDate.setUTCDate(startDate.getUTCDate() + 7 * idx0);
+            const startISO = startDate.toISOString().slice(0, 10);
+            
+            const endDate = new Date(startDate.getTime());
+            endDate.setUTCDate(endDate.getUTCDate() + 6);
+            const endISO = endDate.toISOString().slice(0, 10);
+            
+            return { num: idx0 + 1, sprint: mapWeekToSprintLocal(idx0), from: fmtDM(startISO), to: fmtDM(endISO) };
+        } catch (error) {
+            console.error('weekHeaderLabelLocal error:', error);
+            return { num: idx0 + 1, sprint: null, from: "??.??.????", to: "??.??.????" };
+        }
     }
 
     function listSprintsBetweenLocal(startWeek: number | null, endWeek: number | null): string[] {
@@ -686,89 +728,45 @@ export function RoadmapPlan() {
     // Состояние для ресайзинга
     const [isResizing, setIsResizing] = useState<{ column: string; startX: number; startWidth: number } | null>(null);
 
-    // ===== Демо-данные строк =====
-    const [rows, setRows] = useState<Row[]>(() => {
-        // Ресурсы
-        const res1: ResourceRow = { id: "r1", kind: "resource", team: ["Test"], fn: "FN1", weeks: [0, 0, 0, 1, 1, 1, 1, 1, 1] };
-        const res2: ResourceRow = { id: "r2", kind: "resource", team: ["Test"], fn: "FN1", empl: "Empl1", weeks: [0, 1, 0, 1, 1, 1, 1, 1, 1] };
-        const res3: ResourceRow = { id: "r3", kind: "resource", team: ["Test"], fn: "FN2", weeks: [0, 1, 1, 1, 1, 1, 1, 1, 1] };
-        const res4: ResourceRow = { id: "r4", kind: "resource", team: ["Test"], fn: "FN3", weeks: [1, 0, 1, 1, 1, 0, 0, 0, 0] };
-        const res5: ResourceRow = { id: "r5", kind: "resource", team: ["Test"], fn: "FN4", weeks: [1, 0, 1, 0, 1, 0, 1, 0, 1] };
-        const res6: ResourceRow = { id: "r6", kind: "resource", team: ["Test"], fn: "FN5", weeks: [1, 1, 1, 1, 1, 1, 1, 1, 1] };
-        const res7: ResourceRow = { id: "r7", kind: "resource", team: ["Test"], fn: "FN6", weeks: [2, 2, 2, 2, 2, 2, 2, 2, 2] };
-        const res8: ResourceRow = { id: "r8", kind: "resource", team: ["Test"], fn: "FN7", weeks: [1, 1, 1, 1, 1, 1, 1, 1, 1] };
-        const res9: ResourceRow = { id: "r9", kind: "resource", team: ["Test"], fn: "FN8", weeks: [1, 1, 1, 1, 0, 1, 1, 1, 1] };
-        const res10: ResourceRow = { id: "r10", kind: "resource", team: ["Test 2"], fn: "FN9", weeks: [1, 1, 1, 1, 1, 1, 1, 1, 1] };
-        const res11: ResourceRow = { id: "r11", kind: "resource", team: ["Test"], fn: "FN9", weeks: [1, 1, 1, 1, 1, 1, 1, 1, 1] };
-        const res12: ResourceRow = { id: "r12", kind: "resource", team: ["Test", "Test 2"], fn: "FN10", weeks: [2, 2, 2, 2, 2, 2, 2, 2, 2] };
-        const res13: ResourceRow = { id: "r13", kind: "resource", team: ["Test"], fn: "FN11", weeks: [1, 1, 1, 1, 1, 1, 1, 1, 1] };
-        const res14: ResourceRow = { id: "r14", kind: "resource", team: ["Test", "Test 2"], fn: "FN11", weeks: [1, 1, 1, 1, 1, 1, 1, 1, 1] };
-        const res15: ResourceRow = { id: "r15", kind: "resource", team: ["Test"], fn: "FN12", empl: "Empl1", weeks: [1, 1, 1, 1, 1, 1, 1, 1, 1] };
-        const res16: ResourceRow = { id: "r16", kind: "resource", team: ["Test"], fn: "FN12", empl: "Empl2", weeks: [1, 1, 1, 1, 1, 1, 1, 1, 1] };
-        const res17: ResourceRow = { id: "r17", kind: "resource", team: ["Test"], fn: "FN13", empl: "Empl1", weeks: [1, 1, 1, 1, 1, 1, 1, 1, 1] };
-        const res18: ResourceRow = { id: "r18", kind: "resource", team: ["Test"], fn: "FN13", empl: "Empl2", weeks: [1, 1, 1, 1, 1, 1, 1, 1, 1] };
-        const res19: ResourceRow = { id: "r19", kind: "resource", team: ["Test 2", "Test"], fn: "FN14", empl: "Empl1", weeks: [1, 1, 1, 1, 1, 1, 1, 1, 1] };
-        const res20: ResourceRow = { id: "r20", kind: "resource", team: ["Test", "Test 2"], fn: "FN14", empl: "Empl2", weeks: [1, 1, 1, 1, 1, 1, 1, 1, 1] };
-        const res21: ResourceRow = { id: "r21", kind: "resource", team: ["Test 2", "Test"], fn: "FN15", empl: "Empl1", weeks: [1, 1, 1, 1, 1, 1, 1, 1, 1] };
-        const res22: ResourceRow = { id: "r22", kind: "resource", team: ["Test", "Test 2"], fn: "FN15", empl: "Empl2", weeks: [1, 1, 1, 1, 1, 1, 1, 1, 1] };
-        // Задачи
-        const t1: TaskRow = { id: "t1", kind: "task", status: "Todo", sprintsAuto: [], epic: "", task: "Если не заданы доступные ресурсы, вовзращаем пустую строку", team: "Test", fn: "FN0", planEmpl: 1, planWeeks: 2, blockerIds: [], weekBlockers: [], fact: 0, startWeek: null, endWeek: null, expectedStartWeek: null, manualEdited: false, autoPlanEnabled: true, weeks: Array(TOTAL_WEEKS).fill(0) };
-        const t2: TaskRow = { id: "t2", kind: "task", status: "Todo", sprintsAuto: [], epic: "", task: "Начинаем с той недели где заданы ресурсы", team: "Test", fn: "FN1", planEmpl: 1, planWeeks: 1, blockerIds: [], weekBlockers: [], fact: 0, startWeek: null, endWeek: null, expectedStartWeek: 2, manualEdited: false, autoPlanEnabled: true, weeks: Array(TOTAL_WEEKS).fill(0) };
-        const t3: TaskRow = { id: "t3", kind: "task", status: "Todo", sprintsAuto: [], epic: "", task: "Начинаем с той недели где заданы ресурсы и они не 0", team: "Test", fn: "FN2", planEmpl: 1, planWeeks: 2, blockerIds: [], weekBlockers: [], fact: 0, startWeek: null, endWeek: null, expectedStartWeek: 2, manualEdited: false, autoPlanEnabled: true, weeks: Array(TOTAL_WEEKS).fill(0) };
-        const t4: TaskRow = { id: "t4", kind: "task", status: "Todo", sprintsAuto: [], epic: "", task: "Начинаем с той недели, начиная с которой доступно необходимое кол-во недель для задачи", team: "Test", fn: "FN3", planEmpl: 1, planWeeks: 2, blockerIds: [], weekBlockers: [], fact: 0, startWeek: null, endWeek: null, expectedStartWeek: 3, manualEdited: false, autoPlanEnabled: true, weeks: Array(TOTAL_WEEKS).fill(0) };
-        const t5: TaskRow = { id: "t5", kind: "task", status: "Todo", sprintsAuto: [], epic: "", task: "Если ресурсы, заданы но их недостаточно возвращаем пустую строку", team: "Test", fn: "FN4", planEmpl: 1, planWeeks: 2, blockerIds: [], weekBlockers: [], fact: 0, startWeek: null, endWeek: null, expectedStartWeek: null, manualEdited: false, autoPlanEnabled: true, weeks: Array(TOTAL_WEEKS).fill(0) };
-        const t6: TaskRow = { id: "t6", kind: "task", status: "Todo", sprintsAuto: [], epic: "", task: "Если ресурс занят другой задачей, планируем после нее", team: "Test", fn: "FN5", planEmpl: 1, planWeeks: 2, blockerIds: [], weekBlockers: [], fact: 0, startWeek: null, endWeek: null, expectedStartWeek: null, manualEdited: false, autoPlanEnabled: true, weeks: Array(TOTAL_WEEKS).fill(0) };
-        const t7: TaskRow = { id: "t7", kind: "task", status: "Todo", sprintsAuto: [], epic: "", task: "Если ресурс занят другой задачей, планируем после нее", team: "Test", fn: "FN5", planEmpl: 1, planWeeks: 2, blockerIds: [], weekBlockers: [], fact: 0, startWeek: null, endWeek: null, expectedStartWeek: 3, manualEdited: false, autoPlanEnabled: true, weeks: Array(TOTAL_WEEKS).fill(0) };
-        const t8: TaskRow = { id: "t8", kind: "task", status: "Todo", sprintsAuto: [], epic: "", task: "Если ресурсы занят частично другой задачей и еще есть место планируем параллельно", team: "Test", fn: "FN6", planEmpl: 0, planWeeks: 0, blockerIds: [], weekBlockers: [], fact: 0, startWeek: null, endWeek: null, expectedStartWeek: null, manualEdited: false, autoPlanEnabled: true, weeks: Array(TOTAL_WEEKS).fill(0) };
-        const t9: TaskRow = { id: "t9", kind: "task", status: "Todo", sprintsAuto: [], epic: "", task: "Если ресурсы занят частично другой задачей и еще есть место планируем параллельно", team: "Test", fn: "FN6", planEmpl: 1, planWeeks: 2, blockerIds: [], weekBlockers: [], fact: 0, startWeek: null, endWeek: null, expectedStartWeek: 1, manualEdited: false, autoPlanEnabled: true, weeks: Array(TOTAL_WEEKS).fill(0) };
-        const t10: TaskRow = { id: "t10", kind: "task", status: "Todo", sprintsAuto: [], epic: "", task: "Если задача требует нецелое число недель округляем в большую сторону", team: "Test", fn: "FN7", planEmpl: 1, planWeeks: 1.5, blockerIds: [], weekBlockers: [], fact: 0, startWeek: null, endWeek: null, expectedStartWeek: 1, manualEdited: false, autoPlanEnabled: true, weeks: Array(TOTAL_WEEKS).fill(0) };
-        const t11: TaskRow = { id: "t11", kind: "task", status: "Todo", sprintsAuto: [], epic: "", task: "Если задача требует нецелое число недель округляем в большую сторону", team: "Test", fn: "FN7", planEmpl: 1, planWeeks: 1, blockerIds: [], weekBlockers: [], fact: 0, startWeek: null, endWeek: null, expectedStartWeek: 3, manualEdited: false, autoPlanEnabled: true, weeks: Array(TOTAL_WEEKS).fill(0) };
-        const t12: TaskRow = { id: "t12", kind: "task", status: "Todo", sprintsAuto: [], epic: "", task: "Если у задачи указан блокер начинаем позже блокирующей недели", team: "Test", fn: "FN8", planEmpl: 1, planWeeks: 1, blockerIds: [], weekBlockers: [3], fact: 0, startWeek: null, endWeek: null, expectedStartWeek: 4, manualEdited: false, autoPlanEnabled: true, weeks: Array(TOTAL_WEEKS).fill(0) };
-        const t13: TaskRow = { id: "t13", kind: "task", status: "Todo", sprintsAuto: [], epic: "", task: "Если у задачи указан блокер и нет ресурсов сразу после блокера планируем не раньше блокирующей недели и не раньше чем появятся доступные ресурсы", team: "Test", fn: "FN8", planEmpl: 1, planWeeks: 1, blockerIds: [], weekBlockers: [3], fact: 0, startWeek: null, endWeek: null, expectedStartWeek: 6, manualEdited: false, autoPlanEnabled: true, weeks: Array(TOTAL_WEEKS).fill(0) };
+    // ===== Состояние загрузки данных =====
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+    const [rows, setRows] = useState<Row[]>([]);
+
+    // ===== Загрузка данных при монтировании компонента =====
+    useEffect(() => {
+        const loadData = async () => {
+            try {
+                setLoading(true);
+                setError(null);
+                
+                const response = await fetchRoadmapData();
+                
+                if (response.error) {
+                    setError(response.error);
+                } else {
+                    // Объединяем ресурсы и задачи в один массив rows
+                    const allRows: Row[] = [
+                        ...(response.data.resources || []),
+                        ...(response.data.tasks || [])
+                    ] as Row[];
+                    
+                    // Сортируем по displayOrder
+                    allRows.sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0));
+                    
+                    setRows(allRows as Row[]);
+                    setSprints(response.data.sprints || []);
+                    setTeamData(response.data.teams || []);
+                }
+            } catch (err) {
+                setError(err instanceof Error ? err.message : 'Unknown error');
+            } finally {
+                setLoading(false);
+            }
+        };
         
-        const t14: TaskRow = { id: "t14", kind: "task", status: "Todo", sprintsAuto: [], epic: "", task: "Если одна функция определена для нескольких команд используем ресурсы той команды которая указана в задаче", team: "Test", fn: "FN9", planEmpl: 1, planWeeks: 2, blockerIds: [], weekBlockers: [], fact: 0, startWeek: null, endWeek: null, expectedStartWeek: 1, manualEdited: false, autoPlanEnabled: true, weeks: Array(TOTAL_WEEKS).fill(0) };
-        const t15: TaskRow = { id: "t15", kind: "task", status: "Todo", sprintsAuto: [], epic: "", task: "Если одна функция определена для нескольких команд используем ресурсы той команды которая указана в задаче", team: "Test", fn: "FN9", planEmpl: 1, planWeeks: 2, blockerIds: [], weekBlockers: [], fact: 0, startWeek: null, endWeek: null, expectedStartWeek: 3, manualEdited: false, autoPlanEnabled: true, weeks: Array(TOTAL_WEEKS).fill(0) };
-        const t16: TaskRow = { id: "t16", kind: "task", status: "Todo", sprintsAuto: [], epic: "", task: "Если одна функция определена для нескольких команд используем ресурсы той команды которая указана в задаче", team: "Test 2", fn: "FN9", planEmpl: 1, planWeeks: 2, blockerIds: [], weekBlockers: [], fact: 0, startWeek: null, endWeek: null, expectedStartWeek: 1, manualEdited: false, autoPlanEnabled: true, weeks: Array(TOTAL_WEEKS).fill(0) };
-        const t17: TaskRow = { id: "t17", kind: "task", status: "Todo", sprintsAuto: [], epic: "", task: "Если одна функция определена для нескольких команд используем ресурсы той команды которая указана в задаче", team: "Test 2", fn: "FN9", planEmpl: 1, planWeeks: 2, blockerIds: [], weekBlockers: [], fact: 0, startWeek: null, endWeek: null, expectedStartWeek: 3, manualEdited: false, autoPlanEnabled: true, weeks: Array(TOTAL_WEEKS).fill(0) };
-        const t18: TaskRow = { id: "t18", kind: "task", status: "Todo", sprintsAuto: [], epic: "", task: "Если для одной функции задано сразу несколько команд используем ее ресурв в задачах обеих команд", team: "Test", fn: "FN10", planEmpl: 1, planWeeks: 2, blockerIds: [], weekBlockers: [], fact: 0, startWeek: null, endWeek: null, expectedStartWeek: 1, manualEdited: false, autoPlanEnabled: true, weeks: Array(TOTAL_WEEKS).fill(0) };
-        const t19: TaskRow = { id: "t19", kind: "task", status: "Todo", sprintsAuto: [], epic: "", task: "Если для одной функции задано сразу несколько команд используем ее ресурв в задачах обеих команд", team: "Test 2", fn: "FN10", planEmpl: 1, planWeeks: 2, blockerIds: [], weekBlockers: [], fact: 0, startWeek: null, endWeek: null, expectedStartWeek: 1, manualEdited: false, autoPlanEnabled: true, weeks: Array(TOTAL_WEEKS).fill(0) };
-        const t20: TaskRow = { id: "t20", kind: "task", status: "Todo", sprintsAuto: [], epic: "", task: "Если для одной функции задано сразу несколько команд используем ее ресурв в задачах обеих команд", team: "Test", fn: "FN10", planEmpl: 1, planWeeks: 2, blockerIds: [], weekBlockers: [], fact: 0, startWeek: null, endWeek: null, expectedStartWeek: 3, manualEdited: false, autoPlanEnabled: true, weeks: Array(TOTAL_WEEKS).fill(0) };
-        const t21: TaskRow = { id: "t21", kind: "task", status: "Todo", sprintsAuto: [], epic: "", task: "Если для одной функции задано сразу несколько команд используем ее ресурв в задачах обеих команд", team: "Test 2", fn: "FN10", planEmpl: 1, planWeeks: 2, blockerIds: [], weekBlockers: [], fact: 0, startWeek: null, endWeek: null, expectedStartWeek: 3, manualEdited: false, autoPlanEnabled: true, weeks: Array(TOTAL_WEEKS).fill(0) };
-        
-        const t22: TaskRow = { id: "t22", kind: "task", status: "Todo", sprintsAuto: [], epic: "", task: "Две одинаковые функции, одна для одной команды, другая для двух", team: "Test 2", fn: "FN11", planEmpl: 1, planWeeks: 1, blockerIds: [], weekBlockers: [], fact: 0, startWeek: null, endWeek: null, expectedStartWeek: 1, manualEdited: false, autoPlanEnabled: true, weeks: Array(TOTAL_WEEKS).fill(0) };
-        const t23: TaskRow = { id: "t23", kind: "task", status: "Todo", sprintsAuto: [], epic: "", task: "Две одинаковые функции, одна для одной команды, другая для двух", team: "Test", fn: "FN11", planEmpl: 1, planWeeks: 1, blockerIds: [], weekBlockers: [], fact: 0, startWeek: null, endWeek: null, expectedStartWeek: 1, manualEdited: false, autoPlanEnabled: true, weeks: Array(TOTAL_WEEKS).fill(0) };
-        const t24: TaskRow = { id: "t24", kind: "task", status: "Todo", sprintsAuto: [], epic: "", task: "Две одинаковые функции, одна для одной команды, другая для двух", team: "Test 2", fn: "FN11", planEmpl: 1, planWeeks: 1, blockerIds: [], weekBlockers: [], fact: 0, startWeek: null, endWeek: null, expectedStartWeek: 2, manualEdited: false, autoPlanEnabled: true, weeks: Array(TOTAL_WEEKS).fill(0) };
-        const t25: TaskRow = { id: "t25", kind: "task", status: "Todo", sprintsAuto: [], epic: "", task: "Две одинаковые функции, одна для одной команды, другая для двух", team: "Test 2", fn: "FN11", planEmpl: 1, planWeeks: 1, blockerIds: [], weekBlockers: [], fact: 0, startWeek: null, endWeek: null, expectedStartWeek: 3, manualEdited: false, autoPlanEnabled: true, weeks: Array(TOTAL_WEEKS).fill(0) };
-        const t26: TaskRow = { id: "t26", kind: "task", status: "Todo", sprintsAuto: [], epic: "", task: "Две одинаковые функции, одна для одной команды, другая для двух", team: "Test", fn: "FN11", planEmpl: 1, planWeeks: 1, blockerIds: [], weekBlockers: [], fact: 0, startWeek: null, endWeek: null, expectedStartWeek: 2, manualEdited: false, autoPlanEnabled: true, weeks: Array(TOTAL_WEEKS).fill(0) };
-        const t27: TaskRow = { id: "t27", kind: "task", status: "Todo", sprintsAuto: [], epic: "", task: "Две одинаковые функции, одна для одной команды, другая для двух", team: "Test 2", fn: "FN11", planEmpl: 1, planWeeks: 1, blockerIds: [], weekBlockers: [], fact: 0, startWeek: null, endWeek: null, expectedStartWeek: 4, manualEdited: false, autoPlanEnabled: true, weeks: Array(TOTAL_WEEKS).fill(0) };
-        const t28: TaskRow = { id: "t28", kind: "task", status: "Todo", sprintsAuto: [], epic: "", task: "Две одинаковые функции, одна для одной команды, другая для двух", team: "Test", fn: "FN11", planEmpl: 1, planWeeks: 1, blockerIds: [], weekBlockers: [], fact: 0, startWeek: null, endWeek: null, expectedStartWeek: 3, manualEdited: false, autoPlanEnabled: true, weeks: Array(TOTAL_WEEKS).fill(0) };
-        const t29: TaskRow = { id: "t29", kind: "task", status: "Todo", sprintsAuto: [], epic: "", task: "Две одинаковые функции, одна для одной команды, другая для двух", team: "Test 2", fn: "FN11", planEmpl: 1, planWeeks: 1, blockerIds: [], weekBlockers: [], fact: 0, startWeek: null, endWeek: null, expectedStartWeek: 5, manualEdited: false, autoPlanEnabled: true, weeks: Array(TOTAL_WEEKS).fill(0) };
-        const t30: TaskRow = { id: "t30", kind: "task", status: "Todo", sprintsAuto: [], epic: "", task: "Две одинаковые функции, одна для одной команды, другая для двух", team: "Test 2", fn: "FN11", planEmpl: 1, planWeeks: 1, blockerIds: [], weekBlockers: [], fact: 0, startWeek: null, endWeek: null, expectedStartWeek: 6, manualEdited: false, autoPlanEnabled: true, weeks: Array(TOTAL_WEEKS).fill(0) };
-        
-        const t31: TaskRow = { id: "t31", kind: "task", status: "Todo", sprintsAuto: [], epic: "", task: "Планирование общей задачи при наличии только персональных ресурсов, затем перс задачи", team: "Test", fn: "FN12", planEmpl: 1, planWeeks: 2, blockerIds: [], weekBlockers: [], fact: 0, startWeek: null, endWeek: null, expectedStartWeek: 1, manualEdited: false, autoPlanEnabled: true, weeks: Array(TOTAL_WEEKS).fill(0) };
-        const t32: TaskRow = { id: "t32", kind: "task", status: "Todo", sprintsAuto: [], epic: "", task: "Планирование общей задачи при наличии только персональных ресурсов, затем перс задачи", team: "Test", fn: "FN12", planEmpl: 1, planWeeks: 2, blockerIds: [], weekBlockers: [], fact: 0, startWeek: null, endWeek: null, expectedStartWeek: 1, manualEdited: false, autoPlanEnabled: true, weeks: Array(TOTAL_WEEKS).fill(0) };
-        const t33: TaskRow = { id: "t33", kind: "task", status: "Todo", sprintsAuto: [], epic: "", task: "Планирование персональной задачи после общих задач", team: "Test", fn: "FN12", empl: "Empl1", planEmpl: 1, planWeeks: 2, blockerIds: [], weekBlockers: [], fact: 0, startWeek: null, endWeek: null, expectedStartWeek: 3, manualEdited: false, autoPlanEnabled: true, weeks: Array(TOTAL_WEEKS).fill(0) };
-        const t34: TaskRow = { id: "t34", kind: "task", status: "Todo", sprintsAuto: [], epic: "", task: "Планирование персональной задачи после общих задач", team: "Test", fn: "FN12", empl: "Empl1", planEmpl: 1, planWeeks: 2, blockerIds: [], weekBlockers: [], fact: 0, startWeek: null, endWeek: null, expectedStartWeek: 5, manualEdited: false, autoPlanEnabled: true, weeks: Array(TOTAL_WEEKS).fill(0) };
-        const t35: TaskRow = { id: "t35", kind: "task", status: "Todo", sprintsAuto: [], epic: "", task: "Планирование персональной задачи после общих задач", team: "Test", fn: "FN12", empl: "Empl2", planEmpl: 1, planWeeks: 2, blockerIds: [], weekBlockers: [], fact: 0, startWeek: null, endWeek: null, expectedStartWeek: 3, manualEdited: false, autoPlanEnabled: true, weeks: Array(TOTAL_WEEKS).fill(0) };
-        const t36: TaskRow = { id: "t36", kind: "task", status: "Todo", sprintsAuto: [], epic: "", task: "Планирование персональной задачи после общих задач", team: "Test", fn: "FN12", empl: "Empl2", planEmpl: 1, planWeeks: 2, blockerIds: [], weekBlockers: [], fact: 0, startWeek: null, endWeek: null, expectedStartWeek: 5, manualEdited: false, autoPlanEnabled: true, weeks: Array(TOTAL_WEEKS).fill(0) };
-        const t37: TaskRow = { id: "t37", kind: "task", status: "Todo", sprintsAuto: [], epic: "", task: "Планирование персональной задачи", team: "Test", fn: "FN13", empl: "Empl1", planEmpl: 1, planWeeks: 2, blockerIds: [], weekBlockers: [], fact: 0, startWeek: null, endWeek: null, expectedStartWeek: 1, manualEdited: false, autoPlanEnabled: true, weeks: Array(TOTAL_WEEKS).fill(0) };
-        const t38: TaskRow = { id: "t38", kind: "task", status: "Todo", sprintsAuto: [], epic: "", task: "Планирование персональной задачи", team: "Test", fn: "FN13", empl: "Empl1", planEmpl: 1, planWeeks: 2, blockerIds: [], weekBlockers: [], fact: 0, startWeek: null, endWeek: null, expectedStartWeek: 3, manualEdited: false, autoPlanEnabled: true, weeks: Array(TOTAL_WEEKS).fill(0) };
-        const t39: TaskRow = { id: "t39", kind: "task", status: "Todo", sprintsAuto: [], epic: "", task: "Планирование персональной задачи", team: "Test", fn: "FN13", empl: "Empl2", planEmpl: 1, planWeeks: 2, blockerIds: [], weekBlockers: [], fact: 0, startWeek: null, endWeek: null, expectedStartWeek: 1, manualEdited: false, autoPlanEnabled: true, weeks: Array(TOTAL_WEEKS).fill(0) };
-        const t40: TaskRow = { id: "t40", kind: "task", status: "Todo", sprintsAuto: [], epic: "", task: "Планирование персональной задачи", team: "Test", fn: "FN13", empl: "Empl2", planEmpl: 1, planWeeks: 2, blockerIds: [], weekBlockers: [], fact: 0, startWeek: null, endWeek: null, expectedStartWeek: 3, manualEdited: false, autoPlanEnabled: true, weeks: Array(TOTAL_WEEKS).fill(0) };
-        const t41: TaskRow = { id: "t41", kind: "task", status: "Todo", sprintsAuto: [], epic: "", task: "Планирование общей задачи при наличии только персональных ресурсов, после перс задач", team: "Test", fn: "FN13", planEmpl: 1, planWeeks: 2, blockerIds: [], weekBlockers: [], fact: 0, startWeek: null, endWeek: null, expectedStartWeek: 5, manualEdited: false, autoPlanEnabled: true, weeks: Array(TOTAL_WEEKS).fill(0) };
-        const t42: TaskRow = { id: "t42", kind: "task", status: "Todo", sprintsAuto: [], epic: "", task: "Планирование общей задачи при наличии только персональных ресурсов, после перс задач", team: "Test", fn: "FN13", planEmpl: 1, planWeeks: 2, blockerIds: [], weekBlockers: [], fact: 0, startWeek: null, endWeek: null, expectedStartWeek: 5, manualEdited: false, autoPlanEnabled: true, weeks: Array(TOTAL_WEEKS).fill(0) };
-        const t43: TaskRow = { id: "t43", kind: "task", status: "Todo", sprintsAuto: [], epic: "", task: "Два сотрудника одной функции работают на две команды (не важно кто делает, но будет делать Empl1 по приоритету ресурсов)", team: "Test", fn: "FN14", planEmpl: 1, planWeeks: 2, blockerIds: [], weekBlockers: [], fact: 0, startWeek: null, endWeek: null, expectedStartWeek: 1, manualEdited: false, autoPlanEnabled: true, weeks: Array(TOTAL_WEEKS).fill(0) };
-        const t44: TaskRow = { id: "t44", kind: "task", status: "Todo", sprintsAuto: [], epic: "", task: "Два сотрудника одной функции работают на две команды (перс задача для Empl1)", team: "Test", fn: "FN14", empl: "Empl1", planEmpl: 1, planWeeks: 2, blockerIds: [], weekBlockers: [], fact: 0, startWeek: null, endWeek: null, expectedStartWeek: 3, manualEdited: false, autoPlanEnabled: true, weeks: Array(TOTAL_WEEKS).fill(0) };
-        const t45: TaskRow = { id: "t45", kind: "task", status: "Todo", sprintsAuto: [], epic: "", task: "Два сотрудника одной функции работают на две команды (перс задача для Empl2)", team: "Test 2", fn: "FN14", empl: "Empl2", planEmpl: 1, planWeeks: 2, blockerIds: [], weekBlockers: [], fact: 0, startWeek: null, endWeek: null, expectedStartWeek: 1, manualEdited: false, autoPlanEnabled: true, weeks: Array(TOTAL_WEEKS).fill(0) };
-        const t46: TaskRow = { id: "t46", kind: "task", status: "Todo", sprintsAuto: [], epic: "", task: "Два сотрудника одной функции работают на две команды (перс задача для Empl2)", team: "Test 2", fn: "FN14", empl: "Empl2", planEmpl: 1, planWeeks: 2, blockerIds: [], weekBlockers: [], fact: 0, startWeek: null, endWeek: null, expectedStartWeek: 3, manualEdited: false, autoPlanEnabled: true, weeks: Array(TOTAL_WEEKS).fill(0) };
-        const t47: TaskRow = { id: "t47", kind: "task", status: "Todo", sprintsAuto: [], epic: "", task: "Два сотрудника одной функции работают на две команды (не важно кто делает, но будет делать Empl1 по приоритету ресурсов)", team: "Test", fn: "FN14", planEmpl: 1, planWeeks: 2, blockerIds: [], weekBlockers: [], fact: 0, startWeek: null, endWeek: null, expectedStartWeek: 5, manualEdited: false, autoPlanEnabled: true, weeks: Array(TOTAL_WEEKS).fill(0) };
-        const t48: TaskRow = { id: "t48", kind: "task", status: "Todo", sprintsAuto: [], epic: "", task: "Два сотрудника одной функции работают на две команды (не важно кто делает, но будет делать Empl2 по приоритету ресурсов)", team: "Test", fn: "FN14", planEmpl: 1, planWeeks: 2, blockerIds: [], weekBlockers: [], fact: 0, startWeek: null, endWeek: null, expectedStartWeek: 5, manualEdited: false, autoPlanEnabled: true, weeks: Array(TOTAL_WEEKS).fill(0) };
-        const t49: TaskRow = { id: "t49", kind: "task", status: "Todo", sprintsAuto: [], epic: "", task: "Два сотрудника одной функции работают на две команды (перс задача)", team: "Test", fn: "FN15", empl: "Empl1", planEmpl: 1, planWeeks: 1, blockerIds: [], weekBlockers: [], fact: 0, startWeek: null, endWeek: null, expectedStartWeek: 1, manualEdited: false, autoPlanEnabled: true, weeks: Array(TOTAL_WEEKS).fill(0) };
-        const t50: TaskRow = { id: "t50", kind: "task", status: "Todo", sprintsAuto: [], epic: "", task: "Два сотрудника одной функции работают на две команды (не важно кто делает, но будет делать Empl2 по приоритету ресурсов)", team: "Test", fn: "FN15", planEmpl: 1, planWeeks: 1, blockerIds: [], weekBlockers: [], fact: 0, startWeek: null, endWeek: null, expectedStartWeek: 1, manualEdited: false, autoPlanEnabled: true, weeks: Array(TOTAL_WEEKS).fill(0) };
-        const t51: TaskRow = { id: "t51", kind: "task", status: "Todo", sprintsAuto: [], epic: "", task: "Два сотрудника одной функции работают на две команды (не важно кто делает, но будет делать Empl1 по приоритету ресурсов)", team: "Test", fn: "FN15", planEmpl: 1, planWeeks: 1, blockerIds: [], weekBlockers: [], fact: 0, startWeek: null, endWeek: null, expectedStartWeek: 2, manualEdited: false, autoPlanEnabled: true, weeks: Array(TOTAL_WEEKS).fill(0) };
-        
-        return [res1, res2, res3, res4, res5, res6, res7, res8, res9, res10, res11, res12, res13, res14, res15, res16, res17, res18, res19, res20, res21, res22, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20, t21, t22, t23, t24, t25, t26, t27, t28, t29, t30, t31, t32, t33, t34, t35, t36, t37, t38, t39, t40, t41, t42, t43, t44, t45, t46, t47, t48, t49, t50, t51];
-    });
+        loadData();
+    }, []);
 
     // ===== Последовательный пересчёт (как в формуле roadmap.js) =====
     type ResState = { res: ResourceRow; load: number[] };
@@ -1550,7 +1548,16 @@ export function RoadmapPlan() {
     // Функция для форматирования даты в формат DD.MM.YYYY
     function formatDate(dateString: string): string {
         if (!dateString) return '';
-        const date = new Date(dateString + 'T00:00:00Z');
+        
+        // Если дата уже в формате ISO с временем, используем её как есть
+        // Если дата в формате YYYY-MM-DD, добавляем время
+        const isoString = dateString.includes('T') ? dateString : dateString + 'T00:00:00Z';
+        const date = new Date(isoString);
+        
+        if (isNaN(date.getTime())) {
+            return '??.??.????';
+        }
+        
         const day = date.getUTCDate().toString().padStart(2, '0');
         const month = (date.getUTCMonth() + 1).toString().padStart(2, '0');
         const year = date.getUTCFullYear();
@@ -2788,6 +2795,53 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
     }
 
     // ====== UI ======
+    
+    // Отображение состояния загрузки
+    if (loading) {
+        return (
+            <div className="p-4 flex items-center justify-center h-screen">
+                <div className="text-center">
+                    <div className="text-lg">Загрузка данных...</div>
+                </div>
+            </div>
+        );
+    }
+    
+    // Отображение ошибки
+    if (error) {
+        return (
+            <div className="p-4 flex items-center justify-center h-screen">
+                <div className="text-center">
+                    <div className="text-lg text-red-600 mb-4">Ошибка загрузки данных</div>
+                    <div className="text-sm text-gray-600">{error}</div>
+                </div>
+            </div>
+        );
+    }
+
+    // Проверка наличия данных о спринтах
+    if (sprints.length === 0) {
+        return (
+            <div className="p-4 flex items-center justify-center h-screen">
+                <div className="text-center">
+                    <div className="text-lg">Нет данных о спринтах</div>
+                </div>
+            </div>
+        );
+    }
+
+    // Проверка, что WEEK0 определен
+    if (!WEEK0 || WEEK0 === "Invalid Date") {
+        return (
+            <div className="p-4 flex items-center justify-center h-screen">
+                <div className="text-center">
+                    <div className="text-lg">Ошибка загрузки дат спринтов</div>
+                    <div className="text-sm text-gray-600">WEEK0: {WEEK0}</div>
+                </div>
+            </div>
+        );
+    }
+    
     return (
         <div className="p-4 space-y-4 h-screen flex flex-col">
             <div className="flex gap-2">
@@ -2931,11 +2985,13 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
                                 <span>Auto</span>
                             </th>
                             {/* Заголовки для недель */}
-                            {range(TOTAL_WEEKS).map(w => { const h = weekHeaderLabelLocal(w); return (
+                            {range(TOTAL_WEEKS).map(w => { 
+                                const h = weekHeaderLabelLocal(w); 
+                                return (
                                 <th key={w} className="px-2 py-2 text-center whitespace-nowrap align-middle" style={{width: '3.5rem', border: '1px solid rgb(226, 232, 240)' }}>
                                     <div className="text-xs font-semibold">#{h.num}</div>
                                     <div className="text-[10px] text-gray-500">{h.sprint || ""}</div>
-                                    <div className="text-[10px] text-gray-400">с {h.from}</div>
+                                    <div className="text-[10px] text-gray-400">с {h.from || "??.??.????"}</div>
                                 </th>
                             ); })}
                         </tr>
