@@ -677,6 +677,26 @@ export function RoadmapPlan() {
     const [teamFnColors, setTeamFnColors] = useState<Record<string, string | { bg: string; text: string }>>({});
     const [colorPanel, setColorPanel] = useState<{ anchor: { x: number; y: number }; teamFnKey: string; view: "resource" | "task"; initial: { bg: string; text: string } } | null>(null)
 
+    // ===== Ширина колонок (для ресайзинга) =====
+    const [columnWidths, setColumnWidths] = useState<Record<string, number>>({
+        type: 60,
+        status: 80,
+        sprintsAuto: 80,
+        epic: 200,
+        task: 200, // Убедимся что Task = 200px
+        team: 80,
+        fn: 80,
+        empl: 80,
+        planEmpl: 40,
+        planWeeks: 40
+    });
+
+    // Отладка: показываем текущие ширины при загрузке
+    console.log('🚀 Initial column widths:', columnWidths);
+
+
+    // Состояние для ресайзинга
+    const [isResizing, setIsResizing] = useState<{ column: string; startX: number; startWidth: number } | null>(null);
 
     // ===== Демо-данные строк =====
     const [rows, setRows] = useState<Row[]>(() => {
@@ -2458,19 +2478,23 @@ export function RoadmapPlan() {
     }, [filteredRows]);
 
     // ====== Колоночные ширины и синхронизация горизонтального скролла ======
-    const COL_WIDTH: Partial<Record<ColumnId, string>> = {
-        type: '6rem',
-        status: '32rem', // Объединенная ширина для Status/Sprints/Epic/Task
-        sprintsAuto: '10rem',
-        epic: '8rem',
-        task: '14rem',
-        team: '10rem',
-        fn: '6rem',
-        empl: '8rem',
-        planEmpl: '24rem', // Объединенная ширина для Plan empl/Plan weeks/Auto
-        planWeeks: '8rem',
-        autoplan: '6rem',
-    };
+    const COL_WIDTH: Partial<Record<ColumnId, string>> = useMemo(() => {
+        const widths = {
+            type: `${columnWidths.type}px`,
+            status: `${columnWidths.status}px`,
+            sprintsAuto: `${columnWidths.sprintsAuto}px`,
+            epic: `${columnWidths.epic}px`,
+            task: `${columnWidths.task}px`,
+            team: `${columnWidths.team}px`,
+            fn: `${columnWidths.fn}px`,
+            empl: `${columnWidths.empl}px`,
+            planEmpl: `${columnWidths.planEmpl}px`,
+            planWeeks: `${columnWidths.planWeeks}px`,
+            autoplan: '96px', // Фиксированная ширина для autoplan
+        };
+        console.log('🎯 COL_WIDTH recalculated:', widths);
+        return widths;
+    }, [columnWidths]);
 
     const headerWeeksRef = useRef<HTMLDivElement | null>(null);
     const resWeeksRefs = useRef<Map<ID, HTMLDivElement>>(new Map());
@@ -2501,9 +2525,77 @@ export function RoadmapPlan() {
 
     function renderColGroup() {
         const order: ColumnId[] = ["type","status","sprintsAuto","epic","task","team","fn","empl","planEmpl","planWeeks","autoplan"];
-        const cols = order.map((c) => (<col key={c} style={{ width: COL_WIDTH[c] || "8rem" }} />));
-        return (<colgroup children={[...cols, <col key="timeline" />]} />);
+        console.log('🏗️ renderColGroup called, COL_WIDTH:', COL_WIDTH);
+        const cols = order.map((c) => {
+            const width = COL_WIDTH[c] || "8rem";
+            console.log(`📐 Column ${c}: ${width}`);
+            return (
+                <col key={c} style={{ 
+                    width: width,
+                    minWidth: width,
+                    maxWidth: width
+                }} />
+            );
+        });
+        return (
+            <colgroup>
+                {cols}
+                <col key="timeline" />
+            </colgroup>
+        );
     }
+
+    // ====== Ресайзинг колонок ======
+    const handleResizeStart = (column: string, e: React.MouseEvent) => {
+        console.log('🔧 Starting resize for column:', column, 'current width:', columnWidths[column]);
+        e.preventDefault();
+        e.stopPropagation();
+        setIsResizing({
+            column,
+            startX: e.clientX,
+            startWidth: columnWidths[column] || 200
+        });
+    };
+
+    const handleResizeMove = (e: MouseEvent) => {
+        if (!isResizing) return;
+        
+        const deltaX = e.clientX - isResizing.startX;
+        const newWidth = Math.max(20, isResizing.startWidth + deltaX); // только минимальное ограничение 20px
+        
+        console.log('📏 Resizing column:', isResizing.column, 'to width:', newWidth);
+        
+        setColumnWidths(prev => {
+            const newState = {
+                ...prev,
+                [isResizing.column]: newWidth
+            };
+            console.log('✅ New column widths:', newState);
+            return newState;
+        });
+    };
+
+    const handleResizeEnd = () => {
+        console.log('🏁 Resize ended');
+        setIsResizing(null);
+    };
+
+    // Добавляем глобальные обработчики для ресайзинга
+    useEffect(() => {
+        if (isResizing) {
+            document.addEventListener('mousemove', handleResizeMove);
+            document.addEventListener('mouseup', handleResizeEnd);
+            document.body.style.cursor = 'col-resize';
+            document.body.style.userSelect = 'none';
+            
+            return () => {
+                document.removeEventListener('mousemove', handleResizeMove);
+                document.removeEventListener('mouseup', handleResizeEnd);
+                document.body.style.cursor = '';
+                document.body.style.userSelect = '';
+            };
+        }
+    }, [isResizing]);
 
     // ====== Автоплан: чекбокс + подтверждение ======
     function toggleAutoPlan(taskId: ID, next: boolean) {
@@ -2799,15 +2891,97 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
             {tab === 'plan' ? (
                 <>
                 <div ref={tableContainerRef} className="flex-grow border rounded-xl overflow-auto" style={{ position: "relative" }}>
-                    <table className="min-w-full text-sm select-none table-fixed border-collapse" style={{ border: '1px solid rgb(226, 232, 240)' }}>
+                    <table 
+                        key={JSON.stringify(columnWidths)} 
+                        className="min-w-full text-sm select-none table-fixed border-collapse" 
+                        style={{ border: '1px solid rgb(226, 232, 240)' }}
+                    >
                         {renderColGroup()}
                         <thead className="sticky top-0 z-10" style={{ backgroundColor: 'rgb(249, 250, 251)' }}>
                         <tr style={{ borderBottom: '1px solid rgb(226, 232, 240)' }}>
                             {renderHeadWithFilter("Тип", "type")}
                             {renderHeadWithFilter("Status", "status")}
-                            {renderHeadWithFilter("Sprints", "sprintsAuto")}
+                            <th 
+                                className="px-2 py-2 text-center align-middle" 
+                                style={{ 
+                                    width: `${columnWidths.sprintsAuto}px`,
+                                    minWidth: `${columnWidths.sprintsAuto}px`,
+                                    maxWidth: `${columnWidths.sprintsAuto}px`,
+                                    border: '1px solid rgb(226, 232, 240)', 
+                                    paddingRight: '0.5em', 
+                                    paddingLeft: '0.5em', 
+                                    position: 'relative'
+                                }}
+                            >
+                                <div className="flex items-center justify-between">
+                                    <span>Sprints</span>
+                                </div>
+                                {/* Ресайзер */}
+                                <div
+                                    className="absolute inset-y-0 right-0 cursor-col-resize bg-transparent hover:bg-blue-400 transition-colors opacity-0 hover:opacity-100"
+                                    style={{
+                                        zIndex: 20,
+                                        right: '-3px',
+                                        top: '0',
+                                        bottom: '0',
+                                        width: '6px',
+                                        pointerEvents: 'auto'
+                                    }}
+                                    onMouseDown={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        handleResizeStart('sprintsAuto', e);
+                                    }}
+                                    onMouseEnter={() => {
+                                        document.body.style.cursor = 'col-resize';
+                                    }}
+                                    onMouseLeave={() => {
+                                        document.body.style.cursor = '';
+                                    }}
+                                    title="Перетащите для изменения ширины колонки"
+                                />
+                            </th>
                             {renderHeadWithFilter("Epic", "epic")}
-                            {renderHeadWithFilter("Task", "task")}
+                            <th 
+                                className="px-2 py-2 text-center align-middle" 
+                                style={{ 
+                                    width: `${columnWidths.task}px`,
+                                    minWidth: `${columnWidths.task}px`,
+                                    maxWidth: `${columnWidths.task}px`,
+                                    border: '1px solid rgb(226, 232, 240)', 
+                                    paddingRight: '0.5em', 
+                                    paddingLeft: '0.5em', 
+                                    position: 'relative'
+                                }}
+                            >
+                                <div className="flex items-center justify-between">
+                                    <span>Task</span>
+                                </div>
+                                {/* Ресайзер */}
+                                <div
+                                    className="absolute inset-y-0 right-0 cursor-col-resize bg-transparent hover:bg-blue-400 transition-colors opacity-0 hover:opacity-100"
+                                    style={{
+                                        zIndex: 20,
+                                        right: '-3px',
+                                        top: '0',
+                                        bottom: '0',
+                                        width: '6px',
+                                        pointerEvents: 'auto'
+                                    }}
+                                    onMouseDown={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        handleResizeStart('task', e);
+                                    }}
+                                    onMouseEnter={() => {
+                                        document.body.style.cursor = 'col-resize';
+                                    }}
+                                    onMouseLeave={() => {
+                                        document.body.style.cursor = '';
+                                    }}
+                                    title="Перетащите для изменения ширины колонки"
+                                />
+                            </th>
                             {renderHeadWithFilter("Team", "team")}
                             {renderHeadWithFilter("Fn", "fn")}
                             {renderHeadWithFilter("Empl", "empl")}
@@ -2829,12 +3003,17 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
                         {filteredRows.filter(r => r.kind === "resource").map(r => (
                             <tr key={r.id}
                                 className={"border-b bg-gray-50"}
+                                style={{ height: '24px' }}
                                 data-row-id={r.id}
                                 onMouseDown={(e)=>onMouseDownRow(e,r)}
                                 onContextMenu={(e)=>onContextMenuRow(e,r)}
                             >
                                 {/* Тип */}
-                                <td className={`px-2 py-1 align-middle bg-gray-50 draggable-cell`} style={{...getCellBorderStyle(isSel(r.id,'type')), ...getCellBorderStyleForDrag(r.id)}} onMouseDown={markDragAllowed}>Ресурс</td>
+                                <td className={`px-2 py-1 align-middle bg-gray-50 draggable-cell`} style={{...getCellBorderStyle(isSel(r.id,'type')), ...getCellBorderStyleForDrag(r.id)}} onMouseDown={markDragAllowed}>
+                                    <div className="w-full overflow-hidden" title="Ресурс">
+                                        <span className="block truncate">Ресурс</span>
+                                    </div>
+                                </td>
 
                                 {/* Объединенная ячейка для Status/Sprints/Epic/Task (не используется для ресурсов) */}
                                 <td className={`px-2 py-1 align-middle bg-gray-50 text-center text-gray-400 draggable-cell`} style={{...getCellBorderStyle(isSel(r.id,'status')), ...getCellBorderStyleForDrag(r.id)}} onMouseDown={markDragAllowed}
@@ -2866,7 +3045,11 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
                                                 onEscape={() => stopEdit()}
                                             />
                                         </div>
-                                    ) : (<span>{(r as ResourceRow).team.join(', ')}</span>)}
+                                    ) : (
+                                        <div className="w-full overflow-hidden" title={(r as ResourceRow).team.join(', ')}>
+                                            <span className="block truncate">{(r as ResourceRow).team.join(', ')}</span>
+                                        </div>
+                                    )}
                                 </td>
 
                                 {/* Fn */}
@@ -2880,7 +3063,11 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
                                                     if(e.key==='Escape'){ cancelEditRef.current=true; stopEdit(); }
                                                }}
                                                onBlur={(e)=>{ if(!cancelEditRef.current){ updateResource(r.id,{fn:(e.target as HTMLInputElement).value as Fn}); } stopEdit(); }} />
-                                    ) : (<span>{r.fn}</span>)}
+                                    ) : (
+                                        <div className="w-full overflow-hidden" title={r.fn}>
+                                            <span className="block truncate">{r.fn}</span>
+                                        </div>
+                                    )}
                                 </td>
 
                                 {/* Empl */}
@@ -2894,7 +3081,11 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
                                                    if(e.key==='Escape'){ cancelEditRef.current=true; stopEdit(); }
                                                }}
                                                onBlur={(e)=>{ if(!cancelEditRef.current){ updateResource(r.id,{empl:(e.target as HTMLInputElement).value || undefined}); } stopEdit(); }} />
-                                    ) : (<span>{(r as ResourceRow).empl || ''}</span>)}
+                                    ) : (
+                                        <div className="w-full overflow-hidden" title={(r as ResourceRow).empl || ''}>
+                                            <span className="block truncate">{(r as ResourceRow).empl || ''}</span>
+                                        </div>
+                                    )}
                                 </td>
 
                                 {/* Объединенная ячейка для Plan empl/Plan weeks/Auto (не используется для ресурсов) */}
@@ -2976,7 +3167,7 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
                             return (
                             <tr key={r.id}
                                 className={`border-b ${hasMismatch ? 'bg-red-100' : 'bg-white'}`}
-                                style={hasMismatch ? { backgroundColor: '#fee2e2' } : {}}
+                                style={{ height: '24px', ...(hasMismatch ? { backgroundColor: '#fee2e2' } : {}) }}
                                 data-row-id={r.id}
                                 onMouseDown={(e)=>{ 
                                     if (r.kind==='task') onTaskMouseDown(e, r as TaskRow); 
@@ -2986,7 +3177,11 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
                                 onContextMenu={(e)=>onContextMenuRow(e,r)}
                             >
                                 {/* Тип */}
-                                <td className={`px-2 py-1 align-middle ${getCellBgClass(hasMismatch)} ${getCellBorderClass(r.id)} draggable-cell`} style={{...getCellBorderStyle(isSel(r.id,'type')), ...getCellBorderStyleForDrag(r.id), ...getCellBgStyle(hasMismatch)}} onMouseDown={markDragAllowed}>Задача</td>
+                                <td className={`px-2 py-1 align-middle ${getCellBgClass(hasMismatch)} ${getCellBorderClass(r.id)} draggable-cell`} style={{...getCellBorderStyle(isSel(r.id,'type')), ...getCellBorderStyleForDrag(r.id), ...getCellBgStyle(hasMismatch)}} onMouseDown={markDragAllowed}>
+                                    <div className="w-full overflow-hidden" title="Задача">
+                                        <span className="block truncate">Задача</span>
+                                    </div>
+                                </td>
 
                                 {/* Status */}
                                 <td className={`px-2 py-1 align-middle text-center ${getCellBgClass(hasMismatch)} ${getCellBorderClass(r.id)} draggable-cell`} style={{...getCellBorderStyle(isSel(r.id,'status')), ...getCellBorderStyleForDrag(r.id), ...getCellBgStyle(hasMismatch)}} onMouseDown={markDragAllowed} onDoubleClick={()=>startEdit({rowId:r.id,col:"status"})} onClick={()=>setSel({rowId:r.id,col:"status"})}>
@@ -3013,7 +3208,11 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
                                </td>
 
                                 {/* Sprints readonly */}
-                                <td className={`px-2 py-1 align-middle ${getCellBgClass(hasMismatch)} ${getCellBorderClass(r.id)} draggable-cell`} style={{...getCellBorderStyle(isSel(r.id,'sprintsAuto')), ...getCellBorderStyleForDrag(r.id), ...getCellBgStyle(hasMismatch)}} onMouseDown={markDragAllowed}>{(r as TaskRow).sprintsAuto.join(", ")||""}</td>
+                                <td className={`px-2 py-1 align-middle ${getCellBgClass(hasMismatch)} ${getCellBorderClass(r.id)} draggable-cell`} style={{width: `${columnWidths.sprintsAuto}px`, minWidth: `${columnWidths.sprintsAuto}px`, maxWidth: `${columnWidths.sprintsAuto}px`, ...getCellBorderStyle(isSel(r.id,'sprintsAuto')), ...getCellBorderStyleForDrag(r.id), ...getCellBgStyle(hasMismatch)}} onMouseDown={markDragAllowed}>
+                                    <div className="w-full overflow-hidden" title={(r as TaskRow).sprintsAuto.join(", ")||""}>
+                                        <span className="block truncate">{(r as TaskRow).sprintsAuto.join(", ")||""}</span>
+                                    </div>
+                                </td>
 
                                 {/* Epic */}
                                 <td className={`px-2 py-1 align-middle ${getCellBgClass(hasMismatch)} ${getCellBorderClass(r.id)} draggable-cell`} style={{...getCellBorderStyle(isSel(r.id,'epic')), ...getCellBorderStyleForDrag(r.id), ...getCellBgStyle(hasMismatch)}} onMouseDown={markDragAllowed} onDoubleClick={()=>startEdit({rowId:r.id,col:"epic"})} onClick={()=>setSel({rowId:r.id,col:"epic"})}>
@@ -3026,11 +3225,15 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
                                                    if(e.key==='Escape'){ cancelEditRef.current=true; stopEdit(); }
                                               }}
                                                onBlur={(e)=>{ if(!cancelEditRef.current){ updateTask(r.id,{epic:(e.target as HTMLInputElement).value}); } stopEdit(); }} />
-                                    ) : (<span>{(r as TaskRow).epic||""}</span>)}
+                                    ) : (
+                                        <div className="w-full overflow-hidden" title={(r as TaskRow).epic||""}>
+                                            <span className="block truncate">{(r as TaskRow).epic||""}</span>
+                                        </div>
+                                    )}
                                 </td>
 
                                 {/* Task */}
-                                <td className={`px-2 py-1 align-middle ${getCellBgClass(hasMismatch)} ${getCellBorderClass(r.id)} draggable-cell`} style={{...getCellBorderStyle(isSel(r.id,'task')), ...getCellBorderStyleForDrag(r.id), ...getCellBgStyle(hasMismatch)}} onMouseDown={markDragAllowed} onDoubleClick={()=>startEdit({rowId:r.id,col:"task"})} onClick={()=>setSel({rowId:r.id,col:"task"})}>
+                                <td className={`px-2 py-1 align-middle ${getCellBgClass(hasMismatch)} ${getCellBorderClass(r.id)} draggable-cell`} style={{width: `${columnWidths.task}px`, minWidth: `${columnWidths.task}px`, maxWidth: `${columnWidths.task}px`, ...getCellBorderStyle(isSel(r.id,'task')), ...getCellBorderStyleForDrag(r.id), ...getCellBgStyle(hasMismatch)}} onMouseDown={markDragAllowed} onDoubleClick={()=>startEdit({rowId:r.id,col:"task"})} onClick={()=>setSel({rowId:r.id,col:"task"})}>
                                     {editing?.rowId===r.id && editing?.col==="task" ? (
                                         <input autoFocus className="w-full h-full box-border min-w-0 outline-none bg-transparent" style={{ border: 'none', padding: 0, margin: 0 }} defaultValue={(r as TaskRow).task}
                                                onKeyDown={(e)=>{
@@ -3040,7 +3243,11 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
                                                    if(e.key==='Escape'){ cancelEditRef.current=true; stopEdit(); }
                                               }}
                                                onBlur={(e)=>{ if(!cancelEditRef.current){ updateTask(r.id,{task:(e.target as HTMLInputElement).value}); } stopEdit(); }} />
-                                    ) : (<span>{(r as TaskRow).task}</span>)}
+                                    ) : (
+                                        <div className="w-full overflow-hidden" title={(r as TaskRow).task}>
+                                            <span className="block truncate">{(r as TaskRow).task}</span>
+                                        </div>
+                                    )}
                                 </td>
 
                                 {/* Team */}
@@ -3070,7 +3277,11 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
                                                 searchPlaceholder="Поиск команд..."
                                             />
                                         </div>
-                                    ) : (<span>{r.team}</span>)}
+                                    ) : (
+                                        <div className="w-full overflow-hidden" title={r.team}>
+                                            <span className="block truncate">{r.team}</span>
+                                        </div>
+                                    )}
                                 </td>
 
                                 {/* Fn */}
@@ -3084,7 +3295,11 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
                                                    if(e.key==='Escape'){ cancelEditRef.current=true; stopEdit(); }
                                               }}
                                                onBlur={(e)=>{ if(!cancelEditRef.current){ updateTask(r.id,{fn:(e.target as HTMLInputElement).value as Fn}); } stopEdit(); }} />
-                                    ) : (<span>{r.fn}</span>)}
+                                    ) : (
+                                        <div className="w-full overflow-hidden" title={r.fn}>
+                                            <span className="block truncate">{r.fn}</span>
+                                        </div>
+                                    )}
                                 </td>
 
                                 {/* Empl */}
@@ -3098,7 +3313,11 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
                                                    if(e.key==='Escape'){ cancelEditRef.current=true; stopEdit(); }
                                               }}
                                                onBlur={(e)=>{ if(!cancelEditRef.current){ updateTask(r.id,{empl:(e.target as HTMLInputElement).value || undefined}); } stopEdit(); }} />
-                                    ) : (<span>{(r as TaskRow).empl || ''}</span>)}
+                                    ) : (
+                                        <div className="w-full overflow-hidden" title={(r as TaskRow).empl || ''}>
+                                            <span className="block truncate">{(r as TaskRow).empl || ''}</span>
+                                        </div>
+                                    )}
                                 </td>
 
                                 {/* Plan empl */}
@@ -3723,7 +3942,10 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
 </div>
 );
 // ===== helpers (render) =====
-// Helper function to check if a filter is active
+function filteredValuesForColumn(list: Row[], col: ColumnId): string[] { return list.map(r => valueForCol(r, col)).filter(v => v !== undefined); }
+function isSel(rowId:ID, col:Exclude<ColKey, {week:number}>|"type") { return sel && sel.rowId===rowId && sel.col===col; }
+function isSelWeek(rowId:ID, w:number) { return sel && sel.rowId===rowId && typeof sel.col==='object' && sel.col.week===w; }
+
 function isFilterActive(col: ColumnId): boolean {
     const filter = filters[col];
     return !!(filter && filter.selected.size > 0);
@@ -3739,7 +3961,16 @@ function renderHeadWithFilter(label: string, col: ColumnId) {
         : { padding: '1px 2px' };
     
     return (
-        <th className="px-2 py-2 text-center align-middle" style={{ width: COL_WIDTH[col], border: '1px solid rgb(226, 232, 240)', paddingRight: '0.5em', paddingLeft: '0.5em' }}>
+        <th 
+            className="px-2 py-2 text-center align-middle" 
+            style={{ 
+                width: COL_WIDTH[col], 
+                border: '1px solid rgb(226, 232, 240)', 
+                paddingRight: '0.5em', 
+                paddingLeft: '0.5em', 
+                position: 'relative'
+            }}
+        >
             <div className="flex items-center justify-between">
                 <span>{label}</span>
                 {col === "team" ? (
@@ -3762,12 +3993,36 @@ function renderHeadWithFilter(label: string, col: ColumnId) {
                     </button>
                 )}
             </div>
+            {/* Ресайзер для всех колонок кроме autoplan */}
+            {col !== "autoplan" && (
+                <div
+                    className="absolute inset-y-0 right-0 cursor-col-resize bg-transparent hover:bg-blue-400 transition-colors opacity-0 hover:opacity-100"
+                    style={{ 
+                        zIndex: 20, 
+                        right: '-3px',
+                        top: '0',
+                        bottom: '0',
+                        width: '6px', // Явно задаем ширину 6px
+                        pointerEvents: 'auto'
+                    }}
+                    onMouseDown={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        handleResizeStart(col, e);
+                    }}
+                    onMouseEnter={() => {
+                        document.body.style.cursor = 'col-resize';
+                    }}
+                    onMouseLeave={() => {
+                        document.body.style.cursor = '';
+                    }}
+                    title="Перетащите для изменения ширины колонки"
+                />
+            )}
         </th>
     );
 }
-function filteredValuesForColumn(list: Row[], col: ColumnId): string[] { return list.map(r => valueForCol(r, col)).filter(v => v !== undefined); }
-function isSel(rowId:ID, col:Exclude<ColKey, {week:number}>|"type") { return sel && sel.rowId===rowId && sel.col===col; }
-function isSelWeek(rowId:ID, w:number) { return sel && sel.rowId===rowId && typeof sel.col==='object' && sel.col.week===w; }
+
 // self-tests hook removed to satisfy eslint rules-of-hooks
 }
 
