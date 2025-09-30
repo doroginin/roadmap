@@ -683,12 +683,12 @@ export function RoadmapPlan() {
         status: 80,
         sprintsAuto: 80,
         epic: 200,
-        task: 200, // Убедимся что Task = 200px
+        task: 200,
         team: 80,
         fn: 80,
         empl: 80,
-        planEmpl: 40,
-        planWeeks: 40
+        planEmpl: 50, // Минимум 50px
+        planWeeks: 50 // Минимум 50px
     });
 
     // Отладка: показываем текущие ширины при загрузке
@@ -2427,6 +2427,10 @@ export function RoadmapPlan() {
     type FilterState = { [K in ColumnId]?: { search: string; selected: Set<string> } };
     const [filters, setFilters] = useState<FilterState>({});
     const [filterUi, setFilterUi] = useState<{ col: ColumnId; x:number; y:number } | null>(null);
+    function isFilterActive(col: ColumnId): boolean {
+        const filter = filters[col];
+        return !!(filter && filter.selected.size > 0);
+    }
     function openFilter(col: ColumnId, x:number, y:number) { setFilterUi({ col, x, y }); if (!filters[col]) setFilters(f => ({ ...f, [col]: { search: "", selected: new Set<string>() } })); }
     function toggleFilterValue(col: ColumnId, val: string) { setFilters(f => { const s = new Set(f[col]?.selected || []); if (s.has(val)) s.delete(val); else s.add(val); return { ...f, [col]: { search: f[col]?.search || "", selected: s } }; }); }
     function setFilterSearch(col: ColumnId, v:string) { setFilters(f => ({ ...f, [col]: { search: v, selected: f[col]?.selected || new Set<string>() } })); }
@@ -2490,7 +2494,7 @@ export function RoadmapPlan() {
             empl: `${columnWidths.empl}px`,
             planEmpl: `${columnWidths.planEmpl}px`,
             planWeeks: `${columnWidths.planWeeks}px`,
-            autoplan: '96px', // Фиксированная ширина для autoplan
+            autoplan: '50px', // Фиксированная ширина для autoplan
         };
         console.log('🎯 COL_WIDTH recalculated:', widths);
         return widths;
@@ -2561,9 +2565,20 @@ export function RoadmapPlan() {
         if (!isResizing) return;
         
         const deltaX = e.clientX - isResizing.startX;
-        const newWidth = Math.max(20, isResizing.startWidth + deltaX); // только минимальное ограничение 20px
         
-        console.log('📏 Resizing column:', isResizing.column, 'to width:', newWidth);
+        // Определяем минимальную ширину для каждой колонки
+        let minWidth = 20; // по умолчанию
+        if (['sprintsAuto', 'epic', 'task', 'team', 'fn', 'empl'].includes(isResizing.column)) {
+            minWidth = 70;
+        } else if (['planEmpl', 'planWeeks'].includes(isResizing.column)) {
+            minWidth = 50;
+        } else if (isResizing.column === 'autoplan') {
+            return; // Колонка Auto не ресайзится - фиксированная 50px
+        }
+        
+        const newWidth = Math.max(minWidth, isResizing.startWidth + deltaX);
+        
+        console.log('📏 Resizing column:', isResizing.column, 'to width:', newWidth, 'min:', minWidth);
         
         setColumnWidths(prev => {
             const newState = {
@@ -2899,8 +2914,8 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
                         {renderColGroup()}
                         <thead className="sticky top-0 z-10" style={{ backgroundColor: 'rgb(249, 250, 251)' }}>
                         <tr style={{ borderBottom: '1px solid rgb(226, 232, 240)' }}>
-                            {renderHeadWithFilter("Тип", "type")}
-                            {renderHeadWithFilter("Status", "status")}
+                            {renderHeadWithFilter("Тип", "type", filters, isFilterActive, openFilter, handleResizeStart)}
+                            {renderHeadWithFilter("Status", "status", filters, isFilterActive, openFilter, handleResizeStart)}
                             <th 
                                 className="px-2 py-2 text-center align-middle" 
                                 style={{ 
@@ -2915,6 +2930,17 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
                             >
                                 <div className="flex items-center justify-between">
                                     <span>Sprints</span>
+                                    <button 
+                                        className={isFilterActive('sprintsAuto') ? "text-xs rounded" : "text-xs text-gray-500"} 
+                                        style={isFilterActive('sprintsAuto') 
+                                            ? { padding: '1px 2px', backgroundColor: '#166534', color: '#ffffff' }
+                                            : { padding: '1px 2px' }
+                                        }
+                                        title={isFilterActive('sprintsAuto') ? "Фильтр применен" : "Открыть фильтр"}
+                                        onClick={(e)=>openFilter('sprintsAuto', (e.currentTarget as HTMLElement).getBoundingClientRect().left, (e.currentTarget as HTMLElement).getBoundingClientRect().bottom+4)}
+                                    >
+                                        ▾
+                                    </button>
                                 </div>
                                 {/* Ресайзер */}
                                 <div
@@ -2941,7 +2967,7 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
                                     title="Перетащите для изменения ширины колонки"
                                 />
                             </th>
-                            {renderHeadWithFilter("Epic", "epic")}
+                            {renderHeadWithFilter("Epic", "epic", filters, isFilterActive, openFilter, handleResizeStart)}
                             <th 
                                 className="px-2 py-2 text-center align-middle" 
                                 style={{ 
@@ -2956,6 +2982,17 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
                             >
                                 <div className="flex items-center justify-between">
                                     <span>Task</span>
+                                    <button 
+                                        className={isFilterActive('task') ? "text-xs rounded" : "text-xs text-gray-500"} 
+                                        style={isFilterActive('task') 
+                                            ? { padding: '1px 2px', backgroundColor: '#166534', color: '#ffffff' }
+                                            : { padding: '1px 2px' }
+                                        }
+                                        title={isFilterActive('task') ? "Фильтр применен" : "Открыть фильтр"}
+                                        onClick={(e)=>openFilter('task', (e.currentTarget as HTMLElement).getBoundingClientRect().left, (e.currentTarget as HTMLElement).getBoundingClientRect().bottom+4)}
+                                    >
+                                        ▾
+                                    </button>
                                 </div>
                                 {/* Ресайзер */}
                                 <div
@@ -2982,12 +3019,24 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
                                     title="Перетащите для изменения ширины колонки"
                                 />
                             </th>
-                            {renderHeadWithFilter("Team", "team")}
-                            {renderHeadWithFilter("Fn", "fn")}
-                            {renderHeadWithFilter("Empl", "empl")}
-                            {renderHeadWithFilter("Plan empl", "planEmpl")}
-                            {renderHeadWithFilter("Plan weeks", "planWeeks")}
-                            {renderHeadWithFilter("Auto", "autoplan")}
+                            {renderHeadWithFilter("Team", "team", filters, isFilterActive, openFilter, handleResizeStart)}
+                            {renderHeadWithFilter("Fn", "fn", filters, isFilterActive, openFilter, handleResizeStart)}
+                            {renderHeadWithFilter("Empl", "empl", filters, isFilterActive, openFilter, handleResizeStart)}
+                            {renderHeadWithFilter("Plan empl", "planEmpl", filters, isFilterActive, openFilter, handleResizeStart)}
+                            {renderHeadWithFilter("Plan weeks", "planWeeks", filters, isFilterActive, openFilter, handleResizeStart)}
+                            <th 
+                                className="px-2 py-2 text-center align-middle" 
+                                style={{ 
+                                    width: '50px',
+                                    minWidth: '50px',
+                                    maxWidth: '50px',
+                                    border: '1px solid rgb(226, 232, 240)', 
+                                    paddingRight: '0.5em', 
+                                    paddingLeft: '0.5em'
+                                }}
+                            >
+                                <span>Auto</span>
+                            </th>
                             {/* Заголовки для недель */}
                             {range(TOTAL_WEEKS).map(w => { const h = weekHeaderLabelLocal(w); return (
                                 <th key={w} className="px-2 py-2 text-center whitespace-nowrap align-middle" style={{width: '3.5rem', border: '1px solid rgb(226, 232, 240)' }}>
@@ -3946,12 +3995,8 @@ function filteredValuesForColumn(list: Row[], col: ColumnId): string[] { return 
 function isSel(rowId:ID, col:Exclude<ColKey, {week:number}>|"type") { return sel && sel.rowId===rowId && sel.col===col; }
 function isSelWeek(rowId:ID, w:number) { return sel && sel.rowId===rowId && typeof sel.col==='object' && sel.col.week===w; }
 
-function isFilterActive(col: ColumnId): boolean {
-    const filter = filters[col];
-    return !!(filter && filter.selected.size > 0);
-}
 
-function renderHeadWithFilter(label: string, col: ColumnId) {
+function renderHeadWithFilter(label: string, col: ColumnId, _filters: any, isFilterActive: (col: ColumnId) => boolean, openFilter: (col: ColumnId, x: number, y: number) => void, handleResizeStart: (col: string, e: React.MouseEvent) => void) {
     const filterActive = isFilterActive(col);
     const buttonClass = filterActive 
         ? "text-xs rounded" 
