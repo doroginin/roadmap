@@ -2717,7 +2717,26 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
     if (weeks1.length !== weeks2.length) return false;
     return weeks1.every((val, index) => Math.abs(val - weeks2[index]) < 0.001);
 }
-    const paintRef = useRef<{ active:boolean; rowId:ID; originW:number; value:number; started:boolean } | null>(null);
+    const paintRef = useRef<{ active:boolean; rowId:ID; originW:number; value:number; started:boolean; lastW:number } | null>(null);
+    
+    // Функция для заполнения всех ячеек между двумя позициями
+    function fillWeeksBetween(weeks: number[], fromW: number, toW: number, value: number): number[] {
+        // Расширяем массив до TOTAL_WEEKS если он короче
+        const result = weeks.slice();
+        while (result.length < TOTAL_WEEKS) {
+            result.push(0);
+        }
+        
+        const start = Math.min(fromW, toW);
+        const end = Math.max(fromW, toW);
+        
+        for (let i = start; i <= end && i < TOTAL_WEEKS; i++) {
+            result[i] = value;
+        }
+        
+        return result;
+    }
+    
     function onWeekCellMouseDown(_e: React.MouseEvent, r: Row, w: number) {
         // Одинарный клик только выделяет
         setSel({ rowId: r.id, col: { week: w } });
@@ -2726,11 +2745,11 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
         if (r.kind === "task") {
             const t = r as TaskRow;
             const current = t.weeks[w] || 0; // используем прямое значение как для ресурсов
-            paintRef.current = { active: true, rowId: t.id, originW: w, value: current, started: false };
+            paintRef.current = { active: true, rowId: t.id, originW: w, value: current, started: false, lastW: w };
         } else {
             const rr = r as ResourceRow;
             const current = rr.weeks[w] || 0;
-            paintRef.current = { active: true, rowId: rr.id, originW: w, value: current, started: false };
+            paintRef.current = { active: true, rowId: rr.id, originW: w, value: current, started: false, lastW: w };
         }
     }
     function onWeekCellMouseEnter(_e: React.MouseEvent, r: Row, w: number) {
@@ -2738,42 +2757,56 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
         if (!p || !p.active || r.id !== p.rowId) return;
 
         if (r.kind === "task") {
-            const t = r as TaskRow;
-            const base = t.weeks.slice(); // используем прямую копию weeks как для ресурсов
-            const originalWeeks = t.weeks.slice();
-            
             if (!p.started && w !== p.originW) {
                 p.started = true;
-                base[p.originW] = p.value; // включаем исходную ячейку в мазок
             }
-            base[w] = p.value;
             
-            // Проверяем, изменилось ли значение
-            const hasChanged = !weeksArraysEqual(base, originalWeeks);
+            const fromW = p.lastW;
             
-            setRows(prev => prev.map(x =>
-                (x.kind === "task" && x.id === t.id)
-                    ? { 
-                        ...(x as TaskRow), 
+            setRows(prev => prev.map(x => {
+                if (x.kind === "task" && x.id === r.id) {
+                    const currentTask = x as TaskRow;
+                    const originalWeeks = currentTask.weeks.slice();
+                    
+                    // Заполняем все ячейки между последней обработанной позицией и текущей
+                    const base = fillWeeksBetween(currentTask.weeks, fromW, w, p.value);
+                    
+                    // Проверяем, изменилось ли значение
+                    const hasChanged = !weeksArraysEqual(base, originalWeeks);
+                    
+                    return { 
+                        ...currentTask, 
                         weeks: base,
                         // Устанавливаем флаги только если значение изменилось
                         ...(hasChanged ? { manualEdited: true, autoPlanEnabled: false } : {})
-                    }
-                    : x
-            ));
+                    };
+                }
+                return x;
+            }));
+            
+            // Обновляем последнюю обработанную позицию ПОСЛЕ обработки
+            p.lastW = w;
         } else {
-            const rr = r as ResourceRow;
-            const base = rr.weeks.slice();
             if (!p.started && w !== p.originW) {
                 p.started = true;
-                base[p.originW] = p.value;
             }
-            base[w] = p.value;
-            setRows(prev => prev.map(x =>
-                (x.kind === "resource" && x.id === rr.id)
-                    ? { ...(x as ResourceRow), weeks: base }
-                    : x
-            ));
+            
+            const fromW = p.lastW;
+            
+            setRows(prev => prev.map(x => {
+                if (x.kind === "resource" && x.id === r.id) {
+                    const currentResource = x as ResourceRow;
+                    
+                    // Заполняем все ячейки между последней обработанной позицией и текущей
+                    const base = fillWeeksBetween(currentResource.weeks, fromW, w, p.value);
+                    
+                    return { ...currentResource, weeks: base };
+                }
+                return x;
+            }));
+            
+            // Обновляем последнюю обработанную позицию ПОСЛЕ обработки
+            p.lastW = w;
         }
     }
     useEffect(() => { const up = () => { if (paintRef.current) paintRef.current.active = false; }; window.addEventListener("mouseup", up); return () => window.removeEventListener("mouseup", up); }, []);
