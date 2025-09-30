@@ -92,7 +92,6 @@ function hasExpectedStartWeekMismatch(task: TaskRow): boolean {
            task.startWeek !== undefined && 
            task.expectedStartWeek !== task.startWeek;
     
-    
     return result;
 }
 
@@ -204,7 +203,6 @@ function countFilledCellsInPath(tasks: TaskRow[], path: Array<{taskId: string, w
         return count + (isTaskCellFilled(tasks, cell.taskId, cell.weekIdx) ? 1 : 0);
     }, 0);
 }
-
 
 function calculateRoutePath(
     tasks: TaskRow[], 
@@ -414,17 +412,11 @@ function ArrowOverlay({
                         // Нет пересечений - размещаем по центру
                         y1 = centerY1;
                         y2 = centerY2;
-                        if (import.meta.env.DEV) {
-                            console.log(`Стрелка блокера недели ${link.blockerId} размещена по центру ячейки`);
-                        }
                     } else {
                         // Есть пересечения - размещаем на 6px от верхней границы ячейки
                         const fixedOffset = 6; // Фиксированное смещение от верхней границы
                         y1 = ra.top + fixedOffset - wrapRect.top + container.scrollTop;
                         y2 = rb.top + fixedOffset - wrapRect.top + container.scrollTop;
-                        if (import.meta.env.DEV) {
-                            console.log(`Стрелка блокера недели ${link.blockerId} размещена на ${fixedOffset}px от верхней границы ячейки`);
-                        }
                     }
                     
                     // Создаем путь с вертикальной палочкой в начале: |->
@@ -691,10 +683,6 @@ export function RoadmapPlan() {
         planWeeks: 50 // Минимум 50px
     });
 
-    // Отладка: показываем текущие ширины при загрузке
-    console.log('🚀 Initial column widths:', columnWidths);
-
-
     // Состояние для ресайзинга
     const [isResizing, setIsResizing] = useState<{ column: string; startX: number; startWidth: number } | null>(null);
 
@@ -785,7 +773,6 @@ export function RoadmapPlan() {
     // ===== Последовательный пересчёт (как в формуле roadmap.js) =====
     type ResState = { res: ResourceRow; load: number[] };
     
-    
     function computeAllRowsLocal(list: Row[]): { rows: Row[]; resLoad: Record<ID, number[]> } {
         const resources: ResState[] = list.filter(r => r.kind === 'resource').map(r => ({ 
             res: r as ResourceRow, 
@@ -806,9 +793,6 @@ export function RoadmapPlan() {
 
         // Рекурсивное вычисление максимального времени завершения блокеров
         function computeBlockerEndTime(taskId: ID, currentTaskId: ID): number {
-            if (import.meta.env.DEV) {
-                console.log(`  → Вычисляем время завершения блокера ${taskId} для задачи ${currentTaskId}`);
-            }
             // Проверка на циклическую зависимость
             if (computationStack.has(taskId)) {
                 console.warn(`Обнаружена циклическая зависимость при вычислении блокера ${taskId} для задачи ${currentTaskId}`);
@@ -818,9 +802,6 @@ export function RoadmapPlan() {
             // Проверяем кэш фактических результатов
             if (blockerCache.has(taskId)) {
                 const cachedResult = blockerCache.get(taskId)!;
-                if (import.meta.env.DEV) {
-                    console.log(`  → Найден в кэше: ${cachedResult}`);
-                }
                 return cachedResult;
             }
             
@@ -841,14 +822,8 @@ export function RoadmapPlan() {
 
             // Ищем задачу сначала среди обработанных, затем среди исходных
             let originalTask = findTaskByIdInOut(taskId);
-            if (import.meta.env.DEV) {
-                console.log(`  → Поиск в обработанных: ${originalTask ? 'найдена' : 'не найдена'}`);
-            }
             if (!originalTask) {
                 originalTask = list.find(r => r.id === taskId && r.kind === 'task') as TaskRow | undefined;
-                if (import.meta.env.DEV) {
-                    console.log(`  → Поиск в исходных: ${originalTask ? 'найдена' : 'не найдена'}`);
-                }
             }
             if (!originalTask) {
                 console.warn(`Блокирующая задача ${taskId} не найдена ни в обработанных, ни в исходных задачах`);
@@ -918,15 +893,9 @@ export function RoadmapPlan() {
                     // Если задача уже обработана, кэшируем как фактический результат
                     if (findTaskByIdInOut(taskId)) {
                         blockerCache.set(taskId, endTime);
-                        if (import.meta.env.DEV) {
-                            console.log(`  → Результат (обработанная): ${endTime}`);
-                        }
                     } else {
                         // Если задача не обработана, кэшируем как предварительную оценку
                         estimateCache.set(taskId, endTime);
-                        if (import.meta.env.DEV) {
-                            console.log(`  → Результат (предварительная оценка): ${endTime}`);
-                        }
                     }
                     return endTime;
                 } finally {
@@ -1016,15 +985,6 @@ export function RoadmapPlan() {
             const blocker = Math.max(taskBlocker, weekBlocker);
             
             // ДИАГНОСТИКА: Логируем информацию о планировании
-            if (import.meta.env.DEV) {
-                console.log(`\n=== Планирование задачи ${t.task} (${t.id}) ===`);
-                console.log(`Блокеры задач: ${t.blockerIds.join(', ') || 'нет'}`);
-                console.log(`Блокеры недель: ${t.weekBlockers.join(', ') || 'нет'}`);
-                console.log(`Время завершения блокеров задач: ${taskBlocker}`);
-                console.log(`Максимальная блокирующая неделя: ${weekBlocker} (задача может начинаться с недели ${weekBlocker + 1})`);
-                console.log(`Итоговое время блокера: ${blocker}`);
-                console.log(`Требуется ресурсов: ${need}, недель: ${dur}`);
-            }
 
             // режим: ручной план при отключённом Auto → просто учитываем загрузку
             if (!t.autoPlanEnabled && t.manualEdited) {
@@ -1056,10 +1016,6 @@ export function RoadmapPlan() {
                     // ИСПРАВЛЕНИЕ: Начинаем поиск строго после завершения всех блокеров
                     const minStart = Math.max(1, blocker + 1);
                     
-                    if (import.meta.env.DEV) {
-                        console.log(`Поиск стартового окна: minStart=${minStart}, maxStart=${maxStart}`);
-                        console.log(`Свободные ресурсы (первые 10 недель): ${free.slice(0, 10).join(', ')}`);
-                    }
                     
                     for (let s = minStart; s <= maxStart; s++) {
                         let ok = true;
@@ -1071,15 +1027,11 @@ export function RoadmapPlan() {
                         }
                         if (ok) { 
                             start = s;
-                            if (import.meta.env.DEV) {
-                                console.log(`Найдено стартовое окно: неделя ${start}`);
-                            }
                             break; 
                         }
                     }
                     
                     if (import.meta.env.DEV && start === 0) {
-                        console.log(`Не найдено подходящего стартового окна`);
                     }
                 }
             } finally {
@@ -1100,10 +1052,6 @@ export function RoadmapPlan() {
             t.fact = weeks.reduce((a, b) => a + b, 0);
             t.sprintsAuto = listSprintsBetweenLocal(t.startWeek, t.endWeek);
             
-            if (import.meta.env.DEV) {
-                console.log(`Результат планирования: недели ${t.startWeek}-${t.endWeek}`);
-                console.log(`Распределение: ${weeks.slice(0, 10).join(', ')} (первые 10 недель)`);
-            }
             
             return t;
         }
@@ -1593,7 +1541,6 @@ export function RoadmapPlan() {
 
     // ====== Функции для редактирования спринтов ======
     function startSprintEdit(s: SprintSelection) {
-        console.log('startSprintEdit called with:', s);
         setSprintEditing(s);
         cancelSprintEditRef.current = false;
     }
@@ -2160,7 +2107,6 @@ export function RoadmapPlan() {
                     const weekIdx = parseInt(weekCell.getAttribute('data-week-idx') || '-1');
                     if (weekIdx >= 0) {
                         const weekNumber = weekIdx + 1; // Преобразуем в 1-based
-                        console.log(`Создание блокера на неделю ${weekNumber} для задачи ${draggedRow.id}`);
                         
                         setRows(prev => prev.map(row => 
                             (row.kind === "task" && row.id === draggedRow.id) 
@@ -2196,37 +2142,29 @@ export function RoadmapPlan() {
                         if (isShiftPressed && draggedRow.kind === "task" && targetRowData.kind === "task") {
                             // Назначение блокера - проверяем, что это не та же задача
                             if (draggedRow.id === targetRowData.id) {
-                                console.log("Попытка создать блокер на саму себя - игнорируем");
                                 // Не делаем ничего, просто игнорируем
                             } else {
-                            console.log(`Попытка создать блокер: ${draggedRow.id} -> ${targetRowData.id}`);
                             if (canSetBlocker(draggedRow.id, targetRowData.id)) {
-                                console.log("Блокер разрешен, создаем");
                                 setRows(prev => prev.map(row => 
                                     (row.kind === "task" && row.id === draggedRow.id) 
                                         ? { ...row, blockerIds: Array.from(new Set([...(row as TaskRow).blockerIds, targetRowData.id])) } 
                                         : row
                                 ));
                             } else {
-                                console.log("Блокер запрещен");
                                 alert("Нельзя создать блокер: обнаружен цикл или неверный порядок.");
                                 }
                             }
                         } else {
                             // Перестановка строк
-                            console.log(`Перестановка строк: ${draggedRow.id} -> ${targetRowData.id}, Shift: ${isShiftPressed}`);
                             setRows(prev => {
                                 const list = prev.slice();
                                 const from = list.findIndex(x => x.id === draggedRow.id);
                                 const to = list.findIndex(x => x.id === targetRowData.id);
-                                console.log(`Индексы: from=${from}, to=${to}`);
                                 if (from<0 || to<0 || from===to) {
-                                    console.log(`Перестановка отменена: from=${from}, to=${to}, from===to=${from===to}`);
                                     return prev;
                                 }
                                 const [m] = list.splice(from, 1);
                                 list.splice(to, 0, m);
-                                console.log(`Перестановка выполнена: ${draggedRow.id} перемещен с позиции ${from} на позицию ${to}`);
                                 return list;
                             });
                         }
@@ -2349,78 +2287,7 @@ export function RoadmapPlan() {
         }
     }
 
-    // Функция для тестирования новой логики блокеров
-    function testBlockerLogic() {
-        console.log("=== Тестирование улучшенной логики блокеров ===");
-        
-        // Тест 1: Проверка предотвращения циклических зависимостей
-        console.log("Тест 1: Циклические зависимости");
-        const taskRows = rows.filter(r => r.kind === 'task') as TaskRow[];
-        taskRows.forEach(task => {
-            console.log(`Задача ${task.task} (${task.id}):`, {
-                blockers: task.blockerIds,
-                canBlockItself: canSetBlocker(task.id, task.id),
-            });
-        });
-        
-        // Тест 2: Проверка автопланирования с блокерами
-        console.log("\nТест 2: Результаты автопланирования");
-        const computedTasks = computedRows.filter(r => r.kind === 'task') as TaskRow[];
-        computedTasks.forEach((task, index) => {
-            console.log(`${index + 1}. Задача "${task.task}" (${task.id}):`, {
-                blockers: task.blockerIds,
-                startWeek: task.startWeek,
-                endWeek: task.endWeek,
-                autoPlanEnabled: task.autoPlanEnabled,
-                planWeeks: task.planWeeks
-            });
-        });
-        
-        // Тест 3: Проверка логики для конкретного сценария
-        console.log("\nТест 3: Анализ сценария с цепочкой блокеров");
-        console.log("Пример: Цепочка зависимостей - Задача 2 → Задача 4 → Задача 3 → Задача 1");
-        console.log("Ожидаемый результат:");
-        console.log("- Задача 2: недели 1-2 (не блокируется, высший приоритет)");
-        console.log("- Задача 4: недели 3-4 (блокируется задачей 2)");
-        console.log("- Задача 3: недели 5-6 (блокируется задачей 4)");
-        console.log("- Задача 1: недели 7-8 (блокируется задачей 3)");
-        
-        console.log("\nФактический результат:");
-        computedTasks.forEach((task) => {
-            const startWeek = task.startWeek || 0;
-            const endWeek = task.endWeek || 0;
-            const blockerText = task.blockerIds.length > 0 ? ` (блокируется: ${task.blockerIds.join(', ')})` : ' (не блокируется)';
-            const autoText = task.autoPlanEnabled ? ' [AUTO]' : ' [MANUAL]';
-            const needText = ` (нужно: ${task.planEmpl}, недель: ${task.planWeeks})`;
-            console.log(`- ${task.task}: недели ${startWeek}-${endWeek}${blockerText}${autoText}${needText}`);
-        });
-        
-        console.log("\nДиагностика ресурсов:");
-        const resourceRows = computedRows.filter(r => r.kind === 'resource') as ResourceRow[];
-        resourceRows.forEach(res => {
-            console.log(`Ресурс ${res.fn}: ${res.weeks.slice(0, 10).join(', ')} (первые 10 недель)`);
-        });
-        
-        console.log("\nДетальная диагностика:");
-        console.log("Исправлены ключевые проблемы:");
-        console.log("1. Исправлена топологическая сортировка - сохраняется исходный порядок для стабильности");
-        console.log("2. Двухуровневое кэширование - фактические результаты vs предварительные оценки");
-        console.log("3. Убрана логика учета задач выше - теперь используются только прямые блокеры");
-        console.log("4. Исправлено переключение автопланирования:");
-        console.log("   - При отключении: текущие значения сохраняются как ручные (manualEdited=true)");
-        console.log("   - При включении: умная проверка - если ручные значения = автоплану, то без подтверждения");
-        console.log("   - При включении: запрос подтверждения только если ручные значения отличаются от автоплана");
-        
-        console.log("=== Конец тестирования ===");
-    }
 
-    // Запускаем тест при первой загрузке (только в dev режиме)
-    React.useEffect(() => {
-        if (import.meta.env.DEV) {
-            // Небольшая задержка, чтобы дать время компоненту полностью загрузиться
-            setTimeout(testBlockerLogic, 1000);
-        }
-    }, []);
 
     // ====== Фильтры ======
     type ColumnId = "type"|"status"|"sprintsAuto"|"epic"|"task"|"team"|"fn"|"empl"|"planEmpl"|"planWeeks"|"fact"|"start"|"end"|"autoplan";
@@ -2496,7 +2363,6 @@ export function RoadmapPlan() {
             planWeeks: `${columnWidths.planWeeks}px`,
             autoplan: '50px', // Фиксированная ширина для autoplan
         };
-        console.log('🎯 COL_WIDTH recalculated:', widths);
         return widths;
     }, [columnWidths]);
 
@@ -2529,10 +2395,8 @@ export function RoadmapPlan() {
 
     function renderColGroup() {
         const order: ColumnId[] = ["type","status","sprintsAuto","epic","task","team","fn","empl","planEmpl","planWeeks","autoplan"];
-        console.log('🏗️ renderColGroup called, COL_WIDTH:', COL_WIDTH);
         const cols = order.map((c) => {
             const width = COL_WIDTH[c] || "8rem";
-            console.log(`📐 Column ${c}: ${width}`);
             return (
                 <col key={c} style={{ 
                     width: width,
@@ -2551,7 +2415,6 @@ export function RoadmapPlan() {
 
     // ====== Ресайзинг колонок ======
     const handleResizeStart = (column: string, e: React.MouseEvent) => {
-        console.log('🔧 Starting resize for column:', column, 'current width:', columnWidths[column]);
         e.preventDefault();
         e.stopPropagation();
         setIsResizing({
@@ -2578,20 +2441,17 @@ export function RoadmapPlan() {
         
         const newWidth = Math.max(minWidth, isResizing.startWidth + deltaX);
         
-        console.log('📏 Resizing column:', isResizing.column, 'to width:', newWidth, 'min:', minWidth);
         
         setColumnWidths(prev => {
             const newState = {
                 ...prev,
                 [isResizing.column]: newWidth
             };
-            console.log('✅ New column widths:', newState);
             return newState;
         });
     };
 
     const handleResizeEnd = () => {
-        console.log('🏁 Resize ended');
         setIsResizing(null);
     };
 
@@ -3104,10 +2964,8 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
 
                                 {/* Team */}
                                 <td className={`px-2 py-1 align-middle bg-gray-50 draggable-cell`} style={{...getCellBorderStyle(isSel(r.id,'team')), ...getCellBorderStyleForDrag(r.id)}} onMouseDown={markDragAllowed} onDoubleClick={()=>{
-                                    console.log('Resource team cell double clicked, starting edit');
                                     startEdit({rowId:r.id,col:"team"});
                                 }} onClick={()=>{
-                                    console.log('Resource team cell clicked, setting selection');
                                     setSel({rowId:r.id,col:"team"});
                                 }}>
                                     {editing?.rowId===r.id && editing?.col==="team" ? (
@@ -3334,10 +3192,8 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
 
                                 {/* Team */}
                                 <td className={`px-2 py-1 align-middle ${getCellBgClass(hasMismatch)} ${getCellBorderClass(r.id)} draggable-cell`} style={{...getCellBorderStyle(isSel(r.id,'team')), ...getCellBorderStyleForDrag(r.id), ...getCellBgStyle(hasMismatch)}} onMouseDown={markDragAllowed} onDoubleClick={()=>{
-                                    console.log('Task team cell double clicked, starting edit');
                                     startEdit({rowId:r.id,col:"team"});
                                 }} onClick={()=>{
-                                    console.log('Task team cell clicked, setting selection');
                                     setSel({rowId:r.id,col:"team"});
                                 }}>
                                     {editing?.rowId===r.id && editing?.col==="team" ? (
