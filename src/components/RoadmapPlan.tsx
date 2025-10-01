@@ -1,11 +1,12 @@
 
-import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Select } from "./Select";
 import { TeamMultiSelect } from "./TeamMultiSelect";
 import { ColorPickerPanel } from "./ColorPickerPanel";
 import { normalizeColorValue, getBg, getText } from "./colorUtils";
 import { DEFAULT_BG } from "./colorDefaults";
 import { fetchRoadmapData } from "../api/roadmapApi";
+import type { RoadmapData } from "../api/types";
 
 // =============================
 // Roadmap "План" — интерактивный прототип (v3.2)
@@ -626,7 +627,12 @@ function ArrowOverlay({
 }
 
 // ---- Компонент ----
-export function RoadmapPlan() {
+interface RoadmapPlanProps {
+  initialData?: RoadmapData | null;
+  onDataChange?: (data: RoadmapData) => void;
+}
+
+export function RoadmapPlan({ initialData, onDataChange }: RoadmapPlanProps = {}) {
     // ===== Tabs =====
     type Tab = "plan" | "sprints" | "teams";
     const [tab, setTab] = useState<Tab>("plan");
@@ -640,13 +646,13 @@ export function RoadmapPlan() {
     ]);
 
     // ===== Команды (редактируемые) =====
-    type TeamData = {
+    type LocalTeamData = {
         name: string;
         jiraProject: string;
         featureTeam: string;
         issueType: string;
     };
-    const [teamData, setTeamData] = useState<TeamData[]>([
+    const [teamData, setTeamData] = useState<LocalTeamData[]>([
         { name: "Demo", jiraProject: "", featureTeam: "", issueType: "" }
     ]);
 
@@ -740,24 +746,35 @@ export function RoadmapPlan() {
                 setLoading(true);
                 setError(null);
                 
-                const response = await fetchRoadmapData();
+                let data: RoadmapData;
                 
-                if (response.error) {
-                    setError(response.error);
+                if (initialData) {
+                    // Используем переданные данные
+                    data = initialData;
                 } else {
-                    // Объединяем ресурсы и задачи в один массив rows
-                    const allRows: Row[] = [
-                        ...(response.data.resources || []),
-                        ...(response.data.tasks || [])
-                    ] as Row[];
+                    // Загружаем данные с сервера
+                    const response = await fetchRoadmapData();
                     
-                    // Сортируем по displayOrder
-                    allRows.sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0));
+                    if (response.error) {
+                        setError(response.error);
+                        return;
+                    }
                     
-                    setRows(allRows as Row[]);
-                    setSprints(response.data.sprints || []);
-                    setTeamData(response.data.teams || []);
+                    data = response.data;
                 }
+                
+                // Объединяем ресурсы и задачи в один массив rows
+                const allRows: Row[] = [
+                    ...(data.resources || []),
+                    ...(data.tasks || [])
+                ] as Row[];
+                
+                // Сортируем по displayOrder
+                allRows.sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0));
+                
+                setRows(allRows as Row[]);
+                setSprints(data.sprints || []);
+                setTeamData(data.teams || []);
             } catch (err) {
                 setError(err instanceof Error ? err.message : 'Unknown error');
             } finally {
@@ -766,7 +783,31 @@ export function RoadmapPlan() {
         };
         
         loadData();
-    }, []);
+    }, [initialData]);
+
+    // ===== Функция для уведомления о изменениях данных =====
+    // ОТКЛЮЧЕНО: вызывает бесконечный цикл
+    // const notifyDataChange = useCallback(() => {
+    //     if (!onDataChange) return;
+    //     
+    //     const { resources, tasks } = splitRows(rows);
+    //     const roadmapData: RoadmapData = {
+    //         version: 0, // Версия будет обновлена при сохранении
+    //         teams: teamData.map(t => ({
+    //             name: t.name,
+    //             jiraProject: t.jiraProject,
+    //             featureTeam: t.featureTeam,
+    //             issueType: t.issueType
+    //         })),
+    //         sprints: sprints,
+    //         functions: [], // TODO: добавить функции если нужно
+    //         employees: [], // TODO: добавить сотрудников если нужно
+    //         resources: resources as any[],
+    //         tasks: tasks as any[]
+    //     };
+    //     
+    //     onDataChange(roadmapData);
+    // }, [rows, teamData, sprints, onDataChange]);
 
     // ===== Последовательный пересчёт (как в формуле roadmap.js) =====
     type ResState = { res: ResourceRow; load: number[] };
@@ -1160,12 +1201,11 @@ export function RoadmapPlan() {
     const cancelTeamEditRef = useRef<boolean>(false);
 
     // ====== Стрелки блокеров ======
-    const tableContainerRef = useRef<HTMLDivElement | null>(null);
     const [containerEl, setContainerEl] = useState<HTMLDivElement | null>(null);
-    
-    useEffect(() => {
-        // ensure the ref is set after mount
-        setContainerEl(tableContainerRef.current);
+    const tableContainerRef = useCallback((node: HTMLDivElement | null) => {
+        if (node) {
+            setContainerEl(node);
+        }
     }, []);
 
     // Порядок колонок для стрелок
@@ -1242,7 +1282,7 @@ export function RoadmapPlan() {
         
         // Прокручиваем таблицу, чтобы выделенная ячейка была видна
         setTimeout(() => {
-            const tableContainer = tableContainerRef.current;
+            const tableContainer = containerEl;
             if (tableContainer) {
                 const selectedRow = tableContainer.querySelector(`tr[data-row-id="${target.id}"]`);
                 if (selectedRow) {
@@ -1605,7 +1645,7 @@ export function RoadmapPlan() {
 
     // ====== Функции управления командами ======
     function addTeam() {
-        const newTeam: TeamData = {
+        const newTeam: LocalTeamData = {
             name: `Team ${teamData.length + 1}`,
             jiraProject: "",
             featureTeam: "",
@@ -1615,7 +1655,7 @@ export function RoadmapPlan() {
     }
 
     function addTeamAbove(index: number) {
-        const newTeam: TeamData = {
+        const newTeam: LocalTeamData = {
             name: `Team ${teamData.length + 1}`,
             jiraProject: "",
             featureTeam: "",
@@ -1627,7 +1667,7 @@ export function RoadmapPlan() {
     }
 
     function addTeamBelow(index: number) {
-        const newTeam: TeamData = {
+        const newTeam: LocalTeamData = {
             name: `Team ${teamData.length + 1}`,
             jiraProject: "",
             featureTeam: "",

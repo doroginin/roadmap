@@ -1,88 +1,11 @@
 // API функции для работы с roadmap данными
+import type { 
+  ApiResponse, 
+  RoadmapData, 
+  SaveResponse 
+} from './types';
 
-export interface ApiResponse<T> {
-  data: T;
-  error?: string;
-}
-
-export interface RoadmapData {
-  version: number;
-  teams: TeamData[];
-  sprints: Sprint[];
-  functions: Function[];
-  employees: Employee[];
-  resources: Resource[];
-  tasks: Task[];
-}
-
-export interface Resource {
-  id: string;
-  kind: "resource";
-  team: string[];
-  fn: string;
-  empl?: string;
-  weeks: number[];
-  displayOrder: number;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface Task {
-  id: string;
-  kind: "task";
-  status: "Todo" | "Backlog" | "Cancelled";
-  sprintsAuto: string[];
-  epic?: string;
-  task: string;
-  team: string;
-  fn: string;
-  empl?: string;
-  planEmpl: number;
-  planWeeks: number;
-  blockerIds: string[];
-  weekBlockers: number[];
-  fact: number;
-  startWeek?: number | null;
-  endWeek?: number | null;
-  expectedStartWeek?: number | null;
-  manualEdited: boolean;
-  autoPlanEnabled: boolean;
-  weeks: number[];
-  displayOrder: number;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface Function {
-  id: string;
-  name: string;
-  color?: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface Employee {
-  id: string;
-  name: string;
-  color?: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface Sprint {
-  code: string;
-  start: string;
-  end: string;
-}
-
-export interface TeamData {
-  name: string;
-  jiraProject: string;
-  featureTeam: string;
-  issueType: string;
-}
-
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080';
+const API_BASE_URL = 'http://localhost:8080';
 
 export async function fetchRoadmapData(): Promise<ApiResponse<RoadmapData>> {
   try {
@@ -97,7 +20,69 @@ export async function fetchRoadmapData(): Promise<ApiResponse<RoadmapData>> {
   } catch (error) {
     console.error('Error fetching roadmap data:', error);
     return { 
-      data: { rows: [], sprints: [], teams: [] }, 
+      data: { 
+        version: 0,
+        teams: [], 
+        sprints: [], 
+        functions: [],
+        employees: [],
+        resources: [],
+        tasks: []
+      }, 
+      error: error instanceof Error ? error.message : 'Unknown error' 
+    };
+  }
+}
+
+export async function saveRoadmapData(
+  data: Partial<RoadmapData>, 
+  currentVersion: number
+): Promise<ApiResponse<SaveResponse>> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/v1/data`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        version: currentVersion,
+        ...data
+      })
+    });
+
+    const result = await response.json();
+
+    if (response.ok) {
+      return { data: result };
+    } else {
+      return { 
+        data: { version: currentVersion, success: false }, 
+        error: result.error || `HTTP error! status: ${response.status}` 
+      };
+    }
+  } catch (error) {
+    console.error('Error saving roadmap data:', error);
+    return { 
+      data: { version: currentVersion, success: false }, 
+      error: error instanceof Error ? error.message : 'Unknown error' 
+    };
+  }
+}
+
+export async function fetchVersion(): Promise<ApiResponse<{ version: number }>> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/v1/version`);
+    
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    return { data };
+  } catch (error) {
+    console.error('Error fetching version:', error);
+    return { 
+      data: { version: 0 }, 
       error: error instanceof Error ? error.message : 'Unknown error' 
     };
   }
