@@ -238,7 +238,11 @@ func (r *Repository) GetResources() ([]models.Resource, error) {
 			resource.Employee = &employeeName.String
 		}
 
-		// Convert team IDs to team names
+		// Save original team UUIDs before converting to names
+		resource.TeamUUIDs = make([]string, len(resource.TeamIDs))
+		copy(resource.TeamUUIDs, resource.TeamIDs)
+
+		// Convert team IDs to team names for display
 		teamNames := make([]string, len(resource.TeamIDs))
 		for i, teamIDStr := range resource.TeamIDs {
 			if teamID, err := uuid.Parse(teamIDStr); err == nil {

@@ -70,8 +70,9 @@ func (h *Handlers) GetDataDiff(c *gin.Context) {
 func (h *Handlers) UpdateData(c *gin.Context) {
 	var req models.UpdateRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
+		// Log the binding error for debugging
 		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Invalid request body",
+			"error": "Invalid request body: " + err.Error(),
 		})
 		return
 	}

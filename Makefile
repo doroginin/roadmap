@@ -1,4 +1,4 @@
-.PHONY: build run test clean docker-up docker-down migrate
+.PHONY: build run test clean docker-up docker-down migrate e2e
 
 # Build the application
 build:
@@ -11,6 +11,10 @@ run:
 # Run tests
 test:
 	go test -v ./...
+
+# Run e2e tests
+e2e:
+	cd ./e2e && npm test && npx playwright show-report
 
 # Clean build artifacts
 clean:

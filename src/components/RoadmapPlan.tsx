@@ -5,8 +5,8 @@ import { TeamMultiSelect } from "./TeamMultiSelect";
 import { ColorPickerPanel } from "./ColorPickerPanel";
 import { normalizeColorValue, getBg, getText } from "./colorUtils";
 import { DEFAULT_BG } from "./colorDefaults";
-import { fetchRoadmapData } from "../api/roadmapApi";
-import type { RoadmapData } from "../api/types";
+import { fetchRoadmapData, saveRoadmapData } from "../api/roadmapApi";
+import type { RoadmapData, Function } from "../api/types";
 
 // =============================
 // Roadmap "План" — интерактивный прототип (v3.2)
@@ -46,8 +46,11 @@ type ResourceRow = {
     id: ID;
     kind: "resource";
     team: string[];
+    teamIds?: string[]; // UUIDs for saving
     fn: Fn;
+    functionId?: string; // UUID for saving
     empl?: string; // optional binding to a specific person
+    employeeId?: string; // UUID for saving
     weeks: number[]; // capacity per week
     displayOrder?: number; // order for display
 };
@@ -60,8 +63,11 @@ type TaskRow = {
     epic?: string;
     task: string;
     team: string;
+    teamId?: string; // UUID for saving
     fn: Fn;
+    functionId?: string; // UUID for saving
     empl?: string; // optional; if set, must use only this resource line(s)
+    employeeId?: string; // UUID for saving
     planEmpl: number; // concurrent capacity needed per week
     planWeeks: number; // continuous duration in weeks
     blockerIds: ID[]; // blockers referencing other tasks
@@ -630,9 +636,10 @@ function ArrowOverlay({
 interface RoadmapPlanProps {
   initialData?: RoadmapData | null;
   onDataChange?: (data: RoadmapData) => void;
+  onSaveRequest?: () => void;
 }
 
-export function RoadmapPlan({ initialData, onDataChange }: RoadmapPlanProps = {}) {
+export function RoadmapPlan({ initialData, onDataChange, onSaveRequest }: RoadmapPlanProps = {}) {
     // ===== Tabs =====
     type Tab = "plan" | "sprints" | "teams";
     const [tab, setTab] = useState<Tab>("plan");
@@ -647,6 +654,7 @@ export function RoadmapPlan({ initialData, onDataChange }: RoadmapPlanProps = {}
 
     // ===== Команды (редактируемые) =====
     type LocalTeamData = {
+        id?: string; // UUID
         name: string;
         jiraProject: string;
         featureTeam: string;
@@ -738,10 +746,147 @@ export function RoadmapPlan({ initialData, onDataChange }: RoadmapPlanProps = {}
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [rows, setRows] = useState<Row[]>([]);
+    const [functions, setFunctions] = useState<Function[]>([]);
+    const [currentVersion, setCurrentVersion] = useState<number>(0);
+    
+    // Helper function to prepare data for saving (convert names to UUIDs) - RETURNS data, doesn't call onDataChange
+    const prepareDataForSave = useCallback((): RoadmapData | null => {
+        const { resources, tasks } = splitRows(rows);
+        
+        // Prepare resources with UUIDs - ONLY backend fields
+        const preparedResources = (resources as ResourceRow[]).map(r => {
+            // Convert team names array to UUID array
+            const teamUUIDs = r.team.map(teamName => {
+                const found = teamData.find(t => t.name === teamName);
+                return found?.id;
+            }).filter(Boolean) as string[]; // Remove nulls/undefineds
+            
+            const functionUUID = functions.find(f => f.name === r.fn)?.id || r.functionId;
+            if (!functionUUID) {
+                console.warn(`Function not found for resource ${r.id}: ${r.fn}`);
+            }
+            
+            // Return ONLY fields that backend Resource model expects
+            return {
+                id: r.id,
+                kind: 'resource' as const,
+                team: teamUUIDs, // Backend expects 'team' to be UUID array (maps to team_ids in DB)
+                fn: r.fn, // Function name for display
+                functionId: functionUUID || '00000000-0000-0000-0000-000000000000', // Fallback to null UUID
+                empl: r.empl || null, // Employee name for display
+                employeeId: r.employeeId || null,
+                weeks: r.weeks,
+                displayOrder: r.displayOrder || 0
+            };
+        });
+        
+        // Prepare tasks with UUIDs - ONLY backend fields
+        const preparedTasks = (tasks as TaskRow[]).map(t => {
+            const teamUUID = teamData.find(team => team.name === t.team)?.id || t.teamId;
+            const functionUUID = functions.find(f => f.name === t.fn)?.id || t.functionId;
+            
+            if (!teamUUID) {
+                console.warn(`Team not found for task ${t.id}: ${t.team}`);
+            }
+            if (!functionUUID) {
+                console.warn(`Function not found for task ${t.id}: ${t.fn}`);
+            }
+            
+            // Return ONLY fields that backend Task model expects
+            return {
+                id: t.id,
+                kind: 'task' as const,
+                status: t.status,
+                sprintsAuto: t.sprintsAuto || [],
+                epic: t.epic || null,
+                task: t.task, // Backend expects 'task' field (maps to task_name in DB)
+                teamId: teamUUID || '00000000-0000-0000-0000-000000000000',
+                team: t.team, // Team name for display
+                functionId: functionUUID || '00000000-0000-0000-0000-000000000000',
+                fn: t.fn, // Function name for display
+                employeeId: null, // TODO: map employee if needed
+                empl: t.empl || null, // Employee name for display
+                planEmpl: t.planEmpl,
+                planWeeks: t.planWeeks,
+                blockerIds: t.blockerIds,
+                weekBlockers: t.weekBlockers,
+                fact: t.fact || 0,
+                startWeek: t.startWeek || null,
+                endWeek: t.endWeek || null,
+                expectedStartWeek: t.expectedStartWeek || null,
+                manualEdited: t.manualEdited,
+                autoPlanEnabled: t.autoPlanEnabled,
+                weeks: t.weeks,
+                displayOrder: t.displayOrder || 0
+            };
+        });
+        
+        const roadmapData: RoadmapData = {
+            version: currentVersion,
+            teams: teamData.map(t => ({
+                id: t.id,
+                name: t.name,
+                jiraProject: t.jiraProject,
+                featureTeam: t.featureTeam, // Send as string, not boolean
+                issueType: t.issueType
+            })),
+            sprints: sprints,
+            functions: functions,
+            employees: [], // TODO: add employees if needed
+            resources: preparedResources as any[],
+            tasks: preparedTasks as any[]
+        };
+        
+        return roadmapData;
+    }, [rows, teamData, sprints, functions, currentVersion]);
+    
+    // Manual save handler - prepares data and saves directly WITHOUT calling onDataChange to avoid loop
+    const handleManualSave = useCallback(async () => {
+        const dataToSave = prepareDataForSave();
+        if (!dataToSave) {
+            console.error('No data to save');
+            return;
+        }
+        
+        console.log('Saving data with UUIDs:', dataToSave);
+        console.log('Sample task JSON:', JSON.stringify(dataToSave.tasks[0], null, 2));
+        console.log('Sample resource JSON:', JSON.stringify(dataToSave.resources[0], null, 2));
+        console.log('Full request body size:', JSON.stringify(dataToSave).length, 'chars');
+        console.log('Teams count:', dataToSave.teams.length, 'Sprints count:', dataToSave.sprints.length);
+        console.log('Functions count:', dataToSave.functions.length, 'Resources count:', dataToSave.resources.length, 'Tasks count:', dataToSave.tasks.length);
+        
+        try {
+            // Save directly via API
+            const result = await saveRoadmapData(dataToSave, currentVersion);
+            
+            if (result.error) {
+                console.error('Save failed:', result.error);
+                alert(`Ошибка сохранения: ${result.error}`);
+            } else {
+                console.log('Save successful, new version:', result.data.version);
+                alert('Данные успешно сохранены!');
+                
+                // Update local version only
+                setCurrentVersion(result.data.version);
+            }
+        } catch (err) {
+            const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+            console.error('Save exception:', errorMessage);
+            alert(`Ошибка сохранения: ${errorMessage}`);
+        }
+    }, [prepareDataForSave]);
 
     // ===== Загрузка данных при монтировании компонента =====
+    // Using useRef to track if data is already loaded to avoid re-loading on every initialData change
+    const loadedVersionRef = useRef<number | null>(null);
+    
     useEffect(() => {
         const loadData = async () => {
+            // Skip if we already loaded this version
+            if (initialData && loadedVersionRef.current === initialData.version) {
+                return;
+            }
+            
             try {
                 setLoading(true);
                 setError(null);
@@ -763,6 +908,9 @@ export function RoadmapPlan({ initialData, onDataChange }: RoadmapPlanProps = {}
                     data = response.data;
                 }
                 
+                // Mark this version as loaded
+                loadedVersionRef.current = data.version;
+                
                 // Объединяем ресурсы и задачи в один массив rows
                 const allRows: Row[] = [
                     ...(data.resources || []),
@@ -775,6 +923,8 @@ export function RoadmapPlan({ initialData, onDataChange }: RoadmapPlanProps = {}
                 setRows(allRows as Row[]);
                 setSprints(data.sprints || []);
                 setTeamData(data.teams || []);
+                setFunctions(data.functions || []);
+                setCurrentVersion(data.version || 0);
             } catch (err) {
                 setError(err instanceof Error ? err.message : 'Unknown error');
             } finally {
@@ -785,29 +935,8 @@ export function RoadmapPlan({ initialData, onDataChange }: RoadmapPlanProps = {}
         loadData();
     }, [initialData]);
 
-    // ===== Функция для уведомления о изменениях данных =====
-    // ОТКЛЮЧЕНО: вызывает бесконечный цикл
-    // const notifyDataChange = useCallback(() => {
-    //     if (!onDataChange) return;
-    //     
-    //     const { resources, tasks } = splitRows(rows);
-    //     const roadmapData: RoadmapData = {
-    //         version: 0, // Версия будет обновлена при сохранении
-    //         teams: teamData.map(t => ({
-    //             name: t.name,
-    //             jiraProject: t.jiraProject,
-    //             featureTeam: t.featureTeam,
-    //             issueType: t.issueType
-    //         })),
-    //         sprints: sprints,
-    //         functions: [], // TODO: добавить функции если нужно
-    //         employees: [], // TODO: добавить сотрудников если нужно
-    //         resources: resources as any[],
-    //         tasks: tasks as any[]
-    //     };
-    //     
-    //     onDataChange(roadmapData);
-    // }, [rows, teamData, sprints, onDataChange]);
+    // ===== Ref для отслеживания последних отправленных данных =====
+    // Функция notifyDataChange больше не используется, удалена для предотвращения бесконечных циклов
 
     // ===== Последовательный пересчёт (как в формуле roadmap.js) =====
     type ResState = { res: ResourceRow; load: number[] };
@@ -1575,7 +1704,9 @@ export function RoadmapPlan({ initialData, onDataChange }: RoadmapPlanProps = {}
     function stopEdit() { 
         setEditing(null); 
     }
-    function commitEdit() { setEditing(null); }
+    function commitEdit() { 
+        setEditing(null); 
+    }
 
     // ====== Функции для редактирования спринтов ======
     function startSprintEdit(s: SprintSelection) {
@@ -2884,18 +3015,30 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
     
     return (
         <div className="p-4 space-y-4 h-screen flex flex-col">
-            <div className="flex gap-2">
-                <button className={`px-3 py-1 rounded ${tab==='plan'? 'bg-black text-white':'border'}`} onClick={()=>setTab('plan')}>План</button>
-                <button className={`px-3 py-1 rounded ${tab==='sprints'? 'bg-black text-white':'border'}`} onClick={()=>setTab('sprints')}>Спринты</button>
-                <button className={`px-3 py-1 rounded ${tab==='teams'? 'bg-black text-white':'border'}`} onClick={()=>setTab('teams')}>Команды</button>
+            <div className="flex gap-2 items-center justify-between" data-testid="tab-navigation">
+                <div className="flex gap-2">
+                    <button className={`px-3 py-1 rounded ${tab==='plan'? 'bg-black text-white':'border'}`} onClick={()=>setTab('plan')} data-testid="tab-plan">План</button>
+                    <button className={`px-3 py-1 rounded ${tab==='sprints'? 'bg-black text-white':'border'}`} onClick={()=>setTab('sprints')} data-testid="tab-sprints">Спринты</button>
+                    <button className={`px-3 py-1 rounded ${tab==='teams'? 'bg-black text-white':'border'}`} onClick={()=>setTab('teams')} data-testid="tab-teams">Команды</button>
+                </div>
+                {onSaveRequest && (
+                    <button 
+                        className="px-4 py-1 rounded bg-blue-600 hover:bg-blue-700 text-white transition-colors"
+                        onClick={handleManualSave}
+                        data-testid="manual-save-button"
+                    >
+                        💾 Сохранить
+                    </button>
+                )}
             </div>
     
             {tab === 'plan' ? (
                 <>
-                <div ref={tableContainerRef} className="flex-grow border rounded-xl overflow-auto" style={{ position: "relative" }}>
+                <div ref={tableContainerRef} className="flex-grow border rounded-xl overflow-auto" style={{ position: "relative" }} data-testid="roadmap-table-container">
                     <table 
                         key={JSON.stringify(columnWidths)} 
-                        className="min-w-full text-sm select-none table-fixed border-collapse" 
+                        className="min-w-full text-sm select-none table-fixed border-collapse"
+                        data-testid="roadmap-table" 
                         style={{ border: '1px solid rgb(226, 232, 240)' }}
                     >
                         {renderColGroup()}
@@ -3269,9 +3412,9 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
                                 </td>
 
                                 {/* Task */}
-                                <td className={`px-2 py-1 align-middle ${getCellBgClass(hasMismatch)} ${getCellBorderClass(r.id)} draggable-cell`} style={{width: `${columnWidths.task}px`, minWidth: `${columnWidths.task}px`, maxWidth: `${columnWidths.task}px`, ...getCellBorderStyle(isSel(r.id,'task')), ...getCellBorderStyleForDrag(r.id), ...getCellBgStyle(hasMismatch)}} onMouseDown={markDragAllowed} onDoubleClick={()=>startEdit({rowId:r.id,col:"task"})} onClick={()=>setSel({rowId:r.id,col:"task"})}>
+                                <td className={`px-2 py-1 align-middle ${getCellBgClass(hasMismatch)} ${getCellBorderClass(r.id)} draggable-cell`} style={{width: `${columnWidths.task}px`, minWidth: `${columnWidths.task}px`, maxWidth: `${columnWidths.task}px`, ...getCellBorderStyle(isSel(r.id,'task')), ...getCellBorderStyleForDrag(r.id), ...getCellBgStyle(hasMismatch)}} onMouseDown={markDragAllowed} onDoubleClick={()=>startEdit({rowId:r.id,col:"task"})} onClick={()=>setSel({rowId:r.id,col:"task"})} data-testid={`task-cell-${r.id}`}>
                                     {editing?.rowId===r.id && editing?.col==="task" ? (
-                                        <input autoFocus className="w-full h-full box-border min-w-0 outline-none bg-transparent" style={{ border: 'none', padding: 0, margin: 0 }} defaultValue={(r as TaskRow).task}
+                                        <input autoFocus className="w-full h-full box-border min-w-0 outline-none bg-transparent" style={{ border: 'none', padding: 0, margin: 0 }} defaultValue={(r as TaskRow).task} data-testid={`task-input-${r.id}`}
                                                onKeyDown={(e)=>{
                                                    if(e.key==='Enter'){ updateTask(r.id,{task:(e.target as HTMLInputElement).value}); commitEdit(); }
                                                    if (e.key === 'Tab' && e.shiftKey) { e.preventDefault(); e.stopPropagation(); updateTask(r.id,{task:(e.target as HTMLInputElement).value}); navigateInEditMode('prev', r.id, 'task'); return; }
@@ -3298,11 +3441,13 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
                                                 options={teamNames}
                                                 selectedValue={r.team}
                                                 onSelect={(selected) => {
-                                                    updateTask(r.id, { team: selected });
+                                                    const selectedTeam = teamData.find(t => t.name === selected);
+                                                    updateTask(r.id, { team: selected, teamId: selectedTeam?.id });
                                                     stopEdit();
                                                 }}
                                                 onSaveValue={(selected) => {
-                                                    updateTask(r.id, { team: selected });
+                                                    const selectedTeam = teamData.find(t => t.name === selected);
+                                                    updateTask(r.id, { team: selected, teamId: selectedTeam?.id });
                                                 }}
                                                 onTabNext={() => focusNextRight(r.id, 'team')}
                                                 onTabPrev={() => focusPrevLeft(r.id, 'team')}
@@ -3321,14 +3466,24 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
                                 {/* Fn */}
                                 <td className={`px-2 py-1 align-middle text-center draggable-cell`} style={{ backgroundColor: getBg(teamFnColors[teamKeyFromTask(r as TaskRow)]), color: getText(teamFnColors[teamKeyFromTask(r as TaskRow)]), ...getCellBorderStyle(isSel(r.id,'fn')), ...getCellBorderStyleForDrag(r.id) }} onMouseDown={markDragAllowed} onDoubleClick={()=>startEdit({rowId:r.id,col:"fn"})} onClick={()=>setSel({rowId:r.id,col:"fn"})} onContextMenu={(e)=>onContextMenuCellColor(e, r as TaskRow, 'fn', 'task')}>
                                     {editing?.rowId===r.id && editing?.col==="fn" ? (
-                                        <input autoFocus className="w-full h-full box-border min-w-0 outline-none bg-transparent" style={{ border: 'none', padding: 0, margin: 0 }} defaultValue={r.fn}
-                                               onKeyDown={(e)=>{
-                                                   if(e.key==='Enter'){ updateTask(r.id,{fn:(e.target as HTMLInputElement).value as Fn}); commitEdit(); }
-                                                   if (e.key === 'Tab' && e.shiftKey) { e.preventDefault(); e.stopPropagation(); updateTask(r.id,{fn:(e.target as HTMLInputElement).value as Fn}); navigateInEditMode('prev', r.id, 'fn'); return; }
-                                                   if(e.key==='Tab'){ e.preventDefault(); updateTask(r.id,{fn:(e.target as HTMLInputElement).value as Fn}); navigateInEditMode('next', r.id, 'fn'); }
-                                                   if(e.key==='Escape'){ cancelEditRef.current=true; stopEdit(); }
-                                              }}
-                                               onBlur={(e)=>{ if(!cancelEditRef.current){ updateTask(r.id,{fn:(e.target as HTMLInputElement).value as Fn}); } stopEdit(); }} />
+                                        <Select
+                                            options={functions.map(f => f.name)}
+                                            selectedValue={r.fn}
+                                            onSelect={(value) => { 
+                                                const selectedFunction = functions.find(f => f.name === value);
+                                                updateTask(r.id, {fn: value as Fn, functionId: selectedFunction?.id}); 
+                                                commitEdit(); 
+                                            }}
+                                            onSaveValue={(value) => { 
+                                                const selectedFunction = functions.find(f => f.name === value);
+                                                updateTask(r.id, {fn: value as Fn, functionId: selectedFunction?.id}); 
+                                            }}
+                                            onTabNext={() => { updateTask(r.id, {fn: r.fn}); return navigateInEditMode('next', r.id, 'fn'); }}
+                                            onTabPrev={() => { updateTask(r.id, {fn: r.fn}); return navigateInEditMode('prev', r.id, 'fn'); }}
+                                            onEscape={() => { cancelEditRef.current=true; stopEdit(); }}
+                                            placeholder="Выберите функцию"
+                                            searchPlaceholder="Поиск функции..."
+                                        />
                                     ) : (
                                         <div className="w-full overflow-hidden" title={r.fn}>
                                             <span className="block truncate">{r.fn}</span>
@@ -3911,21 +4066,21 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
 
 {/* UI фильтров */}
 {filterUi && (
-        <div className="fixed z-50" style={{ left: filterUi.x, top: filterUi.y }}>
+        <div className="fixed z-50" style={{ left: filterUi.x, top: filterUi.y }} data-testid="filter-popup">
             <div className="bg-white border rounded shadow p-2 w-56 max-w-xs text-sm" style={{ backgroundColor: '#ffffff' }} onMouseLeave={()=>setFilterUi(null)}>
                 <div className="font-semibold mb-1">Фильтр</div>
-                <input className="border w-full px-2 py-1 mb-2 box-border" placeholder="Поиск" value={filters[filterUi.col]?.search || ""} onChange={e=>setFilterSearch(filterUi.col, e.target.value)} />
-                <div className="max-h-60 overflow-auto space-y-1">
+                <input className="border w-full px-2 py-1 mb-2 box-border" placeholder="Поиск" value={filters[filterUi.col]?.search || ""} onChange={e=>setFilterSearch(filterUi.col, e.target.value)} data-testid="filter-search-input" />
+                <div className="max-h-60 overflow-auto space-y-1" data-testid="filter-options">
                     {Array.from(new Set(filteredValuesForColumn(computedRows, filterUi.col).filter(v => v.toLowerCase().includes((filters[filterUi.col]?.search||"").toLowerCase())))).map(v => (
-                        <label key={v} className="flex items-center gap-2">
-                            <input type="checkbox" checked={filters[filterUi.col]?.selected?.has(v) || false} onChange={()=>toggleFilterValue(filterUi.col, v)} />
+                        <label key={v} className="flex items-center gap-2" data-testid={`filter-option-${v}`}>
+                            <input type="checkbox" checked={filters[filterUi.col]?.selected?.has(v) || false} onChange={()=>toggleFilterValue(filterUi.col, v)} data-testid={`filter-checkbox-${v}`} />
                             <span className="truncate" title={v}>{v || "(пусто)"}</span>
                         </label>
                     ))}
                 </div>
                 <div className="mt-2 flex justify-between">
-                    <button className="text-xs underline" onClick={()=>clearFilter(filterUi.col)}>Сбросить</button>
-                    <button className="text-xs underline" onClick={()=>setFilterUi(null)}>ОК</button>
+                    <button className="text-xs underline" onClick={()=>clearFilter(filterUi.col)} data-testid="filter-clear-button">Сбросить</button>
+                    <button className="text-xs underline" onClick={()=>setFilterUi(null)} data-testid="filter-ok-button">ОК</button>
                 </div>
             </div>
         </div>
@@ -4009,6 +4164,7 @@ function renderHeadWithFilter(label: string, col: ColumnId, _filters: any, isFil
                         style={buttonStyle}
                         title={filterActive ? "Фильтр применен" : "Открыть фильтр"}
                         onClick={(e)=>openFilter(col, (e.currentTarget as HTMLElement).getBoundingClientRect().left, (e.currentTarget as HTMLElement).getBoundingClientRect().bottom+4)}
+                        data-testid="filter-team-button"
                     >
                         ▾
                     </button>

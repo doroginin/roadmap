@@ -31,8 +31,8 @@ type Team struct {
 	JiraProject string    `json:"jiraProject" db:"jira_project"`
 	FeatureTeam string    `json:"featureTeam" db:"feature_team"`
 	IssueType   string    `json:"issueType" db:"issue_type"`
-	CreatedAt   time.Time `json:"createdAt" db:"created_at"`
-	UpdatedAt   time.Time `json:"updatedAt" db:"updated_at"`
+	CreatedAt   time.Time `json:"createdAt,omitempty" db:"created_at"`
+	UpdatedAt   time.Time `json:"updatedAt,omitempty" db:"updated_at"`
 }
 
 // Sprint represents a sprint in the system
@@ -67,11 +67,12 @@ type Employee struct {
 type Resource struct {
 	ID           uuid.UUID       `json:"id" db:"id"`
 	Kind         RowKind         `json:"kind" db:"kind"`
-	TeamIDs      pq.StringArray  `json:"team" db:"team_ids"` // Will be converted to team names in API
-	FunctionID   uuid.UUID       `json:"-" db:"function_id"`
-	Function     string          `json:"fn"` // Will be populated from Function table
-	EmployeeID   *uuid.UUID      `json:"-" db:"employee_id"`
-	Employee     *string         `json:"empl,omitempty"` // Will be populated from Employee table
+	TeamIDs      pq.StringArray  `json:"team" db:"team_ids"`                    // Team names for display (populated from Team table)
+	TeamUUIDs    pq.StringArray  `json:"teamIds,omitempty"`                     // Team UUIDs for saving (populated separately)
+	FunctionID   uuid.UUID       `json:"functionId" db:"function_id"`           // Function UUID for saving
+	Function     string          `json:"fn"`                                    // Function name for display (populated from Function table)
+	EmployeeID   *uuid.UUID      `json:"employeeId,omitempty" db:"employee_id"` // Employee UUID for saving
+	Employee     *string         `json:"empl,omitempty"`                        // Employee name for display (populated from Employee table)
 	Weeks        pq.Float64Array `json:"weeks" db:"weeks"`
 	DisplayOrder int             `json:"displayOrder" db:"display_order"`
 	CreatedAt    time.Time       `json:"createdAt" db:"created_at"`
@@ -86,12 +87,12 @@ type Task struct {
 	SprintsAuto       pq.StringArray  `json:"sprintsAuto" db:"sprints_auto"`
 	Epic              *string         `json:"epic,omitempty" db:"epic"`
 	TaskName          string          `json:"task" db:"task_name"`
-	TeamID            uuid.UUID       `json:"-" db:"team_id"`
-	Team              string          `json:"team"` // Will be populated from Team table
-	FunctionID        uuid.UUID       `json:"-" db:"function_id"`
-	Function          string          `json:"fn"` // Will be populated from Function table
-	EmployeeID        *uuid.UUID      `json:"-" db:"employee_id"`
-	Employee          *string         `json:"empl,omitempty"` // Will be populated from Employee table
+	TeamID            uuid.UUID       `json:"teamId" db:"team_id"`                   // Team UUID for saving
+	Team              string          `json:"team"`                                  // Team name for display (populated from Team table)
+	FunctionID        uuid.UUID       `json:"functionId" db:"function_id"`           // Function UUID for saving
+	Function          string          `json:"fn"`                                    // Function name for display (populated from Function table)
+	EmployeeID        *uuid.UUID      `json:"employeeId,omitempty" db:"employee_id"` // Employee UUID for saving
+	Employee          *string         `json:"empl,omitempty"`                        // Employee name for display (populated from Employee table)
 	PlanEmpl          float64         `json:"planEmpl" db:"plan_empl"`
 	PlanWeeks         float64         `json:"planWeeks" db:"plan_weeks"`
 	BlockerIDs        pq.StringArray  `json:"blockerIds" db:"blocker_ids"`

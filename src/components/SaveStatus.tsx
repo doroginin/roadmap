@@ -36,29 +36,30 @@ export function SaveStatus({ state, onForceSave }: SaveStatusProps) {
   };
 
   return (
-    <div className="flex items-center gap-2 text-sm">
+    <div className="flex items-center gap-2 text-sm" data-testid="save-status">
       {isSaving && (
-        <div className="flex items-center gap-1 text-blue-600">
+        <div className="flex items-center gap-1 text-blue-600" data-testid="save-status-saving">
           <div className="w-3 h-3 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
           <span>Сохранение...</span>
         </div>
       )}
 
       {!isSaving && lastSaved && !hasUnsavedChanges && (
-        <div className="flex items-center gap-1 text-green-600">
+        <div className="flex items-center gap-1 text-green-600" data-testid="save-status-saved">
           <div className="w-2 h-2 bg-green-600 rounded-full"></div>
           <span>Сохранено {formatLastSaved(lastSaved)}</span>
         </div>
       )}
 
       {!isSaving && hasUnsavedChanges && (
-        <div className="flex items-center gap-1 text-orange-600">
+        <div className="flex items-center gap-1 text-orange-600" data-testid="save-status-unsaved">
           <div className="w-2 h-2 bg-orange-600 rounded-full"></div>
           <span>Есть несохраненные изменения</span>
           {onForceSave && (
             <button
               onClick={onForceSave}
               className="ml-2 px-2 py-1 text-xs bg-orange-100 hover:bg-orange-200 text-orange-700 rounded transition-colors"
+              data-testid="save-now-button"
             >
               Сохранить сейчас
             </button>
@@ -67,13 +68,14 @@ export function SaveStatus({ state, onForceSave }: SaveStatusProps) {
       )}
 
       {error && (
-        <div className="flex items-center gap-1 text-red-600">
+        <div className="flex items-center gap-1 text-red-600" data-testid="save-status-error">
           <div className="w-2 h-2 bg-red-600 rounded-full"></div>
           <span>Ошибка: {error}</span>
           {onForceSave && (
             <button
               onClick={onForceSave}
               className="ml-2 px-2 py-1 text-xs bg-red-100 hover:bg-red-200 text-red-700 rounded transition-colors"
+              data-testid="save-retry-button"
             >
               Повторить
             </button>

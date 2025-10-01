@@ -11,9 +11,12 @@ export interface RoadmapData {
 export interface Resource {
   id: string;
   kind: "resource";
-  team: string[];
-  fn: string;
-  empl?: string;
+  team: string[]; // Team names for display
+  teamIds?: string[]; // Team UUIDs for saving (optional for backward compatibility)
+  fn: string; // Function name for display
+  functionId?: string; // Function UUID for saving
+  empl?: string; // Employee name for display
+  employeeId?: string; // Employee UUID for saving
   weeks: number[];
   displayOrder: number;
   createdAt: string;
@@ -27,9 +30,12 @@ export interface Task {
   sprintsAuto: string[];
   epic?: string;
   task: string;
-  team: string;
-  fn: string;
-  empl?: string;
+  team: string; // Team name for display
+  teamId?: string; // Team UUID for saving
+  fn: string; // Function name for display
+  functionId?: string; // Function UUID for saving
+  empl?: string; // Employee name for display
+  employeeId?: string; // Employee UUID for saving
   planEmpl: number;
   planWeeks: number;
   blockerIds: string[];
@@ -69,10 +75,13 @@ export interface Sprint {
 }
 
 export interface TeamData {
+  id?: string; // Team UUID
   name: string;
   jiraProject: string;
   featureTeam: string;
   issueType: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface SaveResponse {
