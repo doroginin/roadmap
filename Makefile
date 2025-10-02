@@ -1,4 +1,4 @@
-.PHONY: build run test clean docker-up docker-down migrate e2e
+.PHONY: build run test clean docker-up docker-down migrate migrate-file migrate-status e2e
 
 # Build the application
 build:
@@ -28,12 +28,28 @@ docker-up:
 docker-down:
 	docker-compose down
 
-# Run database migrations manually
+# Run database migrations
 migrate:
-	@echo "Run the following SQL files in order:"
-	@echo "1. db/changelog/master/001_initial_schema.sql"
-	@echo "2. db/changelog/master/002_seed_data.sql"
-	@echo "3. db/changelog/master/003_migrate_test_tasks.sql"
+	@echo "Running database migrations..."
+	@for sql_file in db/changelog/master/*.sql; do \
+		echo "Executing $$sql_file..."; \
+		docker-compose exec -T postgres psql -U user -d roadmap -f /docker-entrypoint-initdb.d/$$(basename $$sql_file) || exit 1; \
+	done
+	@echo "All migrations completed successfully!"
+
+# Run specific migration
+migrate-file:
+	@if [ -z "$(FILE)" ]; then \
+		echo "Usage: make migrate-file FILE=001_initial_schema.sql"; \
+		exit 1; \
+	fi
+	@echo "Running migration: $(FILE)"
+	@docker-compose exec -T postgres psql -U user -d roadmap -f /docker-entrypoint-initdb.d/$(FILE)
+
+# Check migration status
+migrate-status:
+	@echo "Checking database connection and migration status..."
+	@docker-compose exec -T postgres psql -U user -d roadmap -c "\dt" || echo "Database not accessible or no tables found"
 
 # Install dependencies
 deps:

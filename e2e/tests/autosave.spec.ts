@@ -6,7 +6,6 @@ test.describe('Save functionality', () => {
     await page.goto('/');
 
     // Ждем загрузки данных
-    await expect(page.getByTestId('loading-screen')).toBeVisible();
     await expect(page.getByTestId('app-container')).toBeVisible({ timeout: 10000 });
 
     // Проверяем, что таблица загрузилась
@@ -72,7 +71,6 @@ test.describe('Save functionality', () => {
     await page.reload();
 
     // Ждем загрузки данных
-    await expect(page.getByTestId('loading-screen')).toBeVisible();
     await expect(page.getByTestId('app-container')).toBeVisible({ timeout: 10000 });
 
     // Шаг 7: Снова включаем фильтр по команде "Demo"

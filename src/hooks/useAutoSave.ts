@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { saveRoadmapData } from '../api/roadmapApi';
+import { saveRoadmapChanges } from '../api/roadmapApi';
 import type { RoadmapData, AutoSaveState, UseAutoSaveOptions } from '../api/types';
+import type { ChangeTracker } from './useChangeTracker';
 
 export function useAutoSave(
   data: RoadmapData | null,
+  userId: string | null,
+  changeTracker: ChangeTracker,
   options: UseAutoSaveOptions = {}
 ) {
   const {
@@ -20,8 +23,7 @@ export function useAutoSave(
     hasUnsavedChanges: false
   });
 
-  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const lastSavedDataRef = useRef<string | null>(null);
+  const timeoutRef = useRef<number | null>(null);
   const currentVersionRef = useRef<number>(0);
   const isInitializedRef = useRef<boolean>(false);
 
@@ -32,7 +34,6 @@ export function useAutoSave(
     // Инициализация при первой загрузке данных
     if (!isInitializedRef.current) {
       currentVersionRef.current = data.version;
-      lastSavedDataRef.current = JSON.stringify(data);
       isInitializedRef.current = true;
       setState(prev => ({ 
         ...prev, 
@@ -42,58 +43,68 @@ export function useAutoSave(
       return;
     }
 
+    // Проверяем, есть ли изменения через hasUnsavedChanges из changeTracker
+    if (!changeTracker.hasUnsavedChanges) {
+      return;
+    }
+    
+    setState(prev => ({ ...prev, hasUnsavedChanges: true }));
+
     // Очищаем предыдущий таймер
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current);
     }
 
-    // Проверяем, изменились ли данные
-    const newDataString = JSON.stringify(data);
-    const hasChanges = lastSavedDataRef.current !== newDataString;
-    
-    if (hasChanges) {
-      setState(prev => ({ ...prev, hasUnsavedChanges: true }));
+    // Устанавливаем новый таймер
+    timeoutRef.current = setTimeout(async () => {
+      setState(prev => ({ ...prev, isSaving: true, error: null }));
 
-      // Устанавливаем новый таймер
-      timeoutRef.current = setTimeout(async () => {
-        setState(prev => ({ ...prev, isSaving: true, error: null }));
-
-        try {
-          const result = await saveRoadmapData(data, currentVersionRef.current);
-          
-          if (result.error) {
-            setState(prev => ({ 
-              ...prev, 
-              isSaving: false, 
-              error: result.error || 'Unknown error',
-              hasUnsavedChanges: true
-            }));
-            onSaveError?.(result.error);
-          } else {
-            currentVersionRef.current = result.data.version;
-            lastSavedDataRef.current = JSON.stringify(data);
-            
-            setState(prev => ({ 
-              ...prev, 
-              isSaving: false, 
-              lastSaved: new Date(),
-              error: null,
-              hasUnsavedChanges: false
-            }));
-            onSaveSuccess?.(result.data.version);
-          }
-        } catch (error) {
-          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      try {
+        // Получаем лог изменений только когда нужно сохранить
+        const changeLog = changeTracker.buildChangeLog();
+        
+        // Отладочная информация
+        console.log('🔍 AutoSave Debug:', {
+          hasChanges: Object.keys(changeLog).length > 0,
+          changeLog,
+          changeLogKeys: Object.keys(changeLog),
+          changeLogString: JSON.stringify(changeLog, null, 2),
+          hasUnsavedChanges: changeTracker.hasUnsavedChanges
+        });
+        
+        const result = await saveRoadmapChanges(changeLog, currentVersionRef.current, userId || undefined);
+        
+        if (result.error) {
           setState(prev => ({ 
             ...prev, 
             isSaving: false, 
-            error: errorMessage,
+            error: result.error || 'Unknown error',
             hasUnsavedChanges: true
           }));
-          onSaveError?.(errorMessage);
+          onSaveError?.(result.error);
+        } else {
+          currentVersionRef.current = result.data.version;
+
+          setState(prev => ({
+            ...prev,
+            isSaving: false,
+            lastSaved: new Date(),
+            error: null,
+            hasUnsavedChanges: false
+          }));
+          onSaveSuccess?.(result.data.version);
         }
-      }, delay);
-    }
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        setState(prev => ({
+          ...prev,
+          isSaving: false,
+          error: errorMessage,
+          hasUnsavedChanges: true
+        }));
+        onSaveError?.(errorMessage);
+      }
+    }, delay);
 
     // Очистка при размонтировании
     return () => {
@@ -101,7 +112,7 @@ export function useAutoSave(
         clearTimeout(timeoutRef.current);
       }
     };
-  }, [data, delay, enabled, onSaveSuccess, onSaveError]);
+  }, [changeTracker.hasUnsavedChanges, delay, enabled, onSaveSuccess, onSaveError]);
 
   const forceSave = useCallback(async () => {
     if (!data || !enabled) return;
@@ -114,7 +125,8 @@ export function useAutoSave(
     setState(prev => ({ ...prev, isSaving: true, error: null }));
 
     try {
-      const result = await saveRoadmapData(data, currentVersionRef.current);
+      const changeLog = changeTracker.buildChangeLog();
+      const result = await saveRoadmapChanges(changeLog, currentVersionRef.current, userId || undefined);
       
       if (result.error) {
         setState(prev => ({ 
@@ -126,7 +138,6 @@ export function useAutoSave(
         onSaveError?.(result.error);
       } else {
         currentVersionRef.current = result.data.version;
-        lastSavedDataRef.current = JSON.stringify(data);
         
         setState(prev => ({ 
           ...prev, 
@@ -147,7 +158,7 @@ export function useAutoSave(
       }));
       onSaveError?.(errorMessage);
     }
-  }, [data, enabled, onSaveSuccess, onSaveError]);
+  }, [data, enabled, changeTracker, onSaveSuccess, onSaveError]);
 
   const resetState = useCallback(() => {
     setState({
@@ -156,7 +167,6 @@ export function useAutoSave(
       error: null,
       hasUnsavedChanges: false
     });
-    lastSavedDataRef.current = null;
     currentVersionRef.current = 0;
     isInitializedRef.current = false;
   }, []);

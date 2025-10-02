@@ -4,6 +4,7 @@ import type {
   RoadmapData, 
   SaveResponse 
 } from './types';
+import type { DataChanges } from '../utils/dataDiff';
 
 const API_BASE_URL = 'http://localhost:8080';
 
@@ -36,7 +37,8 @@ export async function fetchRoadmapData(): Promise<ApiResponse<RoadmapData>> {
 
 export async function saveRoadmapData(
   data: Partial<RoadmapData>, 
-  currentVersion: number
+  currentVersion: number,
+  userId?: string
 ): Promise<ApiResponse<SaveResponse>> {
   try {
     // Remove version from data to avoid conflict with currentVersion
@@ -49,6 +51,7 @@ export async function saveRoadmapData(
       },
       body: JSON.stringify({
         version: currentVersion,
+        userId: userId,
         ...dataWithoutVersion
       })
     });
@@ -65,6 +68,43 @@ export async function saveRoadmapData(
     }
   } catch (error) {
     console.error('Error saving roadmap data:', error);
+    return { 
+      data: { version: currentVersion, success: false }, 
+      error: error instanceof Error ? error.message : 'Unknown error' 
+    };
+  }
+}
+
+export async function saveRoadmapChanges(
+  changes: DataChanges,
+  currentVersion: number,
+  userId?: string
+): Promise<ApiResponse<SaveResponse>> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/v1/data`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        version: currentVersion,
+        userId: userId,
+        ...changes
+      })
+    });
+
+    const result = await response.json();
+
+    if (response.ok) {
+      return { data: result };
+    } else {
+      return { 
+        data: { version: currentVersion, success: false }, 
+        error: result.error || `HTTP error! status: ${response.status}` 
+      };
+    }
+  } catch (error) {
+    console.error('Error saving roadmap changes:', error);
     return { 
       data: { version: currentVersion, success: false }, 
       error: error instanceof Error ? error.message : 'Unknown error' 

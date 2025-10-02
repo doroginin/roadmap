@@ -316,7 +316,7 @@ func (r *Repository) GetTasks() ([]models.Task, error) {
 // GetChangesSince returns all changes since the specified version
 func (r *Repository) GetChangesSince(fromVersion int64) ([]models.ChangeLog, error) {
 	rows, err := r.db.Query(`
-		SELECT id, version_number, table_name, record_id, operation, old_data, new_data, created_at
+		SELECT id, version_number, table_name, record_id, operation, user_id, old_data, new_data, created_at
 		FROM change_log 
 		WHERE version_number > $1 
 		ORDER BY version_number, created_at
@@ -330,13 +330,18 @@ func (r *Repository) GetChangesSince(fromVersion int64) ([]models.ChangeLog, err
 	for rows.Next() {
 		var change models.ChangeLog
 		var oldData, newData sql.NullString
+		var userID sql.NullString
 
 		err := rows.Scan(
 			&change.ID, &change.VersionNumber, &change.TableName, &change.RecordID,
-			&change.Operation, &oldData, &newData, &change.CreatedAt,
+			&change.Operation, &userID, &oldData, &newData, &change.CreatedAt,
 		)
 		if err != nil {
 			return nil, err
+		}
+
+		if userID.Valid {
+			change.UserID = &userID.String
 		}
 
 		if oldData.Valid {
@@ -387,6 +392,28 @@ func (r *Repository) BeginTransaction() (*sql.Tx, error) {
 
 // UpdateData updates data in the database within a transaction
 func (r *Repository) UpdateData(tx *sql.Tx, req *models.UpdateRequest) error {
+	// Set user_id in session variable for triggers
+	if req.UserID != nil {
+		fmt.Printf("Repository: Setting user_id to: %s\n", *req.UserID)
+		// Use string concatenation for SET LOCAL as it doesn't support parameters
+		// But validate the UUID to prevent SQL injection
+		if _, err := uuid.Parse(*req.UserID); err != nil {
+			return fmt.Errorf("invalid user_id format: %w", err)
+		}
+		_, err := tx.Exec("SET LOCAL app.user_id = '" + *req.UserID + "'")
+		if err != nil {
+			fmt.Printf("Repository: Error setting user_id: %v\n", err)
+			return fmt.Errorf("failed to set user_id: %w", err)
+		}
+		fmt.Println("Repository: user_id set successfully")
+	} else {
+		fmt.Println("Repository: user_id is nil, clearing")
+		_, err := tx.Exec("SET LOCAL app.user_id = ''")
+		if err != nil {
+			fmt.Printf("Repository: Error clearing user_id: %v\n", err)
+			return fmt.Errorf("failed to clear user_id: %w", err)
+		}
+	}
 	// Update teams
 	for _, team := range req.Teams {
 		_, err := tx.Exec(`

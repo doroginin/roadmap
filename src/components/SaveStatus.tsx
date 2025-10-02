@@ -1,4 +1,3 @@
-import React from 'react';
 import type { AutoSaveState } from '../api/types';
 
 interface SaveStatusProps {
@@ -59,9 +58,9 @@ export function SaveStatus({ state, onForceSave }: SaveStatusProps) {
             <button
               onClick={onForceSave}
               className="ml-2 px-2 py-1 text-xs bg-orange-100 hover:bg-orange-200 text-orange-700 rounded transition-colors"
-              data-testid="save-now-button"
+              data-testid="manual-save-button"
             >
-              Сохранить сейчас
+              Сохранить
             </button>
           )}
         </div>

@@ -1,8 +1,10 @@
 package api
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 
@@ -75,6 +77,27 @@ func (h *Handlers) UpdateData(c *gin.Context) {
 			"error": "Invalid request body: " + err.Error(),
 		})
 		return
+	}
+
+	// Log user_id for debugging
+	if req.UserID != nil {
+		fmt.Printf("UpdateData: user_id received: %s (length: %d)\n", *req.UserID, len(*req.UserID))
+		fmt.Printf("UpdateData: user_id bytes: %v\n", []byte(*req.UserID))
+		fmt.Printf("UpdateData: user_id is valid UUID: %t\n", len(*req.UserID) == 36)
+		fmt.Printf("UpdateData: user_id contains quotes: %t\n", strings.Contains(*req.UserID, "'"))
+		fmt.Printf("UpdateData: user_id contains newlines: %t\n", strings.Contains(*req.UserID, "\n"))
+		fmt.Printf("UpdateData: user_id contains carriage returns: %t\n", strings.Contains(*req.UserID, "\r"))
+		fmt.Printf("UpdateData: user_id contains backslashes: %t\n", strings.Contains(*req.UserID, "\\"))
+		fmt.Printf("UpdateData: user_id contains semicolons: %t\n", strings.Contains(*req.UserID, ";"))
+		fmt.Printf("UpdateData: user_id contains spaces: %t\n", strings.Contains(*req.UserID, " "))
+		fmt.Printf("UpdateData: user_id contains tabs: %t\n", strings.Contains(*req.UserID, "\t"))
+		fmt.Printf("UpdateData: user_id contains double quotes: %t\n", strings.Contains(*req.UserID, "\""))
+		fmt.Printf("UpdateData: user_id contains dollar signs: %t\n", strings.Contains(*req.UserID, "$"))
+		fmt.Printf("UpdateData: user_id contains parentheses: %t\n", strings.Contains(*req.UserID, "(") || strings.Contains(*req.UserID, ")"))
+		fmt.Printf("UpdateData: user_id contains brackets: %t\n", strings.Contains(*req.UserID, "[") || strings.Contains(*req.UserID, "]"))
+		fmt.Printf("UpdateData: user_id contains braces: %t\n", strings.Contains(*req.UserID, "{") || strings.Contains(*req.UserID, "}"))
+	} else {
+		fmt.Println("UpdateData: user_id is nil")
 	}
 
 	response, err := h.service.UpdateData(&req)

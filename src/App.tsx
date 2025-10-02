@@ -1,6 +1,8 @@
 import { RoadmapPlan } from './components/RoadmapPlan'
 import { SaveStatus } from './components/SaveStatus'
 import { useAutoSave } from './hooks/useAutoSave'
+import { useChangeTracker } from './hooks/useChangeTracker'
+import { useUserId } from './hooks/useUserId'
 import { useState, useEffect } from 'react'
 import { fetchRoadmapData } from './api/roadmapApi'
 import type { RoadmapData } from './api/types'
@@ -9,6 +11,10 @@ function App() {
   const [roadmapData, setRoadmapData] = useState<RoadmapData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { userId, isLoading: userIdLoading } = useUserId();
+  
+  // Система отслеживания изменений
+  const changeTracker = useChangeTracker();
 
   // Загружаем данные при монтировании
   useEffect(() => {
@@ -35,18 +41,19 @@ function App() {
   }, []);
 
   // Настройка автосохранения
-  const autoSave = useAutoSave(roadmapData, {
+  const autoSave = useAutoSave(roadmapData, userId, changeTracker, {
     delay: 2000, // 2 секунды задержки
-    enabled: false, // Отключено автосохранение - используем только ручную кнопку "Сохранить"
+    enabled: true, // Включено автосохранение
     onSaveSuccess: (version) => {
       console.log('Data saved successfully, version:', version);
+      changeTracker.clearChanges();
     },
     onSaveError: (error) => {
       console.error('Save error:', error);
     }
   });
 
-  if (loading) {
+  if (loading || userIdLoading) {
     return (
       <div className="container mx-auto p-4" data-testid="loading-screen">
         <div className="flex items-center justify-center h-64">
@@ -81,6 +88,8 @@ function App() {
         initialData={roadmapData}
         onDataChange={setRoadmapData}
         onSaveRequest={autoSave.forceSave}
+        userId={userId}
+        changeTracker={changeTracker}
       />
     </div>
   )

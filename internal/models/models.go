@@ -138,6 +138,7 @@ type ChangeLog struct {
 	TableName     string      `json:"table" db:"table_name"`
 	RecordID      uuid.UUID   `json:"recordId" db:"record_id"`
 	Operation     string      `json:"operation" db:"operation"`
+	UserID        *string     `json:"userId,omitempty" db:"user_id"`
 	OldData       interface{} `json:"oldData,omitempty" db:"old_data"`
 	NewData       interface{} `json:"newData,omitempty" db:"new_data"`
 	CreatedAt     time.Time   `json:"createdAt" db:"created_at"`
@@ -170,6 +171,7 @@ type DiffResponse struct {
 // UpdateRequest represents a request to update data
 type UpdateRequest struct {
 	Version   int64                  `json:"version"`
+	UserID    *string                `json:"userId,omitempty"`
 	Teams     []Team                 `json:"teams,omitempty"`
 	Sprints   []Sprint               `json:"sprints,omitempty"`
 	Functions []Function             `json:"functions,omitempty"`

@@ -97,7 +97,7 @@ CREATE TABLE document_versions (
     version_number BIGINT NOT NULL DEFAULT 1,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     
-    CONSTRAINT single_version_row CHECK (id = uuid_generate_v4())
+    CONSTRAINT single_version_row CHECK (version_number >= 1)
 );
 
 -- Insert initial version

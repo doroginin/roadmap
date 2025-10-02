@@ -5,7 +5,7 @@ import { TeamMultiSelect } from "./TeamMultiSelect";
 import { ColorPickerPanel } from "./ColorPickerPanel";
 import { normalizeColorValue, getBg, getText } from "./colorUtils";
 import { DEFAULT_BG } from "./colorDefaults";
-import { fetchRoadmapData, saveRoadmapData } from "../api/roadmapApi";
+import { fetchRoadmapData } from "../api/roadmapApi";
 import type { RoadmapData, Function } from "../api/types";
 
 // =============================
@@ -637,9 +637,11 @@ interface RoadmapPlanProps {
   initialData?: RoadmapData | null;
   onDataChange?: (data: RoadmapData) => void;
   onSaveRequest?: () => void;
+  userId?: string | null;
+  changeTracker?: any; // TODO: добавить правильный тип
 }
 
-export function RoadmapPlan({ initialData, onDataChange, onSaveRequest }: RoadmapPlanProps = {}) {
+export function RoadmapPlan({ initialData, onDataChange, changeTracker }: RoadmapPlanProps = {}) {
     // ===== Tabs =====
     type Tab = "plan" | "sprints" | "teams";
     const [tab, setTab] = useState<Tab>("plan");
@@ -749,63 +751,50 @@ export function RoadmapPlan({ initialData, onDataChange, onSaveRequest }: Roadma
     const [functions, setFunctions] = useState<Function[]>([]);
     const [currentVersion, setCurrentVersion] = useState<number>(0);
     
-    // Helper function to prepare data for saving (convert names to UUIDs) - RETURNS data, doesn't call onDataChange
+    // Helper function to prepare data for saving (convert names to UUIDs)
     const prepareDataForSave = useCallback((): RoadmapData | null => {
         const { resources, tasks } = splitRows(rows);
         
-        // Prepare resources with UUIDs - ONLY backend fields
+        // Prepare resources with UUIDs
         const preparedResources = (resources as ResourceRow[]).map(r => {
-            // Convert team names array to UUID array
             const teamUUIDs = r.team.map(teamName => {
                 const found = teamData.find(t => t.name === teamName);
                 return found?.id;
-            }).filter(Boolean) as string[]; // Remove nulls/undefineds
+            }).filter(Boolean) as string[];
             
             const functionUUID = functions.find(f => f.name === r.fn)?.id || r.functionId;
-            if (!functionUUID) {
-                console.warn(`Function not found for resource ${r.id}: ${r.fn}`);
-            }
             
-            // Return ONLY fields that backend Resource model expects
             return {
                 id: r.id,
                 kind: 'resource' as const,
-                team: teamUUIDs, // Backend expects 'team' to be UUID array (maps to team_ids in DB)
-                fn: r.fn, // Function name for display
-                functionId: functionUUID || '00000000-0000-0000-0000-000000000000', // Fallback to null UUID
-                empl: r.empl || null, // Employee name for display
+                team: teamUUIDs,
+                fn: r.fn,
+                functionId: functionUUID || '00000000-0000-0000-0000-000000000000',
+                empl: r.empl || null,
                 employeeId: r.employeeId || null,
                 weeks: r.weeks,
                 displayOrder: r.displayOrder || 0
             };
         });
         
-        // Prepare tasks with UUIDs - ONLY backend fields
+        // Prepare tasks with UUIDs
         const preparedTasks = (tasks as TaskRow[]).map(t => {
             const teamUUID = teamData.find(team => team.name === t.team)?.id || t.teamId;
             const functionUUID = functions.find(f => f.name === t.fn)?.id || t.functionId;
             
-            if (!teamUUID) {
-                console.warn(`Team not found for task ${t.id}: ${t.team}`);
-            }
-            if (!functionUUID) {
-                console.warn(`Function not found for task ${t.id}: ${t.fn}`);
-            }
-            
-            // Return ONLY fields that backend Task model expects
             return {
                 id: t.id,
                 kind: 'task' as const,
                 status: t.status,
                 sprintsAuto: t.sprintsAuto || [],
                 epic: t.epic || null,
-                task: t.task, // Backend expects 'task' field (maps to task_name in DB)
+                task: t.task,
                 teamId: teamUUID || '00000000-0000-0000-0000-000000000000',
-                team: t.team, // Team name for display
+                team: t.team,
                 functionId: functionUUID || '00000000-0000-0000-0000-000000000000',
-                fn: t.fn, // Function name for display
-                employeeId: null, // TODO: map employee if needed
-                empl: t.empl || null, // Employee name for display
+                fn: t.fn,
+                employeeId: null,
+                empl: t.empl || null,
                 planEmpl: t.planEmpl,
                 planWeeks: t.planWeeks,
                 blockerIds: t.blockerIds,
@@ -827,54 +816,19 @@ export function RoadmapPlan({ initialData, onDataChange, onSaveRequest }: Roadma
                 id: t.id,
                 name: t.name,
                 jiraProject: t.jiraProject,
-                featureTeam: t.featureTeam, // Send as string, not boolean
+                featureTeam: t.featureTeam,
                 issueType: t.issueType
             })),
             sprints: sprints,
             functions: functions,
-            employees: [], // TODO: add employees if needed
+            employees: [],
             resources: preparedResources as any[],
             tasks: preparedTasks as any[]
         };
         
         return roadmapData;
-    }, [rows, teamData, sprints, functions, currentVersion]);
+    }, [teamData, sprints, functions, currentVersion, rows]);
     
-    // Manual save handler - prepares data and saves directly WITHOUT calling onDataChange to avoid loop
-    const handleManualSave = useCallback(async () => {
-        const dataToSave = prepareDataForSave();
-        if (!dataToSave) {
-            console.error('No data to save');
-            return;
-        }
-        
-        console.log('Saving data with UUIDs:', dataToSave);
-        console.log('Sample task JSON:', JSON.stringify(dataToSave.tasks[0], null, 2));
-        console.log('Sample resource JSON:', JSON.stringify(dataToSave.resources[0], null, 2));
-        console.log('Full request body size:', JSON.stringify(dataToSave).length, 'chars');
-        console.log('Teams count:', dataToSave.teams.length, 'Sprints count:', dataToSave.sprints.length);
-        console.log('Functions count:', dataToSave.functions.length, 'Resources count:', dataToSave.resources.length, 'Tasks count:', dataToSave.tasks.length);
-        
-        try {
-            // Save directly via API
-            const result = await saveRoadmapData(dataToSave, currentVersion);
-            
-            if (result.error) {
-                console.error('Save failed:', result.error);
-                alert(`Ошибка сохранения: ${result.error}`);
-            } else {
-                console.log('Save successful, new version:', result.data.version);
-                alert('Данные успешно сохранены!');
-                
-                // Update local version only
-                setCurrentVersion(result.data.version);
-            }
-        } catch (err) {
-            const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-            console.error('Save exception:', errorMessage);
-            alert(`Ошибка сохранения: ${errorMessage}`);
-        }
-    }, [prepareDataForSave]);
 
     // ===== Загрузка данных при монтировании компонента =====
     // Using useRef to track if data is already loaded to avoid re-loading on every initialData change
@@ -2655,6 +2609,11 @@ export function RoadmapPlan({ initialData, onDataChange, onSaveRequest }: Roadma
         const t = computedRows.find(r => r.kind === "task" && r.id === taskId) as TaskRow | undefined;
         if (!t) return;
 
+        // Записываем изменение в лог
+        if (changeTracker) {
+            changeTracker.addCellChange('task', taskId, 'autoPlanEnabled', t.autoPlanEnabled, next);
+        }
+
         if (next) {
             // Включение автопланирования
             if (t.manualEdited && t.weeks.some(v => v > 0)) {
@@ -2883,8 +2842,62 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
     }
 
     // ====== Обновления полей ======
-    function updateTask<K extends keyof TaskRow>(id: ID, patch: Pick<TaskRow, K>) { setRows(prev => prev.map(r => (r.kind === "task" && r.id === id) ? { ...r, ...patch } : r)); }
-    function updateResource<K extends keyof ResourceRow>(id: ID, patch: Pick<ResourceRow, K>) { setRows(prev => prev.map(r => (r.kind === "resource" && r.id === id) ? { ...r, ...patch } : r)); }
+    function updateTask<K extends keyof TaskRow>(id: ID, patch: Pick<TaskRow, K>) { 
+        // Находим текущую задачу для записи изменений
+        const currentTask = computedRows.find(r => r.kind === "task" && r.id === id) as TaskRow | undefined;
+        
+        // Записываем изменения в лог
+        if (changeTracker && currentTask) {
+            Object.entries(patch).forEach(([key, value]) => {
+                const oldValue = (currentTask as any)[key];
+                if (oldValue !== value) {
+                    changeTracker.addCellChange('task', id, key, oldValue, value);
+                }
+            });
+        }
+        
+        setRows(prev => {
+            const newRows = prev.map(r => (r.kind === "task" && r.id === id) ? { ...r, ...patch } : r);
+            return newRows;
+        });
+        
+        // Уведомляем родительский компонент об изменении данных после обновления состояния
+        if (onDataChange) {
+            // Используем setTimeout чтобы дождаться обновления состояния
+            setTimeout(() => {
+                const dataToSave = prepareDataForSave();
+                if (dataToSave) {
+                    onDataChange(dataToSave);
+                }
+            }, 0);
+        }
+    }
+    function updateResource<K extends keyof ResourceRow>(id: ID, patch: Pick<ResourceRow, K>) { 
+        // Находим текущий ресурс для записи изменений
+        const currentResource = computedRows.find(r => r.kind === "resource" && r.id === id) as ResourceRow | undefined;
+        
+        // Записываем изменения в лог
+        if (changeTracker && currentResource) {
+            Object.entries(patch).forEach(([key, value]) => {
+                const oldValue = (currentResource as any)[key];
+                if (oldValue !== value) {
+                    changeTracker.addCellChange('resource', id, key, oldValue, value);
+                }
+            });
+        }
+        
+        setRows(prev => {
+            const newRows = prev.map(r => (r.kind === "resource" && r.id === id) ? { ...r, ...patch } : r);
+            // Уведомляем родительский компонент об изменении данных
+            if (onDataChange) {
+                const dataToSave = prepareDataForSave();
+                if (dataToSave) {
+                    onDataChange(dataToSave);
+                }
+            }
+            return newRows;
+        });
+    }
 
     function splitRows(list: Row[]) { const resources = list.filter(r => r.kind === "resource"); const tasks = list.filter(r => r.kind === "task"); return { resources, tasks }; }
     function newResource(): ResourceRow {
@@ -3021,15 +3034,6 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
                     <button className={`px-3 py-1 rounded ${tab==='sprints'? 'bg-black text-white':'border'}`} onClick={()=>setTab('sprints')} data-testid="tab-sprints">Спринты</button>
                     <button className={`px-3 py-1 rounded ${tab==='teams'? 'bg-black text-white':'border'}`} onClick={()=>setTab('teams')} data-testid="tab-teams">Команды</button>
                 </div>
-                {onSaveRequest && (
-                    <button 
-                        className="px-4 py-1 rounded bg-blue-600 hover:bg-blue-700 text-white transition-colors"
-                        onClick={handleManualSave}
-                        data-testid="manual-save-button"
-                    >
-                        💾 Сохранить
-                    </button>
-                )}
             </div>
     
             {tab === 'plan' ? (
@@ -3232,9 +3236,9 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
                                 </td>
 
                                 {/* Fn */}
-                                <td className={`px-2 py-1 align-middle text-center draggable-cell`} style={{ backgroundColor: getBg(teamFnColors[teamKeyFromResource(r as ResourceRow)]), color: getText(teamFnColors[teamKeyFromResource(r as ResourceRow)]), ...getCellBorderStyle(isSel(r.id,'fn')), ...getCellBorderStyleForDrag(r.id) }} onMouseDown={markDragAllowed} onDoubleClick={()=>startEdit({rowId:r.id,col:"fn"})} onClick={()=>setSel({rowId:r.id,col:"fn"})} onContextMenu={(e)=>onContextMenuCellColor(e, r as ResourceRow, 'fn', 'resource')}>
+                                <td className={`px-2 py-1 align-middle text-center draggable-cell`} style={{ backgroundColor: getBg(teamFnColors[teamKeyFromResource(r as ResourceRow)]), color: getText(teamFnColors[teamKeyFromResource(r as ResourceRow)]), ...getCellBorderStyle(isSel(r.id,'fn')), ...getCellBorderStyleForDrag(r.id) }} onMouseDown={markDragAllowed} onDoubleClick={()=>startEdit({rowId:r.id,col:"fn"})} onClick={()=>setSel({rowId:r.id,col:"fn"})} onContextMenu={(e)=>onContextMenuCellColor(e, r as ResourceRow, 'fn', 'resource')} data-testid={`resource-cell-${r.id}`}>
                                     {editing?.rowId===r.id && editing?.col==="fn" ? (
-                                        <input autoFocus className="w-full h-full box-border min-w-0 outline-none bg-transparent" style={{ border: 'none', padding: 0, margin: 0 }} defaultValue={r.fn}
+                                        <input autoFocus className="w-full h-full box-border min-w-0 outline-none bg-transparent" style={{ border: 'none', padding: 0, margin: 0 }} defaultValue={r.fn} data-testid={`resource-input-${r.id}`}
                                                onKeyDown={(e)=>{
                                                     if(e.key==='Enter'){ updateResource(r.id,{fn:(e.target as HTMLInputElement).value as Fn}); commitEdit(); }
                                                     if (e.key === 'Tab' && e.shiftKey) { e.preventDefault(); e.stopPropagation(); updateResource(r.id,{fn:(e.target as HTMLInputElement).value as Fn}); navigateInEditMode('prev', r.id, 'fn'); return; }
