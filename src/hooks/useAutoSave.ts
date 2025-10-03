@@ -10,7 +10,7 @@ export function useAutoSave(
   options: UseAutoSaveOptions = {}
 ) {
   const {
-    delay = 2000,
+    delay = 1000,
     enabled = true,
     onSaveSuccess,
     onSaveError
