@@ -36,17 +36,6 @@ BEGIN
     INSERT INTO resources (id, kind, team_ids, function_id, employee_id, weeks, display_order, created_at, updated_at)
     VALUES 
     (
-        '550e8400-e29b-41d4-a716-446655440001',
-        'resource',
-        ARRAY[demo_team_id]::uuid[],
-        'bbbbbbbb-0000-0000-0000-000000000001',
-        'cccccccc-0000-0000-0000-000000000001',
-        ARRAY[1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
-        1,
-        NOW(),
-        NOW()
-    ),
-    (
         'dddddddd-0000-0000-0000-000000000002',
         'resource',
         ARRAY[demo_team_id]::uuid[],

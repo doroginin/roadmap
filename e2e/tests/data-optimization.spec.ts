@@ -140,7 +140,7 @@ test.describe('Data Optimization Tests', () => {
     await page.getByTestId('filter-ok-button').click();
 
     // Находим первую строку ресурса (используем существующий ресурс)
-    const testResourceId = '550e8400-e29b-41d4-a716-446655440001';
+    const testResourceId = 'dddddddd-0000-0000-0000-000000000002';
     const resourceCell = page.getByTestId(`resource-cell-${testResourceId}`);
     await expect(resourceCell).toBeVisible({ timeout: 5000 });
 
@@ -240,7 +240,7 @@ test.describe('Data Optimization Tests', () => {
     await taskInput.press('Enter');
 
     // Сразу редактируем ресурс (в пределах 2 секунд)
-    const testResourceId = '550e8400-e29b-41d4-a716-446655440001';
+    const testResourceId = 'dddddddd-0000-0000-0000-000000000002';
     const resourceCell = page.getByTestId(`resource-cell-${testResourceId}`);
     await expect(resourceCell).toBeVisible({ timeout: 5000 });
 
