@@ -317,13 +317,36 @@ function ArrowOverlay({
     }>>([]);
     const [hoverId, setHoverId] = useState<string | null>(null);
 
-    // Measure and compute paths
-    useLayoutEffect(() => {
-        if (!container) return;
+    // Use refs to store current values to avoid recreating useLayoutEffect
+    const linksRef = useRef(links);
+    const tasksRef = useRef(tasks);
+    const prevPathsRef = useRef<typeof paths>([]);
+    
+    // Update refs when props change
+    useEffect(() => {
+        linksRef.current = links;
+        tasksRef.current = tasks;
+    }, [links, tasks]);
 
-        const measure = () => {
+        // Measure and compute paths
+        useLayoutEffect(() => {
+            if (!container) return;
+
+            let timeoutId: number | null = null;
+            
+            const measure = () => {
+                // Debounce measure calls to prevent infinite loops
+                if (timeoutId) {
+                    clearTimeout(timeoutId);
+                }
+                
+                timeoutId = window.setTimeout(() => {
             const wrapRect = container.getBoundingClientRect();
             const result: typeof paths = [];
+            
+            // Use current values from refs
+            const currentLinks = linksRef.current;
+            const currentTasks = tasksRef.current;
             
             // Функция для проверки, пересекается ли стрелка с занятой ячейкой
             const getArrowOffset = (x1: number, y1: number, x2: number, y2: number): {offsetX: number, offsetY: number} => {
@@ -339,7 +362,7 @@ function ArrowOverlay({
                     
                     // Проверяем пересечения с занятыми ячейками
                     let hasIntersection = false;
-                    tasks.forEach(task => {
+                    currentTasks.forEach(task => {
                         for (let weekIdx = 0; weekIdx < task.weeks.length; weekIdx++) {
                             if ((task.weeks[weekIdx] || 0) > 0) {
                                 const cellElement = document.getElementById(cellId(task.id, weekIdx));
@@ -370,7 +393,7 @@ function ArrowOverlay({
                     let hasIntersection = false;
                     let targetCellLeft = null;
                     
-                    tasks.forEach(task => {
+                    currentTasks.forEach(task => {
                         for (let weekIdx = 0; weekIdx < task.weeks.length; weekIdx++) {
                             if ((task.weeks[weekIdx] || 0) > 0) {
                                 const cellElement = document.getElementById(cellId(task.id, weekIdx));
@@ -399,7 +422,7 @@ function ArrowOverlay({
                 return {offsetX, offsetY};
             };
 
-            links.forEach((link, i) => {
+            currentLinks.forEach((link, i) => {
                 let a: HTMLElement | null, b: HTMLElement | null;
                 
                 if (link.type === 'week') {
@@ -507,8 +530,31 @@ function ArrowOverlay({
                 });
             });
 
-            setPaths(result);
-        };
+            // Only update paths if they actually changed to prevent infinite loops
+            const prevPaths = prevPathsRef.current;
+            let hasChanges = false;
+            
+            if (prevPaths.length !== result.length) {
+                hasChanges = true;
+            } else {
+                // Deep comparison for each path
+                hasChanges = result.some((newPath, index) => {
+                    const oldPath = prevPaths[index];
+                    return !oldPath || 
+                           oldPath.d !== newPath.d || 
+                           oldPath.isConflict !== newPath.isConflict ||
+                           oldPath.blockerId !== newPath.blockerId ||
+                           oldPath.blockedTaskId !== newPath.blockedTaskId ||
+                           oldPath.type !== newPath.type;
+                });
+            }
+            
+            if (hasChanges) {
+                prevPathsRef.current = result;
+                setPaths(result);
+            }
+                }, 16); // ~60fps
+            };
 
         // Observe resize/scroll/DOM changes
         const ro = new ResizeObserver(measure);
@@ -524,13 +570,16 @@ function ArrowOverlay({
         measure();
 
         return () => {
+            if (timeoutId) {
+                clearTimeout(timeoutId);
+            }
             ro.disconnect();
             obs.disconnect();
             container.removeEventListener("scroll", onScroll);
             window.removeEventListener("resize", measure);
             document.removeEventListener("scroll", onScroll, true);
         };
-    }, [container, links]);
+    }, [container]); // eslint-disable-line react-hooks/exhaustive-deps
 
     if (!container) return null;
 
@@ -889,8 +938,24 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker }: Roadma
         loadData();
     }, [initialData]);
 
-    // ===== Ref для отслеживания последних отправленных данных =====
-    // Функция notifyDataChange больше не используется, удалена для предотвращения бесконечных циклов
+    // ===== Уведомление родительского компонента об изменениях данных =====
+    const isInitialMount = useRef(true);
+    
+    useEffect(() => {
+        // Пропускаем первый рендер (при монтировании)
+        if (isInitialMount.current) {
+            isInitialMount.current = false;
+            return;
+        }
+        
+        // Уведомляем родительский компонент об изменении данных
+        if (onDataChange) {
+            const dataToSave = prepareDataForSave();
+            if (dataToSave) {
+                onDataChange(dataToSave);
+            }
+        }
+    }, [rows, teamData, sprints, functions, onDataChange, prepareDataForSave]);
 
     // ===== Последовательный пересчёт (как в формуле roadmap.js) =====
     type ResState = { res: ResourceRow; load: number[] };
@@ -933,7 +998,7 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker }: Roadma
             }
 
             // Ищем задачу среди уже обработанных
-            let blockerTask = findTaskByIdInOut(taskId);
+            const blockerTask = findTaskByIdInOut(taskId);
             
             if (blockerTask) {
                 // Задача уже обработана, используем её endWeek
@@ -977,7 +1042,7 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker }: Roadma
 
                     // УПРОЩЕННАЯ ЛОГИКА: Используем только блокеры задачи
                     // Топологическая сортировка гарантирует правильный порядок обработки
-                    let earliestStartAfterProcessedTasks = blockerOfBlocker;
+                    const earliestStartAfterProcessedTasks = blockerOfBlocker;
 
                     // Вычисляем план для блокирующей задачи с учетом её блокеров
                     const need = Math.max(0, originalTask.planEmpl || 0);
@@ -1154,6 +1219,7 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker }: Roadma
                     }
                     
                     if (import.meta.env.DEV && start === 0) {
+                        // Debug: start is 0
                     }
                 }
             } finally {
@@ -1197,7 +1263,7 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker }: Roadma
 
         // Повторяем до тех пор, пока не обработаем все задачи
         while (taskOrder.length < tasks.length) {
-            let foundTasks: TaskRow[] = [];
+            const foundTasks: TaskRow[] = [];
             
             // Собираем все задачи, которые можно обработать на этом шаге
             for (const task of tasks) {
@@ -2860,17 +2926,6 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
             const newRows = prev.map(r => (r.kind === "task" && r.id === id) ? { ...r, ...patch } : r);
             return newRows;
         });
-        
-        // Уведомляем родительский компонент об изменении данных после обновления состояния
-        if (onDataChange) {
-            // Используем setTimeout чтобы дождаться обновления состояния
-            setTimeout(() => {
-                const dataToSave = prepareDataForSave();
-                if (dataToSave) {
-                    onDataChange(dataToSave);
-                }
-            }, 0);
-        }
     }
     function updateResource<K extends keyof ResourceRow>(id: ID, patch: Pick<ResourceRow, K>) { 
         // Находим текущий ресурс для записи изменений
@@ -2888,13 +2943,6 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
         
         setRows(prev => {
             const newRows = prev.map(r => (r.kind === "resource" && r.id === id) ? { ...r, ...patch } : r);
-            // Уведомляем родительский компонент об изменении данных
-            if (onDataChange) {
-                const dataToSave = prepareDataForSave();
-                if (dataToSave) {
-                    onDataChange(dataToSave);
-                }
-            }
             return newRows;
         });
     }

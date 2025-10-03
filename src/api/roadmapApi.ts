@@ -42,7 +42,7 @@ export async function saveRoadmapData(
 ): Promise<ApiResponse<SaveResponse>> {
   try {
     // Remove version from data to avoid conflict with currentVersion
-    const { version: _, ...dataWithoutVersion } = data;
+    const { version: _version, ...dataWithoutVersion } = data;
     
     const response = await fetch(`${API_BASE_URL}/api/v1/data`, {
       method: 'PUT',

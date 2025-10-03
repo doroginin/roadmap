@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 
 test.describe('Save functionality', () => {
-  test('should save task name changes with manual save button', async ({ page }) => {
+  test('should save task name changes automatically', async ({ page }) => {
     // Шаг 1: Открываем страницу
     await page.goto('/');
 
@@ -58,10 +58,6 @@ test.describe('Save functionality', () => {
     // Проверяем, что название обновилось в ячейке
     await expect(taskCell).toContainText(newTaskName);
 
-    // Шаг 5: Сохраняем данные вручную
-    // Нажимаем кнопку "Сохранить"
-    await page.getByTestId('manual-save-button').click();
-
     // Ждем немного для завершения сохранения
     await page.waitForTimeout(2000);
 
@@ -88,39 +84,5 @@ test.describe('Save functionality', () => {
     await expect(updatedTaskCell).toContainText(newTaskName);
 
     console.log('Test passed: data persisted after reload');
-  });
-
-  test('should use manual save button for immediate save', async ({ page }) => {
-    // Открываем страницу
-    await page.goto('/');
-    await expect(page.getByTestId('app-container')).toBeVisible({ timeout: 10000 });
-
-    // Включаем фильтр по команде "Demo"
-    await page.getByTestId('filter-team-button').click();
-    await expect(page.getByTestId('filter-popup')).toBeVisible();
-    await page.getByTestId('filter-checkbox-Demo').click();
-    await page.getByTestId('filter-ok-button').click();
-
-    // Находим тестовую задачу
-    const testTaskId = 'bbbbbbbb-0000-0000-0000-000000000002';
-    const taskCell = page.getByTestId(`task-cell-${testTaskId}`);
-    await expect(taskCell).toBeVisible({ timeout: 5000 });
-
-    // Редактируем название
-    await taskCell.dblclick();
-    const taskInput = page.getByTestId(`task-input-${testTaskId}`);
-    await expect(taskInput).toBeVisible();
-
-    const newTaskName = `Задача Б - быстрое сохранение ${Date.now()}`;
-    await taskInput.fill(newTaskName);
-    await taskInput.press('Enter');
-
-    // Нажимаем кнопку "Сохранить"
-    await page.getByTestId('manual-save-button').click();
-
-    // Ждем немного для завершения сохранения
-    await page.waitForTimeout(2000);
-
-    console.log('Manual save test passed');
   });
 });

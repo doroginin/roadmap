@@ -48,7 +48,13 @@ export function useAutoSave(
       return;
     }
     
-    setState(prev => ({ ...prev, hasUnsavedChanges: true }));
+    // Обновляем состояние только если оно действительно изменилось
+    setState(prev => {
+      if (prev.hasUnsavedChanges === true) {
+        return prev; // Не обновляем, если уже true
+      }
+      return { ...prev, hasUnsavedChanges: true };
+    });
 
     // Очищаем предыдущий таймер
     if (timeoutRef.current) {
@@ -75,33 +81,61 @@ export function useAutoSave(
         const result = await saveRoadmapChanges(changeLog, currentVersionRef.current, userId || undefined);
         
         if (result.error) {
-          setState(prev => ({ 
-            ...prev, 
-            isSaving: false, 
-            error: result.error || 'Unknown error',
-            hasUnsavedChanges: true
-          }));
+          setState(prev => {
+            const newState = { 
+              ...prev, 
+              isSaving: false, 
+              error: result.error || 'Unknown error',
+              hasUnsavedChanges: true
+            };
+            // Проверяем, действительно ли состояние изменилось
+            if (prev.isSaving === newState.isSaving && 
+                prev.error === newState.error && 
+                prev.hasUnsavedChanges === newState.hasUnsavedChanges) {
+              return prev;
+            }
+            return newState;
+          });
           onSaveError?.(result.error);
         } else {
           currentVersionRef.current = result.data.version;
 
-          setState(prev => ({
-            ...prev,
-            isSaving: false,
-            lastSaved: new Date(),
-            error: null,
-            hasUnsavedChanges: false
-          }));
+          setState(prev => {
+            const newState = {
+              ...prev,
+              isSaving: false,
+              lastSaved: new Date(),
+              error: null,
+              hasUnsavedChanges: false
+            };
+            // Проверяем, действительно ли состояние изменилось
+            if (prev.isSaving === newState.isSaving && 
+                prev.lastSaved?.getTime() === newState.lastSaved?.getTime() && 
+                prev.error === newState.error && 
+                prev.hasUnsavedChanges === newState.hasUnsavedChanges) {
+              return prev;
+            }
+            return newState;
+          });
           onSaveSuccess?.(result.data.version);
         }
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        setState(prev => ({
-          ...prev,
-          isSaving: false,
-          error: errorMessage,
-          hasUnsavedChanges: true
-        }));
+        setState(prev => {
+          const newState = {
+            ...prev,
+            isSaving: false,
+            error: errorMessage,
+            hasUnsavedChanges: true
+          };
+          // Проверяем, действительно ли состояние изменилось
+          if (prev.isSaving === newState.isSaving && 
+              prev.error === newState.error && 
+              prev.hasUnsavedChanges === newState.hasUnsavedChanges) {
+            return prev;
+          }
+          return newState;
+        });
         onSaveError?.(errorMessage);
       }
     }, delay);
