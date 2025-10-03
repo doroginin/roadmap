@@ -815,14 +815,13 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker }: Roadma
             
             return {
                 id: r.id,
-                kind: 'resource' as const,
-                team: teamUUIDs,
+                team: teamUUIDs.length > 0 ? teamUUIDs : undefined,
                 fn: r.fn,
-                functionId: functionUUID || '00000000-0000-0000-0000-000000000000',
-                empl: r.empl || null,
-                employeeId: r.employeeId || null,
-                weeks: r.weeks,
-                displayOrder: r.displayOrder || 0
+                functionId: functionUUID || undefined,
+                empl: r.empl || undefined,
+                employeeId: r.employeeId || undefined,
+                weeks: r.weeks || undefined,
+                displayOrder: r.displayOrder || undefined
             };
         });
         
@@ -833,29 +832,28 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker }: Roadma
             
             return {
                 id: t.id,
-                kind: 'task' as const,
-                status: t.status,
-                sprintsAuto: t.sprintsAuto || [],
-                epic: t.epic || null,
-                task: t.task,
-                teamId: teamUUID || '00000000-0000-0000-0000-000000000000',
+                status: t.status || undefined,
+                sprintsAuto: t.sprintsAuto || undefined,
+                epic: t.epic || undefined,
+                task: t.task || undefined,
+                teamId: teamUUID || undefined,
                 team: t.team,
-                functionId: functionUUID || '00000000-0000-0000-0000-000000000000',
+                functionId: functionUUID || undefined,
                 fn: t.fn,
-                employeeId: null,
-                empl: t.empl || null,
-                planEmpl: t.planEmpl,
-                planWeeks: t.planWeeks,
-                blockerIds: t.blockerIds,
-                weekBlockers: t.weekBlockers,
-                fact: t.fact || 0,
-                startWeek: t.startWeek || null,
-                endWeek: t.endWeek || null,
-                expectedStartWeek: t.expectedStartWeek || null,
-                manualEdited: t.manualEdited,
-                autoPlanEnabled: t.autoPlanEnabled,
-                weeks: t.weeks,
-                displayOrder: t.displayOrder || 0
+                employeeId: t.employeeId || undefined,
+                empl: t.empl || undefined,
+                planEmpl: t.planEmpl || undefined,
+                planWeeks: t.planWeeks || undefined,
+                blockerIds: t.blockerIds || undefined,
+                weekBlockers: t.weekBlockers || undefined,
+                fact: t.fact || undefined,
+                startWeek: t.startWeek || undefined,
+                endWeek: t.endWeek || undefined,
+                expectedStartWeek: t.expectedStartWeek || undefined,
+                manualEdited: t.manualEdited || undefined,
+                autoPlanEnabled: t.autoPlanEnabled || undefined,
+                weeks: t.weeks || undefined,
+                displayOrder: t.displayOrder || undefined
             };
         });
         

@@ -205,6 +205,7 @@ export function useChangeTracker() {
 
   // Очищаем изменения после успешного сохранения
   const clearChanges = useCallback(() => {
+    console.log('🔍 clearChanges called');
     setChanges([]);
     setHasUnsavedChanges(false);
   }, []);

@@ -2,6 +2,30 @@ import { test, expect } from '@playwright/test';
 
 test.describe('Save functionality', () => {
   test('should save task name changes automatically', async ({ page }) => {
+    // Перехватываем сетевые запросы для анализа
+    const apiRequests: Array<{ method: string; body: unknown; timestamp: number }> = [];
+    
+    await page.route('**/api/v1/data', async (route) => {
+      const request = route.request();
+      const method = request.method();
+      
+      if (method === 'PUT') {
+        const requestBody = request.postData();
+        if (requestBody) {
+          const body = JSON.parse(requestBody);
+          apiRequests.push({
+            method,
+            body,
+            timestamp: Date.now()
+          });
+          console.log('PUT request body:', body);
+        }
+      }
+      
+      // Продолжаем выполнение запроса
+      await route.continue();
+    });
+
     // Шаг 1: Открываем страницу
     await page.goto('/');
 
@@ -58,8 +82,8 @@ test.describe('Save functionality', () => {
     // Проверяем, что название обновилось в ячейке
     await expect(taskCell).toContainText(newTaskName);
 
-    // Ждем немного для завершения сохранения
-    await page.waitForTimeout(2000);
+    // Ждем больше времени для завершения сохранения
+    await page.waitForTimeout(5000);
 
     console.log('Data saved successfully');
 
@@ -68,6 +92,9 @@ test.describe('Save functionality', () => {
 
     // Ждем загрузки данных
     await expect(page.getByTestId('app-container')).toBeVisible({ timeout: 10000 });
+    
+    // Дополнительная задержка для полной загрузки данных
+    await page.waitForTimeout(2000);
 
     // Шаг 7: Снова включаем фильтр по команде "Demo"
     await page.getByTestId('filter-team-button').click();

@@ -55,9 +55,12 @@ func (s *Service) GetDataDiff(fromVersion int64) (*models.DiffResponse, error) {
 
 // UpdateData updates data in the database with optimistic locking
 func (s *Service) UpdateData(req *models.UpdateRequest) (*models.UpdateResponse, error) {
+	fmt.Printf("Service: UpdateData called with %d tasks\n", len(req.Tasks))
+
 	// Start transaction
 	tx, err := s.repo.BeginTransaction()
 	if err != nil {
+		fmt.Printf("Service: Failed to start transaction: %v\n", err)
 		return &models.UpdateResponse{
 			Success: false,
 			Error:   fmt.Sprintf("Failed to start transaction: %v", err),
@@ -68,13 +71,16 @@ func (s *Service) UpdateData(req *models.UpdateRequest) (*models.UpdateResponse,
 	// Check current version for optimistic locking
 	currentVersion, err := s.repo.GetCurrentVersion()
 	if err != nil {
+		fmt.Printf("Service: Failed to get current version: %v\n", err)
 		return &models.UpdateResponse{
 			Success: false,
 			Error:   fmt.Sprintf("Failed to get current version: %v", err),
 		}, nil
 	}
 
+	fmt.Printf("Service: Version check - client: %d, server: %d\n", req.Version, currentVersion)
 	if req.Version != currentVersion {
+		fmt.Printf("Service: Version conflict detected\n")
 		return &models.UpdateResponse{
 			Success: false,
 			Error:   fmt.Sprintf("Version conflict: client version %d, server version %d", req.Version, currentVersion),
@@ -82,13 +88,16 @@ func (s *Service) UpdateData(req *models.UpdateRequest) (*models.UpdateResponse,
 	}
 
 	// Update data
+	fmt.Printf("Service: Calling repository UpdateData\n")
 	err = s.repo.UpdateData(tx, req)
 	if err != nil {
+		fmt.Printf("Service: Repository UpdateData failed: %v\n", err)
 		return &models.UpdateResponse{
 			Success: false,
 			Error:   fmt.Sprintf("Failed to update data: %v", err),
 		}, nil
 	}
+	fmt.Printf("Service: Repository UpdateData succeeded\n")
 
 	// Commit transaction
 	if err := tx.Commit(); err != nil {

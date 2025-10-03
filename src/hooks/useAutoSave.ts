@@ -117,6 +117,10 @@ export function useAutoSave(
             }
             return newState;
           });
+          
+          // Очищаем изменения в трекере
+          changeTracker.clearChanges();
+          
           onSaveSuccess?.(result.data.version);
         }
       } catch (error) {
@@ -180,6 +184,10 @@ export function useAutoSave(
           error: null,
           hasUnsavedChanges: false
         }));
+        
+        // Очищаем изменения в трекере
+        changeTracker.clearChanges();
+        
         onSaveSuccess?.(result.data.version);
       }
     } catch (error) {

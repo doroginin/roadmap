@@ -11,14 +11,14 @@ export interface RoadmapData {
 export interface Resource {
   id: string;
   kind: "resource";
-  team: string[]; // Team names for display
+  team?: string[]; // Team names for display
   teamIds?: string[]; // Team UUIDs for saving (optional for backward compatibility)
   fn: string; // Function name for display
   functionId?: string; // Function UUID for saving
   empl?: string; // Employee name for display
   employeeId?: string; // Employee UUID for saving
-  weeks: number[];
-  displayOrder: number;
+  weeks?: number[];
+  displayOrder?: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -26,28 +26,28 @@ export interface Resource {
 export interface Task {
   id: string;
   kind: "task";
-  status: "Todo" | "Backlog" | "Cancelled";
-  sprintsAuto: string[];
+  status?: "Todo" | "Backlog" | "Cancelled";
+  sprintsAuto?: string[];
   epic?: string;
-  task: string;
+  task?: string;
   team: string; // Team name for display
   teamId?: string; // Team UUID for saving
   fn: string; // Function name for display
   functionId?: string; // Function UUID for saving
   empl?: string; // Employee name for display
   employeeId?: string; // Employee UUID for saving
-  planEmpl: number;
-  planWeeks: number;
-  blockerIds: string[];
-  weekBlockers: number[];
-  fact: number;
+  planEmpl?: number;
+  planWeeks?: number;
+  blockerIds?: string[];
+  weekBlockers?: number[];
+  fact?: number;
   startWeek?: number | null;
   endWeek?: number | null;
   expectedStartWeek?: number | null;
-  manualEdited: boolean;
-  autoPlanEnabled: boolean;
-  weeks: number[];
-  displayOrder: number;
+  manualEdited?: boolean;
+  autoPlanEnabled?: boolean;
+  weeks?: number[];
+  displayOrder?: number;
   createdAt: string;
   updatedAt: string;
 }

@@ -17,6 +17,7 @@ const (
 )
 
 // RowKind represents the type of row (resource or task)
+// Note: This is now only used for API responses, not stored in DB
 type RowKind string
 
 const (
@@ -27,10 +28,10 @@ const (
 // Team represents a team in the system
 type Team struct {
 	ID          uuid.UUID `json:"id" db:"id"`
-	Name        string    `json:"name" db:"name"`
-	JiraProject string    `json:"jiraProject" db:"jira_project"`
-	FeatureTeam string    `json:"featureTeam" db:"feature_team"`
-	IssueType   string    `json:"issueType" db:"issue_type"`
+	Name        *string   `json:"name,omitempty" db:"name"`
+	JiraProject *string   `json:"jiraProject,omitempty" db:"jira_project"`
+	FeatureTeam *string   `json:"featureTeam,omitempty" db:"feature_team"`
+	IssueType   *string   `json:"issueType,omitempty" db:"issue_type"`
 	CreatedAt   time.Time `json:"createdAt,omitempty" db:"created_at"`
 	UpdatedAt   time.Time `json:"updatedAt,omitempty" db:"updated_at"`
 }
@@ -38,9 +39,9 @@ type Team struct {
 // Sprint represents a sprint in the system
 type Sprint struct {
 	ID        uuid.UUID `json:"id" db:"id"`
-	Code      string    `json:"code" db:"code"`
-	StartDate string    `json:"start" db:"start_date"` // YYYY-MM-DD format
-	EndDate   string    `json:"end" db:"end_date"`     // YYYY-MM-DD format
+	Code      *string   `json:"code,omitempty" db:"code"`
+	StartDate *string   `json:"start,omitempty" db:"start_date"` // YYYY-MM-DD format
+	EndDate   *string   `json:"end,omitempty" db:"end_date"`     // YYYY-MM-DD format
 	CreatedAt time.Time `json:"createdAt" db:"created_at"`
 	UpdatedAt time.Time `json:"updatedAt" db:"updated_at"`
 }
@@ -48,7 +49,7 @@ type Sprint struct {
 // Function represents a function in the system
 type Function struct {
 	ID        uuid.UUID `json:"id" db:"id"`
-	Name      string    `json:"name" db:"name"`
+	Name      *string   `json:"name,omitempty" db:"name"`
 	Color     *string   `json:"color,omitempty" db:"color"`
 	CreatedAt time.Time `json:"createdAt" db:"created_at"`
 	UpdatedAt time.Time `json:"updatedAt" db:"updated_at"`
@@ -57,7 +58,7 @@ type Function struct {
 // Employee represents an employee in the system
 type Employee struct {
 	ID        uuid.UUID `json:"id" db:"id"`
-	Name      string    `json:"name" db:"name"`
+	Name      *string   `json:"name,omitempty" db:"name"`
 	Color     *string   `json:"color,omitempty" db:"color"`
 	CreatedAt time.Time `json:"createdAt" db:"created_at"`
 	UpdatedAt time.Time `json:"updatedAt" db:"updated_at"`
@@ -65,48 +66,48 @@ type Employee struct {
 
 // Resource represents a resource row
 type Resource struct {
-	ID           uuid.UUID       `json:"id" db:"id"`
-	Kind         RowKind         `json:"kind" db:"kind"`
-	TeamIDs      pq.StringArray  `json:"team" db:"team_ids"`                    // Team names for display (populated from Team table)
-	TeamUUIDs    pq.StringArray  `json:"teamIds,omitempty"`                     // Team UUIDs for saving (populated separately)
-	FunctionID   uuid.UUID       `json:"functionId" db:"function_id"`           // Function UUID for saving
-	Function     string          `json:"fn"`                                    // Function name for display (populated from Function table)
-	EmployeeID   *uuid.UUID      `json:"employeeId,omitempty" db:"employee_id"` // Employee UUID for saving
-	Employee     *string         `json:"empl,omitempty"`                        // Employee name for display (populated from Employee table)
-	Weeks        pq.Float64Array `json:"weeks" db:"weeks"`
-	DisplayOrder int             `json:"displayOrder" db:"display_order"`
-	CreatedAt    time.Time       `json:"createdAt" db:"created_at"`
-	UpdatedAt    time.Time       `json:"updatedAt" db:"updated_at"`
+	ID           uuid.UUID        `json:"id" db:"id"`
+	Kind         RowKind          `json:"kind"`                                  // Computed field for API responses
+	TeamIDs      *pq.StringArray  `json:"team,omitempty" db:"team_ids"`          // Team names for display (populated from Team table)
+	TeamUUIDs    pq.StringArray   `json:"teamIds,omitempty"`                     // Team UUIDs for saving (populated separately)
+	FunctionID   *uuid.UUID       `json:"functionId,omitempty" db:"function_id"` // Function UUID for saving
+	Function     string           `json:"fn"`                                    // Function name for display (populated from Function table)
+	EmployeeID   *uuid.UUID       `json:"employeeId,omitempty" db:"employee_id"` // Employee UUID for saving
+	Employee     *string          `json:"empl,omitempty"`                        // Employee name for display (populated from Employee table)
+	Weeks        *pq.Float64Array `json:"weeks,omitempty" db:"weeks"`
+	DisplayOrder *int             `json:"displayOrder,omitempty" db:"display_order"`
+	CreatedAt    time.Time        `json:"createdAt" db:"created_at"`
+	UpdatedAt    time.Time        `json:"updatedAt" db:"updated_at"`
 }
 
 // Task represents a task row
 type Task struct {
-	ID                uuid.UUID       `json:"id" db:"id"`
-	Kind              RowKind         `json:"kind" db:"kind"`
-	Status            TaskStatus      `json:"status" db:"status"`
-	SprintsAuto       pq.StringArray  `json:"sprintsAuto" db:"sprints_auto"`
-	Epic              *string         `json:"epic,omitempty" db:"epic"`
-	TaskName          string          `json:"task" db:"task_name"`
-	TeamID            uuid.UUID       `json:"teamId" db:"team_id"`                   // Team UUID for saving
-	Team              string          `json:"team"`                                  // Team name for display (populated from Team table)
-	FunctionID        uuid.UUID       `json:"functionId" db:"function_id"`           // Function UUID for saving
-	Function          string          `json:"fn"`                                    // Function name for display (populated from Function table)
-	EmployeeID        *uuid.UUID      `json:"employeeId,omitempty" db:"employee_id"` // Employee UUID for saving
-	Employee          *string         `json:"empl,omitempty"`                        // Employee name for display (populated from Employee table)
-	PlanEmpl          float64         `json:"planEmpl" db:"plan_empl"`
-	PlanWeeks         float64         `json:"planWeeks" db:"plan_weeks"`
-	BlockerIDs        pq.StringArray  `json:"blockerIds" db:"blocker_ids"`
-	WeekBlockers      pq.Int64Array   `json:"weekBlockers" db:"week_blockers"`
-	Fact              float64         `json:"fact" db:"fact"`
-	StartWeek         *int            `json:"startWeek" db:"start_week"`
-	EndWeek           *int            `json:"endWeek" db:"end_week"`
-	ExpectedStartWeek *int            `json:"expectedStartWeek" db:"expected_start_week"`
-	ManualEdited      bool            `json:"manualEdited" db:"manual_edited"`
-	AutoPlanEnabled   bool            `json:"autoPlanEnabled" db:"auto_plan_enabled"`
-	Weeks             pq.Float64Array `json:"weeks" db:"weeks"`
-	DisplayOrder      int             `json:"displayOrder" db:"display_order"`
-	CreatedAt         time.Time       `json:"createdAt" db:"created_at"`
-	UpdatedAt         time.Time       `json:"updatedAt" db:"updated_at"`
+	ID                uuid.UUID        `json:"id" db:"id"`
+	Kind              RowKind          `json:"kind"` // Computed field for API responses
+	Status            *TaskStatus      `json:"status,omitempty" db:"status"`
+	SprintsAuto       *pq.StringArray  `json:"sprintsAuto,omitempty" db:"sprints_auto"`
+	Epic              *string          `json:"epic,omitempty" db:"epic"`
+	TaskName          *string          `json:"task,omitempty" db:"task_name"`
+	TeamID            *uuid.UUID       `json:"teamId,omitempty" db:"team_id"`         // Team UUID for saving
+	Team              string           `json:"team"`                                  // Team name for display (populated from Team table)
+	FunctionID        *uuid.UUID       `json:"functionId,omitempty" db:"function_id"` // Function UUID for saving
+	Function          string           `json:"fn"`                                    // Function name for display (populated from Function table)
+	EmployeeID        *uuid.UUID       `json:"employeeId,omitempty" db:"employee_id"` // Employee UUID for saving
+	Employee          *string          `json:"empl,omitempty"`                        // Employee name for display (populated from Employee table)
+	PlanEmpl          *float64         `json:"planEmpl,omitempty" db:"plan_empl"`
+	PlanWeeks         *float64         `json:"planWeeks,omitempty" db:"plan_weeks"`
+	BlockerIDs        *pq.StringArray  `json:"blockerIds,omitempty" db:"blocker_ids"`
+	WeekBlockers      *pq.Int64Array   `json:"weekBlockers,omitempty" db:"week_blockers"`
+	Fact              *float64         `json:"fact,omitempty" db:"fact"`
+	StartWeek         *int             `json:"startWeek" db:"start_week"`
+	EndWeek           *int             `json:"endWeek" db:"end_week"`
+	ExpectedStartWeek *int             `json:"expectedStartWeek" db:"expected_start_week"`
+	ManualEdited      *bool            `json:"manualEdited,omitempty" db:"manual_edited"`
+	AutoPlanEnabled   *bool            `json:"autoPlanEnabled,omitempty" db:"auto_plan_enabled"`
+	Weeks             *pq.Float64Array `json:"weeks,omitempty" db:"weeks"`
+	DisplayOrder      *int             `json:"displayOrder,omitempty" db:"display_order"`
+	CreatedAt         time.Time        `json:"createdAt" db:"created_at"`
+	UpdatedAt         time.Time        `json:"updatedAt" db:"updated_at"`
 }
 
 // Row represents either a Resource or Task (union type for API responses)
@@ -116,13 +117,23 @@ type Row interface {
 	GetDisplayOrder() int
 }
 
-func (r *Resource) GetID() uuid.UUID     { return r.ID }
-func (r *Resource) GetKind() RowKind     { return r.Kind }
-func (r *Resource) GetDisplayOrder() int { return r.DisplayOrder }
+func (r *Resource) GetID() uuid.UUID { return r.ID }
+func (r *Resource) GetKind() RowKind { return RowKindResource }
+func (r *Resource) GetDisplayOrder() int {
+	if r.DisplayOrder != nil {
+		return *r.DisplayOrder
+	}
+	return 0
+}
 
-func (t *Task) GetID() uuid.UUID     { return t.ID }
-func (t *Task) GetKind() RowKind     { return t.Kind }
-func (t *Task) GetDisplayOrder() int { return t.DisplayOrder }
+func (t *Task) GetID() uuid.UUID { return t.ID }
+func (t *Task) GetKind() RowKind { return RowKindTask }
+func (t *Task) GetDisplayOrder() int {
+	if t.DisplayOrder != nil {
+		return *t.DisplayOrder
+	}
+	return 0
+}
 
 // DocumentVersion represents the current version of the document
 type DocumentVersion struct {
@@ -171,7 +182,7 @@ type DiffResponse struct {
 // UpdateRequest represents a request to update data
 type UpdateRequest struct {
 	Version   int64                  `json:"version"`
-	UserID    *string                `json:"userId,omitempty"`
+	UserID    string                 `json:"userId"` // Required field
 	Teams     []Team                 `json:"teams,omitempty"`
 	Sprints   []Sprint               `json:"sprints,omitempty"`
 	Functions []Function             `json:"functions,omitempty"`

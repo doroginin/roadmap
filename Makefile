@@ -14,7 +14,7 @@ test:
 
 # Run e2e tests
 e2e:
-	cd ./e2e && npm test && npx playwright show-report
+	cd ./e2e && npm test
 
 # Clean build artifacts
 clean:

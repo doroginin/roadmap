@@ -1,6 +1,11 @@
 // Утилиты для работы с UUID
 export function generateUUID(): string {
-  // Простая генерация UUID v4
+  // Используем crypto.randomUUID() если доступен, иначе fallback на правильную генерацию UUID v4
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  
+  // Fallback: правильная генерация UUID v4
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
     const r = Math.random() * 16 | 0;
     const v = c === 'x' ? r : (r & 0x3 | 0x8);

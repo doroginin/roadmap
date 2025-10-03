@@ -6,15 +6,14 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- Create enum types
 CREATE TYPE task_status AS ENUM ('Todo', 'Backlog', 'Cancelled');
-CREATE TYPE row_kind AS ENUM ('resource', 'task');
 
 -- Teams table
 CREATE TABLE teams (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    name VARCHAR(255) NOT NULL UNIQUE,
-    jira_project VARCHAR(255) DEFAULT '',
-    feature_team VARCHAR(255) DEFAULT '',
-    issue_type VARCHAR(255) DEFAULT '',
+    name VARCHAR(255) UNIQUE,
+    jira_project VARCHAR(255),
+    feature_team VARCHAR(255),
+    issue_type VARCHAR(255),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -22,9 +21,9 @@ CREATE TABLE teams (
 -- Sprints table
 CREATE TABLE sprints (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    code VARCHAR(50) NOT NULL UNIQUE,
-    start_date DATE NOT NULL,
-    end_date DATE NOT NULL,
+    code VARCHAR(50) UNIQUE,
+    start_date DATE,
+    end_date DATE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -32,7 +31,7 @@ CREATE TABLE sprints (
 -- Functions table (for fn field)
 CREATE TABLE functions (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    name VARCHAR(255) NOT NULL UNIQUE,
+    name VARCHAR(255) UNIQUE,
     color VARCHAR(7), -- hex color code
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
@@ -41,7 +40,7 @@ CREATE TABLE functions (
 -- Employees table
 CREATE TABLE employees (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    name VARCHAR(255) NOT NULL UNIQUE,
+    name VARCHAR(255) UNIQUE,
     color VARCHAR(7), -- hex color code
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
@@ -50,45 +49,39 @@ CREATE TABLE employees (
 -- Resources table
 CREATE TABLE resources (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    kind row_kind NOT NULL DEFAULT 'resource',
-    team_ids UUID[] NOT NULL, -- array of team IDs
-    function_id UUID NOT NULL REFERENCES functions(id),
+    team_ids UUID[], -- array of team IDs
+    function_id UUID REFERENCES functions(id),
     employee_id UUID REFERENCES employees(id), -- optional
-    weeks DECIMAL[] NOT NULL DEFAULT '{}', -- capacity per week
-    display_order INTEGER NOT NULL DEFAULT 0,
+    weeks DECIMAL[] DEFAULT '{}', -- capacity per week
+    display_order INTEGER DEFAULT 0,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    
-    CONSTRAINT resources_kind_check CHECK (kind = 'resource')
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 -- Tasks table
 CREATE TABLE tasks (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    kind row_kind NOT NULL DEFAULT 'task',
-    status task_status NOT NULL DEFAULT 'Todo',
+    status task_status DEFAULT 'Todo',
     sprints_auto TEXT[] DEFAULT '{}', -- auto-calculated sprint codes
     epic VARCHAR(255),
-    task_name VARCHAR(500) NOT NULL,
-    team_id UUID NOT NULL REFERENCES teams(id),
-    function_id UUID NOT NULL REFERENCES functions(id),
+    task_name VARCHAR(500),
+    team_id UUID REFERENCES teams(id),
+    function_id UUID REFERENCES functions(id),
     employee_id UUID REFERENCES employees(id), -- optional
-    plan_empl DECIMAL NOT NULL DEFAULT 0,
-    plan_weeks DECIMAL NOT NULL DEFAULT 0,
+    plan_empl DECIMAL DEFAULT 0,
+    plan_weeks DECIMAL DEFAULT 0,
     blocker_ids UUID[] DEFAULT '{}', -- references to other tasks
     week_blockers INTEGER[] DEFAULT '{}', -- week numbers that block this task
-    fact DECIMAL NOT NULL DEFAULT 0, -- auto-calculated
+    fact DECIMAL DEFAULT 0, -- auto-calculated
     start_week INTEGER, -- auto-calculated
     end_week INTEGER, -- auto-calculated
     expected_start_week INTEGER, -- hidden field for expected start week
-    manual_edited BOOLEAN NOT NULL DEFAULT FALSE,
-    auto_plan_enabled BOOLEAN NOT NULL DEFAULT TRUE,
-    weeks DECIMAL[] NOT NULL DEFAULT '{}', -- actual placed amounts by week
-    display_order INTEGER NOT NULL DEFAULT 0,
+    manual_edited BOOLEAN DEFAULT FALSE,
+    auto_plan_enabled BOOLEAN DEFAULT TRUE,
+    weeks DECIMAL[] DEFAULT '{}', -- actual placed amounts by week
+    display_order INTEGER DEFAULT 0,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    
-    CONSTRAINT tasks_kind_check CHECK (kind = 'task')
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 -- Document versions table for optimistic locking
@@ -112,6 +105,7 @@ CREATE TABLE change_log (
     operation VARCHAR(10) NOT NULL, -- INSERT, UPDATE, DELETE
     old_data JSONB,
     new_data JSONB,
+    user_id VARCHAR(255),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 

@@ -33,11 +33,10 @@ BEGIN
     ) ON CONFLICT (id) DO NOTHING;
 
     -- Добавляем тестовые ресурсы
-    INSERT INTO resources (id, kind, team_ids, function_id, employee_id, weeks, display_order, created_at, updated_at)
+    INSERT INTO resources (id, team_ids, function_id, employee_id, weeks, display_order, created_at, updated_at)
     VALUES 
     (
         'dddddddd-0000-0000-0000-000000000002',
-        'resource',
         ARRAY[demo_team_id]::uuid[],
         'bbbbbbbb-0000-0000-0000-000000000001',
         NULL,
@@ -48,11 +47,10 @@ BEGIN
     ) ON CONFLICT (id) DO NOTHING;
 
     -- Добавляем тестовые задачи
-    INSERT INTO tasks (id, kind, status, sprints_auto, epic, task_name, team_id, function_id, employee_id, plan_empl, plan_weeks, blocker_ids, week_blockers, fact, start_week, end_week, expected_start_week, manual_edited, auto_plan_enabled, weeks, display_order, created_at, updated_at)
+    INSERT INTO tasks (id, status, sprints_auto, epic, task_name, team_id, function_id, employee_id, plan_empl, plan_weeks, blocker_ids, week_blockers, fact, start_week, end_week, expected_start_week, manual_edited, auto_plan_enabled, weeks, display_order, created_at, updated_at)
     VALUES 
     (
         'aaaaaaaa-0000-0000-0000-000000000001',
-        'task',
         'Todo',
         ARRAY['Q3S1'],
         'Test Epic',
@@ -77,7 +75,6 @@ BEGIN
     ),
     (
         'bbbbbbbb-0000-0000-0000-000000000002',
-        'task',
         'Todo',
         ARRAY['Q3S1'],
         'Test Epic',
@@ -102,7 +99,6 @@ BEGIN
     ),
     (
         'eeeeeeee-0000-0000-0000-000000000001',
-        'task',
         'Todo',
         ARRAY['Q3S1', 'Q3S2'],
         'Test Epic',
