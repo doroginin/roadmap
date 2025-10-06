@@ -3,6 +3,7 @@ import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useSta
 import { Select } from "./Select";
 import { TeamMultiSelect } from "./TeamMultiSelect";
 import { ColorPickerPanel } from "./ColorPickerPanel";
+import { SaveStatus } from "./SaveStatus";
 import { normalizeColorValue, getBg, getText } from "./colorUtils";
 import { DEFAULT_BG } from "./colorDefaults";
 import { fetchRoadmapData } from "../api/roadmapApi";
@@ -688,9 +689,10 @@ interface RoadmapPlanProps {
   onSaveRequest?: () => void;
   userId?: string | null;
   changeTracker?: any; // TODO: добавить правильный тип
+  autoSaveState?: any; // TODO: добавить правильный тип для AutoSaveState
 }
 
-export function RoadmapPlan({ initialData, onDataChange, changeTracker }: RoadmapPlanProps = {}) {
+export function RoadmapPlan({ initialData, onDataChange, changeTracker, autoSaveState }: RoadmapPlanProps = {}) {
     // ===== Tabs =====
     type Tab = "plan" | "sprints" | "teams";
     const [tab, setTab] = useState<Tab>("plan");
@@ -3073,18 +3075,32 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
     }
     
     return (
-        <div className="p-4 space-y-4 h-screen flex flex-col">
-            <div className="flex gap-2 items-center justify-between" data-testid="tab-navigation">
-                <div className="flex gap-2">
-                    <button className={`px-3 py-1 rounded ${tab==='plan'? 'bg-black text-white':'border'}`} onClick={()=>setTab('plan')} data-testid="tab-plan">План</button>
-                    <button className={`px-3 py-1 rounded ${tab==='sprints'? 'bg-black text-white':'border'}`} onClick={()=>setTab('sprints')} data-testid="tab-sprints">Спринты</button>
-                    <button className={`px-3 py-1 rounded ${tab==='teams'? 'bg-black text-white':'border'}`} onClick={()=>setTab('teams')} data-testid="tab-teams">Команды</button>
+        <div className="h-screen flex flex-col">
+            {/* Tab navigation на всю ширину экрана */}
+            <div className="w-full bg-white px-4 py-3">
+                <div className="container mx-auto flex gap-2 items-center justify-between" data-testid="tab-navigation">
+                    <div className="flex gap-2">
+                        <button className={`px-3 py-1 rounded ${tab==='plan'? 'bg-black text-white':'border'}`} onClick={()=>setTab('plan')} data-testid="tab-plan">План</button>
+                        <button className={`px-3 py-1 rounded ${tab==='sprints'? 'bg-black text-white':'border'}`} onClick={()=>setTab('sprints')} data-testid="tab-sprints">Спринты</button>
+                        <button className={`px-3 py-1 rounded ${tab==='teams'? 'bg-black text-white':'border'}`} onClick={()=>setTab('teams')} data-testid="tab-teams">Команды</button>
+                    </div>
+                    {autoSaveState && (
+                        <div data-testid="save-status-bar">
+                            <SaveStatus 
+                                state={autoSaveState} 
+                                onForceSave={autoSaveState.forceSave}
+                            />
+                        </div>
+                    )}
                 </div>
             </div>
+            
+            {/* Основной контент в контейнере */}
+            <div className="flex-grow p-4 w-full overflow-hidden flex flex-col">
     
             {tab === 'plan' ? (
                 <>
-                <div ref={tableContainerRef} className="flex-grow border rounded-xl overflow-auto" style={{ position: "relative" }} data-testid="roadmap-table-container">
+                <div ref={tableContainerRef} className="flex-grow border rounded-xl overflow-auto" style={{ position: "relative", width: "100%" }} data-testid="roadmap-table-container">
                     <table 
                         key={JSON.stringify(columnWidths)} 
                         className="min-w-full text-sm select-none table-fixed border-collapse"
@@ -3753,7 +3769,7 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
         </>
     ) : tab === 'sprints' ? (
         <>
-        <div className="sprint-table-container flex-grow border rounded-xl overflow-auto" style={{ position: "relative" }}>
+        <div className="sprint-table-container flex-grow border rounded-xl overflow-auto" style={{ position: "relative", maxHeight: "calc(100vh - 200px)" }}>
             <table className="min-w-full text-sm select-none table-fixed border-collapse" style={{ border: '1px solid rgb(226, 232, 240)' }}>
                 <colgroup>
                     <col style={{ width: '120px' }} />
@@ -3914,7 +3930,7 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
         </>
     ) : (
         <>
-        <div className="team-table-container flex-grow border rounded-xl overflow-auto" style={{ position: "relative" }}>
+        <div className="team-table-container flex-grow border rounded-xl overflow-auto" style={{ position: "relative", maxHeight: "calc(100vh - 200px)" }}>
             <table className="min-w-full text-sm select-none table-fixed border-collapse" style={{ border: '1px solid rgb(226, 232, 240)' }}>
                 <colgroup>
                     <col style={{ width: '200px' }} />
@@ -4178,7 +4194,8 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
         </div>
     </div>
 )}
-</div>
+            </div>
+        </div>
 );
 // ===== helpers (render) =====
 function filteredValuesForColumn(list: Row[], col: ColumnId): string[] { return list.map(r => valueForCol(r, col)).filter(v => v !== undefined); }

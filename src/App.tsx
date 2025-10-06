@@ -1,5 +1,4 @@
 import { RoadmapPlan } from './components/RoadmapPlan'
-import { SaveStatus } from './components/SaveStatus'
 import { useAutoSave } from './hooks/useAutoSave'
 import { useChangeTracker } from './hooks/useChangeTracker'
 import { useUserId } from './hooks/useUserId'
@@ -74,15 +73,7 @@ function App() {
   }
 
   return (
-    <div className="container mx-auto" data-testid="app-container">
-      {/* Статус сохранения */}
-      <div className="sticky top-0 z-50 bg-white border-b border-gray-200 px-4 py-2" data-testid="save-status-bar">
-        <SaveStatus 
-          state={autoSave} 
-          onForceSave={autoSave.forceSave}
-        />
-      </div>
-      
+    <div className="w-screen max-w-full overflow-hidden" data-testid="app-container">
       {/* Основной компонент */}
       <RoadmapPlan 
         initialData={roadmapData}
@@ -90,6 +81,7 @@ function App() {
         onSaveRequest={autoSave.forceSave}
         userId={userId}
         changeTracker={changeTracker}
+        autoSaveState={autoSave}
       />
     </div>
   )

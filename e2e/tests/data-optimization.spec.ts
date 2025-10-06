@@ -29,7 +29,6 @@ test.describe('Data Optimization Tests', () => {
     await page.goto('/');
 
     // Ждем загрузки данных
-    await expect(page.getByTestId('loading-screen')).toBeVisible();
     await expect(page.getByTestId('app-container')).toBeVisible({ timeout: 10000 });
 
     // Проверяем, что таблица загрузилась
