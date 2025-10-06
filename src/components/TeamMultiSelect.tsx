@@ -30,13 +30,6 @@ export function TeamMultiSelect({ teams, selectedTeams, onSelect, onSaveValue, o
     };
   }, []);
 
-  // Обработчик выбора команды
-  const handleTeamChange = (team: string) => {
-    const newSelected = selectedTeams.includes(team)
-      ? selectedTeams.filter(t => t !== team)
-      : [...selectedTeams, team];
-    onSelect(newSelected);
-  };
 
   // Обработчик сохранения команды без закрытия списка
   const handleTeamSave = (team: string) => {
@@ -179,7 +172,7 @@ export function TeamMultiSelect({ teams, selectedTeams, onSelect, onSaveValue, o
   const filteredTeams = teams.filter(team => team.toLowerCase().includes(inputValue.toLowerCase()));
 
   return (
-    <div className="relative" ref={dropdownRef}>
+    <div className="relative" ref={dropdownRef} data-testid="team-multiselect">
       <div
         className="w-full h-full flex items-center cursor-pointer bg-white"
         onClick={() => setIsOpen(!isOpen)}
@@ -305,7 +298,7 @@ export function TeamMultiSelect({ teams, selectedTeams, onSelect, onSaveValue, o
                     type="checkbox"
                     style={{ marginRight: '8px' }}
                     checked={selectedTeams.includes(team)}
-                    onChange={() => handleTeamChange(team)}
+                    onChange={() => handleTeamSave(team)}
                   />
                   <span>{team}</span>
                 </label>
