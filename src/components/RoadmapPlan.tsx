@@ -1400,6 +1400,51 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker, autoSave
         }
     }, []);
 
+    // ====== Высота заголовка таблицы для правильного позиционирования ресурсов ======
+    const theadRef = useRef<HTMLTableSectionElement | null>(null);
+    const [theadHeight, setTheadHeight] = useState<number>(48); // начальное значение по умолчанию
+
+    // Измеряем высоту заголовка таблицы
+    useLayoutEffect(() => {
+        const measureTheadHeight = () => {
+            if (theadRef.current) {
+                const height = theadRef.current.getBoundingClientRect().height;
+                setTheadHeight(height);
+            }
+        };
+
+        // Измеряем при монтировании
+        measureTheadHeight();
+        
+        // Повторное измерение через requestAnimationFrame для корректного измерения после рендеринга
+        requestAnimationFrame(() => {
+            measureTheadHeight();
+            // Ещё одно измерение после следующего кадра для надёжности
+            requestAnimationFrame(measureTheadHeight);
+        });
+        
+        const resizeObserver = new ResizeObserver(measureTheadHeight);
+        if (theadRef.current) {
+            resizeObserver.observe(theadRef.current);
+        }
+
+        window.addEventListener('resize', measureTheadHeight);
+        
+        return () => {
+            resizeObserver.disconnect();
+            window.removeEventListener('resize', measureTheadHeight);
+        };
+    }, []);
+
+    // Дополнительное измерение при изменении данных, которые влияют на высоту заголовка
+    useEffect(() => {
+        if (theadRef.current) {
+            const height = theadRef.current.getBoundingClientRect().height;
+            setTheadHeight(height);
+        }
+    }, [columnWidths]);
+
+
     // Порядок колонок для стрелок
     const columnOrder = useMemo<(ColKey)[]>(() => {
         const base: (ColKey)[] = ["type","status","sprintsAuto","epic","task","team","fn","empl","planEmpl","planWeeks","autoplan"];
@@ -2584,6 +2629,53 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker, autoSave
         return result;
     }, [computedRows, filters]);
 
+    // Управление overflow контейнера таблицы в зависимости от количества строк
+    useEffect(() => {
+        const updateOverflow = () => {
+            if (containerEl) {
+                const table = containerEl.querySelector('table');
+                
+                if (table) {
+                    // Получаем доступное пространство от родительского контейнера
+                    const parentContainer = containerEl.parentElement;
+                    if (parentContainer) {
+                        const parentRect = parentContainer.getBoundingClientRect();
+                        const availableHeight = parentRect.height - 40; // 40px для отступов
+                        
+                        const tableRect = table.getBoundingClientRect();
+                        
+                        // Если таблица помещается в доступное пространство, ограничиваем высоту
+                        if (tableRect.height <= availableHeight) {
+                            containerEl.style.overflowX = 'auto'; // Горизонтальная прокрутка всегда доступна
+                            containerEl.style.overflowY = 'hidden'; // Вертикальная прокрутка отключена
+                            containerEl.style.height = `${tableRect.height}px`; // Фиксируем высоту по содержимому
+                            containerEl.style.maxHeight = 'none';
+                        } else {
+                            containerEl.style.overflowX = 'auto'; // Горизонтальная прокрутка всегда доступна
+                            containerEl.style.overflowY = 'auto'; // Вертикальная прокрутка включена
+                            containerEl.style.height = `${availableHeight}px`;
+                            containerEl.style.maxHeight = `${availableHeight}px`;
+                        }
+                        
+                        // Сбрасываем позицию скролла при изменении фильтра
+                        containerEl.scrollTop = 0;
+                    }
+                }
+            }
+        };
+
+        // Выполняем с задержкой для корректного измерения после рендеринга
+        const timeoutId = setTimeout(updateOverflow, 100);
+        
+        // Также обновляем при изменении размера окна
+        window.addEventListener('resize', updateOverflow);
+        
+        return () => {
+            clearTimeout(timeoutId);
+            window.removeEventListener('resize', updateOverflow);
+        };
+    }, [containerEl, theadHeight, filteredRows]);
+
     const links = useMemo(() => {
         const tasks = filteredRows.filter(r => r.kind === "task") as TaskRow[];
         return buildLinks(tasks);
@@ -3140,11 +3232,11 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
             </div>
             
             {/* Основной контент в контейнере */}
-            <div className="flex-grow p-4 w-full overflow-visible flex flex-col" style={{ height: 'calc(100vh - 120px)' }}>
+            <div className="flex-grow p-4 w-full overflow-visible" style={{ height: 'calc(100vh - 120px)' }}>
     
             {tab === 'plan' ? (
                 <>
-                <div ref={tableContainerRef} className="flex-grow border rounded-xl overflow-auto" style={{ position: "relative", width: "100%" }} data-testid="roadmap-table-container">
+                <div ref={tableContainerRef} className="border rounded-xl" style={{ position: "relative", width: "100%", height: "auto" }} data-testid="roadmap-table-container">
                     <table 
                         key={JSON.stringify(columnWidths)} 
                         className="text-sm select-none"
@@ -3154,12 +3246,12 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
                             borderCollapse: 'separate',
                             borderSpacing: 0,
                             tableLayout: 'fixed',
-                            width: '100%'
-                            
+                            width: '100%',
+                            height: 'auto'
                         }}
                     >
                         {renderColGroup()}
-                        <thead style={{ 
+                        <thead ref={theadRef} style={{ 
                             position: 'sticky',
                             top: 0,
                             zIndex: 20, // Выше всех остальных элементов
@@ -3308,7 +3400,7 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
                         {/* Закрепленная область для ресурсных строк */}
                         <tbody className="sticky bg-gray-50" style={{ 
                             position: 'sticky',
-                            top: '48px', // 48px = 3rem (высота шапки)
+                            top: `${theadHeight}px`, // Динамически вычисленная высота шапки
                             zIndex: 8, // Выше задач, но ниже шапки
                             backgroundColor: 'rgb(249, 250, 251)' 
                         }}>

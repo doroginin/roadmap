@@ -185,17 +185,25 @@ test.describe('Frozen Columns Tests', () => {
     await expect(resourceTbody).toBeVisible();
 
     // Проверяем, что tbody с ресурсами имеет стили закрепления
-    const tbodyStyle = await resourceTbody.evaluate((el) => {
-      const computedStyle = window.getComputedStyle(el);
+    const { tbodyStyle, theadHeight } = await page.evaluate(() => {
+      const tbody = document.querySelector('tbody');
+      const thead = document.querySelector('thead');
+      const computedStyle = window.getComputedStyle(tbody!);
+      const theadRect = thead!.getBoundingClientRect();
       return {
-        position: computedStyle.position,
-        top: computedStyle.top,
-        zIndex: computedStyle.zIndex
+        tbodyStyle: {
+          position: computedStyle.position,
+          top: computedStyle.top,
+          zIndex: computedStyle.zIndex
+        },
+        theadHeight: theadRect.height
       };
     });
     
     expect(tbodyStyle.position).toBe('sticky');
-    expect(tbodyStyle.top).toBe('48px'); // 48px = 3rem (высота шапки)
+    // Проверяем, что top соответствует высоте заголовка (динамически вычисленной)
+    expect(parseInt(tbodyStyle.top)).toBeGreaterThan(0);
+    expect(parseInt(tbodyStyle.top)).toBeCloseTo(theadHeight, 0);
     expect(tbodyStyle.zIndex).toBe('8');
 
     // Проверяем, что есть ресурсные строки
