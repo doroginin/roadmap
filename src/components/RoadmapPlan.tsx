@@ -829,10 +829,10 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker, autoSave
         epic: 195 - 45,
         task: 195 - 45,
         team: 80 - 45,
-        fn: 60 - 45,
-        empl: 60 - 45,
-        planEmpl: 60 - 45,
-        planWeeks: 60 - 45
+        fn: 55 - 45,
+        empl: 70 - 45,
+        planEmpl: 70 - 45,
+        planWeeks: 80 - 45
     });
 
     // Состояние для ресайзинга
@@ -2656,9 +2656,6 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker, autoSave
                             containerEl.style.height = `${availableHeight}px`;
                             containerEl.style.maxHeight = `${availableHeight}px`;
                         }
-                        
-                        // Сбрасываем позицию скролла при изменении фильтра
-                        containerEl.scrollTop = 0;
                     }
                 }
             }
@@ -2675,6 +2672,13 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker, autoSave
             window.removeEventListener('resize', updateOverflow);
         };
     }, [containerEl, theadHeight, filteredRows]);
+
+    // Сбрасываем позицию скролла только при изменении фильтров
+    useEffect(() => {
+        if (containerEl) {
+            containerEl.scrollTop = 0;
+        }
+    }, [containerEl, filters]);
 
     const links = useMemo(() => {
         const tasks = filteredRows.filter(r => r.kind === "task") as TaskRow[];
