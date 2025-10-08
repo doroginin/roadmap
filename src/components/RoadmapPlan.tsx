@@ -7,6 +7,7 @@ import { normalizeColorValue, getBg, getText } from "./colorUtils";
 import { DEFAULT_BG } from "./colorDefaults";
 import { fetchRoadmapData } from "../api/roadmapApi";
 import type { RoadmapData, Function } from "../api/types";
+import { generateUUID } from "../utils/uuid";
 
 // CSS стили для закрепления колонок
 
@@ -3111,11 +3112,11 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
 
     function splitRows(list: Row[]) { const resources = list.filter(r => r.kind === "resource"); const tasks = list.filter(r => r.kind === "task"); return { resources, tasks }; }
     function newResource(): ResourceRow {
-        return { id: rid(), kind: "resource", team: [], fn: "" as Fn, weeks: Array(TOTAL_WEEKS).fill(0) };
+        return { id: generateUUID(), kind: "resource", team: [], fn: "" as Fn, weeks: Array(TOTAL_WEEKS).fill(0) };
     }
     function newTask(): TaskRow {
         return {
-            id: rid(),
+            id: generateUUID(),
             kind: "task",
             status: "Todo",
             sprintsAuto: [],
@@ -3136,7 +3137,6 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
             weeks: Array(TOTAL_WEEKS).fill(0)
         };
     }
-    function rid() { return Math.random().toString(36).slice(2); }
 
     // ====== Локальное состояние меню добавления ======
     const [addMenuOpen, setAddMenuOpen] = useState<boolean>(false);
@@ -3151,8 +3151,8 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
             if (idx < 0) return prev;
             const row = prev[idx];
             const copy: Row = row.kind === 'task'
-                ? { ...(row as TaskRow), id: rid(), blockerIds: [...(row as TaskRow).blockerIds], weekBlockers: [...(row as TaskRow).weekBlockers], expectedStartWeek: (row as TaskRow).expectedStartWeek }
-        : { ...(row as ResourceRow), id: rid(), weeks: [...(row as ResourceRow).weeks] };
+                ? { ...(row as TaskRow), id: generateUUID(), blockerIds: [...(row as TaskRow).blockerIds], weekBlockers: [...(row as TaskRow).weekBlockers], expectedStartWeek: (row as TaskRow).expectedStartWeek }
+        : { ...(row as ResourceRow), id: generateUUID(), weeks: [...(row as ResourceRow).weeks] };
             const next = prev.slice();
             next.splice(idx + 1, 0, copy);
             return next;
@@ -3436,6 +3436,7 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
                                 className={"border-b bg-gray-50"}
                                 style={{ height: '24px' }}
                                 data-row-id={r.id}
+                                data-testid={`resource`}
                                 onMouseDown={(e)=>onMouseDownRow(e,r)}
                                 onContextMenu={(e)=>onContextMenuRow(e,r)}
                             >
@@ -3456,7 +3457,7 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
                                     startEdit({rowId:r.id,col:"team"});
                                 }} onClick={()=>{
                                     setSel({rowId:r.id,col:"team"});
-                                }}>
+                                }} data-testid={`team`}>
                                 {editing?.rowId===r.id && editing?.col==="team" ? (
                                     <div className="w-full h-full">
                                         <TeamMultiSelect
@@ -3610,6 +3611,7 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
                                     ...(hasMismatch ? { backgroundColor: '#fee2e2' } : {}) 
                                 }}
                                 data-row-id={r.id}
+                                data-testid={`task`}
                                 onMouseDown={(e)=>{ 
                                     if (r.kind==='task') onTaskMouseDown(e, r as TaskRow); 
                                     onMouseDownRow(e, r);
@@ -3696,7 +3698,7 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
                                     startEdit({rowId:r.id,col:"team"});
                                 }} onClick={()=>{
                                     setSel({rowId:r.id,col:"team"});
-                                }}>
+                                }} data-testid={`team`}>
                                     {editing?.rowId===r.id && editing?.col==="team" ? (
                                         <div className="w-full h-full">
                                             <Select

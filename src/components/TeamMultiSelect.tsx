@@ -18,15 +18,26 @@ export function TeamMultiSelect({ teams, selectedTeams, onSelect, onSaveValue, o
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLDivElement>(null);
-  const [dropdownPosition, setDropdownPosition] = useState<{ top: number; left: number } | null>(null);
+  const [dropdownPosition, setDropdownPosition] = useState<{ top: number; left: number; openUpward: boolean } | null>(null);
   
   // Обновляем позицию dropdown при открытии
   useEffect(() => {
     if (isOpen && triggerRef.current) {
       const rect = triggerRef.current.getBoundingClientRect();
+      const viewportHeight = window.innerHeight;
+      
+      // Примерная высота dropdown (с запасом)
+      const estimatedDropdownHeight = 300; // max-h-40 (~160px) + padding + search input
+      
+      // Определяем, достаточно ли места снизу
+      const spaceBelow = viewportHeight - rect.bottom;
+      const spaceAbove = rect.top;
+      const openUpward = spaceBelow < estimatedDropdownHeight && spaceAbove > spaceBelow;
+      
       setDropdownPosition({
-        top: rect.bottom,
-        left: rect.left
+        top: openUpward ? rect.top : rect.bottom,
+        left: rect.left,
+        openUpward
       });
     }
   }, [isOpen]);
@@ -206,7 +217,8 @@ export function TeamMultiSelect({ teams, selectedTeams, onSelect, onSaveValue, o
           className="z-50 bg-white border rounded shadow-lg" 
           style={{ 
             position: 'fixed',
-            top: `${dropdownPosition.top}px`,
+            top: dropdownPosition.openUpward ? undefined : `${dropdownPosition.top}px`,
+            bottom: dropdownPosition.openUpward ? `${window.innerHeight - dropdownPosition.top}px` : undefined,
             left: `${dropdownPosition.left}px`,
             backgroundColor: '#ffffff', 
             minWidth: '10em', 
