@@ -21,12 +21,11 @@ test.describe('Team MultiSelect Filter Behavior', () => {
     await expect(multiselect).toBeVisible({ timeout: 5000 });
 
     // Шаг 3: Проверяем, что мультиселект содержит команду Demo
-    await expect(multiselect.getByText('Demo').first()).toBeVisible();
+    // Dropdown рендерится через Portal, поэтому ищем label напрямую в документе
+    const demoLabel = page.locator('label').filter({ hasText: /^Demo$/ }).first();
+    await expect(demoLabel).toBeVisible();
 
     // Шаг 4: Кликаем на чекбокс Demo внутри мультиселекта
-    // Ищем label с текстом "Demo" и внутри него чекбокс
-    const demoLabel = multiselect.locator('label').filter({ hasText: 'Demo' }).first();
-    await expect(demoLabel).toBeVisible();
     const demoCheckbox = demoLabel.locator('input[type="checkbox"]');
     await expect(demoCheckbox).toBeVisible();
     
@@ -38,7 +37,8 @@ test.describe('Team MultiSelect Filter Behavior', () => {
     await demoCheckbox.click();
 
     // Шаг 5: Проверяем, что мультиселект все еще открыт после клика на чекбокс
-    await expect(multiselect).toBeVisible({ timeout: 2000 });
+    // Проверяем, что dropdown с label элементами все еще виден
+    await expect(demoLabel).toBeVisible({ timeout: 2000 });
     console.log('✅ Test passed: Team multiselect remained open after clicking checkbox inside it');
 
     // Шаг 6: Проверяем, что состояние чекбокса изменилось
@@ -48,7 +48,7 @@ test.describe('Team MultiSelect Filter Behavior', () => {
 
     // Шаг 7: Кликаем еще раз, чтобы вернуть исходное состояние
     await demoCheckbox.click();
-    await expect(multiselect).toBeVisible({ timeout: 2000 });
+    await expect(demoLabel).toBeVisible({ timeout: 2000 });
     console.log('✅ Test passed: Team multiselect remained open after second checkbox click');
   });
 });
