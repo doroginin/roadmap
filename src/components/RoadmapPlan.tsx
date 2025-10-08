@@ -2920,7 +2920,7 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
     if (weeks1.length !== weeks2.length) return false;
     return weeks1.every((val, index) => Math.abs(val - weeks2[index]) < 0.001);
 }
-    const paintRef = useRef<{ active:boolean; rowId:ID; originW:number; value:number; started:boolean; lastW:number } | null>(null);
+    const paintRef = useRef<{ active:boolean; rowId:ID; originW:number; value:number; started:boolean; lastW:number; savedWeeks?: number[]; wasAutoPlan?: boolean } | null>(null);
     
     // Функция для заполнения всех ячеек между двумя позициями
     function fillWeeksBetween(weeks: number[], fromW: number, toW: number, value: number): number[] {
@@ -2948,7 +2948,17 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
         if (r.kind === "task") {
             const t = r as TaskRow;
             const current = t.weeks[w] || 0; // используем прямое значение как для ресурсов
-            paintRef.current = { active: true, rowId: t.id, originW: w, value: current, started: false, lastW: w };
+            // Сохраняем текущие недели (автозапланированные) и флаг автопланирования
+            paintRef.current = { 
+                active: true, 
+                rowId: t.id, 
+                originW: w, 
+                value: current, 
+                started: false, 
+                lastW: w,
+                savedWeeks: t.weeks.slice(), // Сохраняем текущие автозапланированные недели
+                wasAutoPlan: t.autoPlanEnabled // Запоминаем, было ли автопланирование включено
+            };
         } else {
             const rr = r as ResourceRow;
             const current = rr.weeks[w] || 0;
@@ -2969,13 +2979,22 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
             setRows(prev => prev.map(x => {
                 if (x.kind === "task" && x.id === r.id) {
                     const currentTask = x as TaskRow;
-                    const originalWeeks = currentTask.weeks.slice();
+                    
+                    // Всегда используем сохраненные недели, если они есть
+                    // Это защищает от потери данных при пересчетах
+                    const weeksToUse = p.savedWeeks ? p.savedWeeks : currentTask.weeks;
+                    const originalWeeks = weeksToUse.slice();
                     
                     // Заполняем все ячейки между последней обработанной позицией и текущей
-                    const base = fillWeeksBetween(currentTask.weeks, fromW, w, p.value);
+                    const base = fillWeeksBetween(weeksToUse, fromW, w, p.value);
                     
                     // Проверяем, изменилось ли значение
                     const hasChanged = !weeksArraysEqual(base, originalWeeks);
+                    
+                    // Обновляем сохраненные недели для следующей итерации
+                    if (hasChanged && p.savedWeeks) {
+                        p.savedWeeks = base.slice();
+                    }
                     
                     return { 
                         ...currentTask, 
@@ -3933,7 +3952,7 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
                 <div className="relative">
                     <button className="bg-black text-white rounded px-4 py-2" onClick={()=>setAddMenuOpen(v=>!v)}>+ Добавить</button>
                     {addMenuOpen && (
-                        <div className="absolute bottom-full mb-2 left-0 bg-white border rounded shadow p-1 w-40">
+                        <div className="absolute bottom-full mb-2 left-0 bg-white border rounded shadow p-1 w-40" style={{ zIndex: 1000 }}>
                             <button className="w-full text-left px-2 py-1 hover:bg-gray-100" onClick={addResourceBottom}>Ресурс</button>
                             <button className="w-full text-left px-2 py-1 hover:bg-gray-100" onClick={addTaskBottom}>Задача</button>
                         </div>
