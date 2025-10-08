@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 
 interface TeamMultiSelectProps {
   teams: string[];
@@ -16,11 +17,25 @@ export function TeamMultiSelect({ teams, selectedTeams, onSelect, onSaveValue, o
   const [inputValue, setInputValue] = useState('');
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLDivElement>(null);
+  const [dropdownPosition, setDropdownPosition] = useState<{ top: number; left: number } | null>(null);
   
+  // Обновляем позицию dropdown при открытии
+  useEffect(() => {
+    if (isOpen && triggerRef.current) {
+      const rect = triggerRef.current.getBoundingClientRect();
+      setDropdownPosition({
+        top: rect.bottom,
+        left: rect.left
+      });
+    }
+  }, [isOpen]);
+
   // Обработчик клика вне dropdown
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node) &&
+          triggerRef.current && !triggerRef.current.contains(event.target as Node)) {
         setIsOpen(false);
       }
     }
@@ -172,21 +187,33 @@ export function TeamMultiSelect({ teams, selectedTeams, onSelect, onSaveValue, o
   const filteredTeams = teams.filter(team => team.toLowerCase().includes(inputValue.toLowerCase()));
 
   return (
-    <div className="relative" ref={dropdownRef} data-testid="team-multiselect">
+    <>
       <div
+        ref={triggerRef}
         className="w-full h-full flex items-center cursor-pointer bg-white"
         onClick={() => setIsOpen(!isOpen)}
         onKeyDown={handleKeyDown}
         tabIndex={0}
+        data-testid="team-multiselect"
       >
         <span className="truncate px-1">{selectedTeams.join(', ') || 'Выберите команды...'}</span>
         <span className="ml-auto px-1">▾</span>
       </div>
       
-      {isOpen && (
+      {isOpen && dropdownPosition && createPortal(
         <div 
-          className="absolute z-50 mt-1 bg-white border rounded shadow-lg" 
-          style={{ backgroundColor: '#ffffff', minWidth: '10em', width: '16rem', maxWidth: '20rem' }}
+          ref={dropdownRef}
+          className="z-50 bg-white border rounded shadow-lg" 
+          style={{ 
+            position: 'fixed',
+            top: `${dropdownPosition.top}px`,
+            left: `${dropdownPosition.left}px`,
+            backgroundColor: '#ffffff', 
+            minWidth: '10em', 
+            width: '16rem', 
+            maxWidth: '20rem', 
+            zIndex: 9999 
+          }}
           onMouseDown={(e) => e.stopPropagation()}
           onMouseMove={(e) => e.stopPropagation()}
           onMouseUp={(e) => e.stopPropagation()}
@@ -213,7 +240,7 @@ export function TeamMultiSelect({ teams, selectedTeams, onSelect, onSaveValue, o
               className="max-h-40 overflow-y-auto"
               onMouseDown={(e) => e.stopPropagation()}
               onMouseMove={(e) => e.stopPropagation()}
-              onMouseUp={(e) => e.stopPropagation()}
+              onMouseUp={(e ) => e.stopPropagation()}
               onKeyDown={(e) => {
                 if (e.key === 'ArrowDown') {
                   e.preventDefault();
@@ -305,8 +332,9 @@ export function TeamMultiSelect({ teams, selectedTeams, onSelect, onSaveValue, o
               ))}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
-    </div>
+    </>
   );
 }
