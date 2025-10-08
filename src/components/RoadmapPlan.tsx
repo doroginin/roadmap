@@ -627,7 +627,10 @@ function ArrowOverlay({
     if (!container) return null;
 
     const w = Math.max(container.clientWidth, container.scrollWidth);
-    const h = Math.max(container.clientHeight, container.scrollHeight);
+    // Используем высоту таблицы вместо scrollHeight контейнера для корректной работы с фильтрами
+    const table = container.querySelector('table');
+    const tableHeight = table ? table.getBoundingClientRect().height : 0;
+    const h = Math.max(container.clientHeight, tableHeight);
 
     return (
         <svg
@@ -2641,7 +2644,7 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker, autoSave
                     if (parentContainer) {
                         const parentRect = parentContainer.getBoundingClientRect();
                         const availableHeight = parentRect.height - 40; // 40px для отступов
-                        
+
                         const tableRect = table.getBoundingClientRect();
                         
                         // Если таблица помещается в доступное пространство, ограничиваем высоту
