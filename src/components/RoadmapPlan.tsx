@@ -2675,7 +2675,7 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker, autoSave
             clearTimeout(timeoutId);
             window.removeEventListener('resize', updateOverflow);
         };
-    }, [containerEl, theadHeight, filteredRows]);
+    }, [containerEl, theadHeight, filteredRows, tab]);
 
     // Сбрасываем позицию скролла только при изменении фильтров
     useEffect(() => {
