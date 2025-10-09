@@ -202,8 +202,8 @@ function buildLinks(tasks: TaskRow[]): Link[] {
     const taskMap = new Map(tasks.map(t => [t.id, t]));
     
     for (const task of tasks) {
-        // Обрабатываем блокеры задач
-        for (const blockerId of task.blockerIds) {
+        // Обрабатываем блокеры задач (безопасная проверка на undefined)
+        for (const blockerId of (task.blockerIds || [])) {
             const blocker = taskMap.get(blockerId);
             if (!blocker) continue;
             
@@ -1305,7 +1305,8 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker, autoSave
 
         // Топологическая сортировка задач по зависимостям
         function canProcessTask(task: TaskRow): boolean {
-            return task.blockerIds.every(blockerId => processedTaskIds.has(blockerId));
+            // Безопасная проверка на случай если blockerIds undefined
+            return (task.blockerIds || []).every(blockerId => processedTaskIds.has(blockerId));
         }
 
         // Повторяем до тех пор, пока не обработаем все задачи
@@ -3112,19 +3113,54 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
     }
 
     function splitRows(list: Row[]) { const resources = list.filter(r => r.kind === "resource"); const tasks = list.filter(r => r.kind === "task"); return { resources, tasks }; }
-    function newResource(): ResourceRow {
-        return { id: generateUUID(), kind: "resource", team: [], fn: "" as Fn, weeks: Array(TOTAL_WEEKS).fill(0) };
+    
+    // Функция для извлечения значений по умолчанию из активных фильтров
+    // Возвращает первое выбранное значение для каждого отфильтрованного поля
+    function getFilterDefaults() {
+        const defaults: Record<string, string> = {};
+        
+        for (const col of Object.keys(filters) as ColumnId[]) {
+            const filter = filters[col];
+            if (filter && filter.selected.size > 0) {
+                // Берем первое значение из Set
+                const firstValue = Array.from(filter.selected)[0];
+                // Игнорируем пустые значения и "(пусто)"
+                if (firstValue && firstValue !== "(пусто)" && firstValue.trim() !== "") {
+                    defaults[col] = firstValue;
+                }
+            }
+        }
+        
+        return defaults;
     }
+    
+    function newResource(): ResourceRow {
+        const defaults = getFilterDefaults();
+        
+        // Для ресурсов team - это массив, поэтому обрабатываем особым образом
+        const teamValue = defaults.team ? [defaults.team] : [];
+        
+        return { 
+            id: generateUUID(), 
+            kind: "resource", 
+            team: teamValue, 
+            fn: (defaults.fn || "") as Fn, 
+            weeks: Array(TOTAL_WEEKS).fill(0) 
+        };
+    }
+    
     function newTask(): TaskRow {
+        const defaults = getFilterDefaults();
+        
         return {
             id: generateUUID(),
             kind: "task",
-            status: "Todo",
+            status: (defaults.status || "Todo") as Status,
             sprintsAuto: [],
-            epic: "",
+            epic: defaults.epic || "",
             task: "",
-            team: "",
-            fn: "" as Fn,
+            team: defaults.team || "",
+            fn: (defaults.fn || "") as Fn,
             planEmpl: 0,
             planWeeks: 0,
             blockerIds: [],
