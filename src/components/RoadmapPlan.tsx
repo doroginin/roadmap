@@ -3048,6 +3048,7 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
         const used = (computed.resLoad[rr.id]?.[weekIdx0] ?? 0);
         if (used > cap) return "#fee2e2"; // перегруз — красный
         if (cap > 0 && used < cap) return "#dcfce7"; // недогруз — зелёный
+        if (cap === 0) return "#ffffff"; // белый фон для нулевых значений
         return "transparent";
     }
 
@@ -3242,9 +3243,9 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
             <div className="w-full bg-white px-4 py-3">
                 <div className="container mx-auto flex gap-2 items-center justify-between" data-testid="tab-navigation">
                     <div className="flex gap-2">
-                        <button className={`px-3 py-1 rounded ${tab==='plan'? 'bg-black text-white':'border'}`} onClick={()=>setTab('plan')} data-testid="tab-plan">План</button>
-                        <button className={`px-3 py-1 rounded ${tab==='sprints'? 'bg-black text-white':'border'}`} onClick={()=>setTab('sprints')} data-testid="tab-sprints">Спринты</button>
-                        <button className={`px-3 py-1 rounded ${tab==='teams'? 'bg-black text-white':'border'}`} onClick={()=>setTab('teams')} data-testid="tab-teams">Команды</button>
+                        <button className={`px-3 py-1 rounded border`} style={tab==='plan' ? {backgroundColor: '#d1d5db', color: 'black', marginRight: '0.5em'} : {backgroundColor: '#f3f4f6', marginRight: '0.5em'}} onClick={()=>setTab('plan')} data-testid="tab-plan">План</button>
+                        <button className={`px-3 py-1 rounded border`} style={tab==='sprints' ? {backgroundColor: '#d1d5db', color: 'black', marginRight: '0.5em'} : {backgroundColor: '#f3f4f6', marginRight: '0.5em'}} onClick={()=>setTab('sprints')} data-testid="tab-sprints">Спринты</button>
+                        <button className={`px-3 py-1 rounded border`} style={tab==='teams' ? {backgroundColor: '#d1d5db', color: 'black'} : {backgroundColor: '#f3f4f6'}} onClick={()=>setTab('teams')} data-testid="tab-teams">Команды</button>
                     </div>
                     {autoSaveState && (
                         <div data-testid="save-status-bar">
@@ -3281,7 +3282,7 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
                             position: 'sticky',
                             top: 0,
                             zIndex: 20, // Выше всех остальных элементов
-                            backgroundColor: 'rgb(249, 250, 251)'
+                            backgroundColor: '#f3f4f6'
                         }}>
                         <tr style={{ borderBottom: '1px solid rgb(226, 232, 240)' }}>
                             {renderHeadWithFilter("Тип", "type", filters, isFilterActive, openFilter, handleResizeStart, columnWidths)}
@@ -3296,8 +3297,9 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
                                     paddingRight: '0.5em', 
                                     paddingLeft: '0.5em', 
                                     position: 'relative',
-                                borderLeft: '1px solid rgb(226, 232, 240)',
-                                    ...getFrozenColumnStyle('sprintsAuto', columnWidths)
+                                    borderLeft: '1px solid rgb(226, 232, 240)',
+                                    ...getFrozenColumnStyle('sprintsAuto', columnWidths),
+                                    backgroundColor: '#f3f4f6'
                                 }}
                             >
                                 <div className="flex items-center justify-between">
@@ -3306,7 +3308,7 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
                                         className={isFilterActive('sprintsAuto') ? "text-xs rounded" : "text-xs text-gray-500"} 
                                         style={isFilterActive('sprintsAuto') 
                                             ? { padding: '1px 2px', backgroundColor: '#166534', color: '#ffffff' }
-                                            : { padding: '1px 2px' }
+                                            : { padding: '1px 2px', backgroundColor: '#d1d5db' }
                                         }
                                         title={isFilterActive('sprintsAuto') ? "Фильтр применен" : "Открыть фильтр"}
                                         onClick={(e)=>openFilter('sprintsAuto', (e.currentTarget as HTMLElement).getBoundingClientRect().left, (e.currentTarget as HTMLElement).getBoundingClientRect().bottom+4)}
@@ -3350,7 +3352,8 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
                                     paddingRight: '0.5em', 
                                     paddingLeft: '0.5em', 
                                     position: 'relative',
-                                    ...getFrozenColumnStyle('task', columnWidths)
+                                    ...getFrozenColumnStyle('task', columnWidths),
+                                    backgroundColor: '#f3f4f6'
                                 }}
                             >
                                 <div className="flex items-center justify-between">
@@ -3359,7 +3362,7 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
                                         className={isFilterActive('task') ? "text-xs rounded" : "text-xs text-gray-500"} 
                                         style={isFilterActive('task') 
                                             ? { padding: '1px 2px', backgroundColor: '#166534', color: '#ffffff' }
-                                            : { padding: '1px 2px' }
+                                            : { padding: '1px 2px', backgroundColor: '#d1d5db' }
                                         }
                                         title={isFilterActive('task') ? "Фильтр применен" : "Открыть фильтр"}
                                         onClick={(e)=>openFilter('task', (e.currentTarget as HTMLElement).getBoundingClientRect().left, (e.currentTarget as HTMLElement).getBoundingClientRect().bottom+4)}
@@ -3406,7 +3409,8 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
                                     border: '1px solid rgb(226, 232, 240)', 
                                     paddingRight: '0.5em', 
                                     paddingLeft: '0.5em',
-                                    ...getFrozenColumnStyle('autoplan', columnWidths)
+                                    ...getFrozenColumnStyle('autoplan', columnWidths),
+                                    backgroundColor: '#f3f4f6'
                                 }}
                             >
                                 <span>Auto</span>
@@ -3428,12 +3432,12 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
                             position: 'sticky',
                             top: `${theadHeight}px`, // Динамически вычисленная высота шапки
                             zIndex: 8, // Выше задач, но ниже шапки
-                            backgroundColor: 'rgb(249, 250, 251)' 
+                            backgroundColor: '#f3f4f6' 
                         }}>
                         {/* Ресурсы */}
                         {filteredRows.filter(r => r.kind === "resource").map(r => (
                             <tr key={r.id}
-                                className={"border-b bg-gray-50"}
+                                className={"border-b bg-white"}
                                 style={{ height: '24px' }}
                                 data-row-id={r.id}
                                 data-testid={`resource`}
@@ -3441,19 +3445,19 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
                                 onContextMenu={(e)=>onContextMenuRow(e,r)}
                             >
                                 {/* Тип */}
-                                <td className={`px-2 py-1 align-middle bg-gray-50 draggable-cell`} style={{...getCellBorderStyle(isSel(r.id,'type')), ...getCellBorderStyleForDrag(r.id), ...getFrozenColumnStyle('type', columnWidths)}} onMouseDown={markDragAllowed}>
+                                <td className={`px-2 py-1 align-middle draggable-cell`} style={{...getCellBorderStyle(isSel(r.id,'type')), ...getCellBorderStyleForDrag(r.id), ...getFrozenColumnStyle('type', columnWidths)}} onMouseDown={markDragAllowed}>
                                     <div className="w-full overflow-hidden" title="Ресурс">
                                         <span className="block truncate">Ресурс</span>
                                     </div>
                                 </td>
 
                                 {/* Объединенная ячейка для Status/Sprints/Epic/Task (не используется для ресурсов) */}
-                                <td className={`px-2 py-1 align-middle bg-gray-50 text-center text-gray-400 draggable-cell`} style={{...getCellBorderStyle(isSel(r.id,'status')), ...getCellBorderStyleForDrag(r.id), ...getFrozenColumnStyle('status', columnWidths)}} onMouseDown={markDragAllowed}
+                                <td className={`px-2 py-1 align-middle text-center text-gray-400 draggable-cell`} style={{...getCellBorderStyle(isSel(r.id,'status')), ...getCellBorderStyleForDrag(r.id), ...getFrozenColumnStyle('status', columnWidths)}} onMouseDown={markDragAllowed}
                                     colSpan={4}
                                 >—</td>
 
                                 {/* Team */}
-                                <td className={`px-2 py-1 align-middle bg-gray-50 draggable-cell`} style={{ borderLeft: '1px solid rgb(226, 232, 240)', ...getCellBorderStyle(isSel(r.id,'team')), ...getCellBorderStyleForDrag(r.id), ...getFrozenColumnStyle('team', columnWidths) }} onMouseDown={markDragAllowed} onDoubleClick={()=>{
+                                <td className={`px-2 py-1 align-middle draggable-cell`} style={{ borderLeft: '1px solid rgb(226, 232, 240)', ...getCellBorderStyle(isSel(r.id,'team')), ...getCellBorderStyleForDrag(r.id), ...getFrozenColumnStyle('team', columnWidths) }} onMouseDown={markDragAllowed} onDoubleClick={()=>{
                                     startEdit({rowId:r.id,col:"team"});
                                 }} onClick={()=>{
                                     setSel({rowId:r.id,col:"team"});
@@ -3483,7 +3487,7 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
                                 </td>
 
                                 {/* Fn */}
-                                <td className={`px-2 py-1 align-middle text-center draggable-cell`} style={{ backgroundColor: getBg(teamFnColors[teamKeyFromResource(r as ResourceRow)]), color: getText(teamFnColors[teamKeyFromResource(r as ResourceRow)]), ...getCellBorderStyle(isSel(r.id,'fn')), ...getCellBorderStyleForDrag(r.id), ...getFrozenColumnStyle('fn', columnWidths) }} onMouseDown={markDragAllowed} onDoubleClick={()=>startEdit({rowId:r.id,col:"fn"})} onClick={()=>setSel({rowId:r.id,col:"fn"})} onContextMenu={(e)=>onContextMenuCellColor(e, r as ResourceRow, 'fn', 'resource')} data-testid={`resource-cell-${r.id}`}>
+                                <td className={`px-2 py-1 align-middle text-center draggable-cell`} style={{ ...getCellBorderStyle(isSel(r.id,'fn')), ...getCellBorderStyleForDrag(r.id), ...getFrozenColumnStyle('fn', columnWidths), backgroundColor: getBg(teamFnColors[teamKeyFromResource(r as ResourceRow)]), color: getText(teamFnColors[teamKeyFromResource(r as ResourceRow)]) }} onMouseDown={markDragAllowed} onDoubleClick={()=>startEdit({rowId:r.id,col:"fn"})} onClick={()=>setSel({rowId:r.id,col:"fn"})} onContextMenu={(e)=>onContextMenuCellColor(e, r as ResourceRow, 'fn', 'resource')} data-testid={`resource-cell-${r.id}`}>
                                     {editing?.rowId===r.id && editing?.col==="fn" ? (
                                         <input autoFocus className="w-full h-full box-border min-w-0 outline-none bg-transparent" style={{ border: 'none', padding: 0, margin: 0 }} defaultValue={r.fn} data-testid={`resource-input-${r.id}`}
                                                onKeyDown={(e)=>{
@@ -3501,7 +3505,7 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
                                 </td>
 
                                 {/* Empl */}
-                                <td className={`px-2 py-1 align-middle bg-gray-50 text-center draggable-cell`} style={{...getCellBorderStyle(isSel(r.id,'empl')), ...getCellBorderStyleForDrag(r.id), ...getFrozenColumnStyle('empl', columnWidths)}} onMouseDown={markDragAllowed} onDoubleClick={()=>startEdit({rowId:r.id,col:"empl"})} onClick={()=>setSel({rowId:r.id,col:"empl"})}>
+                                <td className={`px-2 py-1 align-middle text-center draggable-cell`} style={{...getCellBorderStyle(isSel(r.id,'empl')), ...getCellBorderStyleForDrag(r.id), ...getFrozenColumnStyle('empl', columnWidths)}} onMouseDown={markDragAllowed} onDoubleClick={()=>startEdit({rowId:r.id,col:"empl"})} onClick={()=>setSel({rowId:r.id,col:"empl"})}>
                                     {editing?.rowId===r.id && editing?.col==="empl" ? (
                                         <input autoFocus className="w-full h-full box-border min-w-0 outline-none bg-transparent" style={{ border: 'none', padding: 0, margin: 0 }} defaultValue={(r as ResourceRow).empl || ""}
                                                onKeyDown={(e)=>{
@@ -3519,7 +3523,7 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
                                 </td>
 
                                 {/* Объединенная ячейка для Plan empl/Plan weeks/Auto (не используется для ресурсов) */}
-                                <td className={`px-2 py-1 align-middle bg-gray-50 text-center text-gray-400 draggable-cell`} style={{...getCellBorderStyle(isSel(r.id,'planEmpl')), ...getCellBorderStyleForDrag(r.id), ...getFrozenColumnStyle('planEmpl', columnWidths)}} onMouseDown={markDragAllowed}
+                                <td className={`px-2 py-1 align-middle text-center text-gray-400 draggable-cell`} style={{...getCellBorderStyle(isSel(r.id,'planEmpl')), ...getCellBorderStyleForDrag(r.id), ...getFrozenColumnStyle('planEmpl', columnWidths)}} onMouseDown={markDragAllowed}
                                     colSpan={3}
                                 >—</td>
 
@@ -3580,7 +3584,7 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
                                                     }}
                                                 />
                                             ) : (
-                                                <span>{(r as ResourceRow).weeks[w] || 0}</span>
+                                                <span style={{display: 'inline-block', minWidth: '2em', textAlign: 'center'}}>{(r as ResourceRow).weeks[w] || "\u00A0"}</span>
                                             )}
                                         </div>
                                     </td>
@@ -3728,7 +3732,7 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
                                 </td>
 
                                 {/* Fn */}
-                                <td className={`px-2 py-1 align-middle text-center draggable-cell`} style={{ backgroundColor: getBg(teamFnColors[teamKeyFromTask(r as TaskRow)]), color: getText(teamFnColors[teamKeyFromTask(r as TaskRow)]), ...getCellBorderStyle(isSel(r.id,'fn')), ...getCellBorderStyleForDrag(r.id), ...getFrozenColumnStyle('fn', columnWidths) }} onMouseDown={markDragAllowed} onDoubleClick={()=>startEdit({rowId:r.id,col:"fn"})} onClick={()=>setSel({rowId:r.id,col:"fn"})} onContextMenu={(e)=>onContextMenuCellColor(e, r as TaskRow, 'fn', 'task')}>
+                                <td className={`px-2 py-1 align-middle text-center draggable-cell`} style={{ ...getCellBorderStyle(isSel(r.id,'fn')), ...getCellBorderStyleForDrag(r.id), ...getFrozenColumnStyle('fn', columnWidths), backgroundColor: getBg(teamFnColors[teamKeyFromTask(r as TaskRow)]), color: getText(teamFnColors[teamKeyFromTask(r as TaskRow)]) }} onMouseDown={markDragAllowed} onDoubleClick={()=>startEdit({rowId:r.id,col:"fn"})} onClick={()=>setSel({rowId:r.id,col:"fn"})} onContextMenu={(e)=>onContextMenuCellColor(e, r as TaskRow, 'fn', 'task')}>
                                     {editing?.rowId===r.id && editing?.col==="fn" ? (
                                         <Select
                                             options={functions.map(f => f.name)}
@@ -3955,7 +3959,7 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
             {/* Кнопка Добавить снизу - прилеплена к низу */}
             <div className="flex justify-start mt-auto" style={{ flexShrink: 0 }}>
                 <div className="relative">
-                    <button className="bg-black text-white rounded px-4 py-2" onClick={()=>setAddMenuOpen(v=>!v)}>+ Добавить</button>
+                    <button className="border rounded px-4 py-2" style={{backgroundColor: '#f3f4f6'}} onClick={()=>setAddMenuOpen(v=>!v)}>+ Добавить</button>
                     {addMenuOpen && (
                         <div className="absolute bottom-full mb-2 left-0 bg-white border rounded shadow p-1 w-40" style={{ zIndex: 1000 }}>
                             <button className="w-full text-left px-2 py-1 hover:bg-gray-100" onClick={addResourceBottom}>Ресурс</button>
@@ -3974,7 +3978,7 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
                     <col style={{ width: '150px' }} />
                     <col style={{ width: '150px' }} />
                 </colgroup>
-                <thead className="sticky top-0 z-10" style={{ backgroundColor: 'rgb(249, 250, 251)' }}>
+                <thead className="sticky top-0 z-10" style={{ backgroundColor: '#f3f4f6' }}>
                 <tr style={{ borderBottom: '1px solid rgb(226, 232, 240)' }}>
                     <th className="px-4 py-2 text-left" style={{ border: '1px solid rgb(226, 232, 240)', paddingRight: '0.5em', paddingLeft: '0.5em' }}>Код</th>
                     <th className="px-4 py-2 text-left" style={{ border: '1px solid rgb(226, 232, 240)', paddingRight: '0.5em', paddingLeft: '0.5em' }}>Начало</th>
@@ -4123,7 +4127,7 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
 
         {/* Кнопка Добавить снизу */}
         <div className="flex justify-start">
-            <button className="bg-black text-white rounded px-4 py-2" onClick={addSprint}>+ Добавить</button>
+            <button className="border rounded px-4 py-2" style={{backgroundColor: '#f3f4f6'}} onClick={addSprint}>+ Добавить</button>
         </div>
         </>
     ) : (
@@ -4136,7 +4140,7 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
                     <col style={{ width: '150px' }} />
                     <col style={{ width: '150px' }} />
                 </colgroup>
-                <thead className="sticky top-0 z-10" style={{ backgroundColor: 'rgb(249, 250, 251)' }}>
+                <thead className="sticky top-0 z-10" style={{ backgroundColor: '#f3f4f6' }}>
                 <tr style={{ borderBottom: '1px solid rgb(226, 232, 240)' }}>
                     <th className="px-4 py-2 text-left" style={{ border: '1px solid rgb(226, 232, 240)', paddingRight: '0.5em', paddingLeft: '0.5em' }}>Название</th>
                     <th className="px-4 py-2 text-left" style={{ border: '1px solid rgb(226, 232, 240)', paddingRight: '0.5em', paddingLeft: '0.5em' }}>Проект в JIRA</th>
@@ -4343,8 +4347,8 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
                     ))}
                 </div>
                 <div className="mt-2 flex justify-between">
-                    <button className="text-xs underline" onClick={()=>clearFilter(filterUi.col)} data-testid="filter-clear-button">Сбросить</button>
-                    <button className="text-xs underline" onClick={()=>setFilterUi(null)} data-testid="filter-ok-button">ОК</button>
+                    <button className="text-xs border rounded px-2 py-1" style={{backgroundColor: '#f3f4f6'}} onClick={()=>clearFilter(filterUi.col)} data-testid="filter-clear-button">Сбросить</button>
+                    <button className="text-xs border rounded px-2 py-1" style={{backgroundColor: '#f3f4f6'}} onClick={()=>setFilterUi(null)} data-testid="filter-ok-button">ОК</button>
                 </div>
             </div>
         </div>
@@ -4408,7 +4412,7 @@ function renderHeadWithFilter(label: string, col: ColumnId, _filters: any, isFil
         : "text-xs text-gray-500";
     const buttonStyle = filterActive 
         ? { padding: '1px 2px', backgroundColor: '#166534', color: '#ffffff' } // Force green background and white text with inline styles
-        : { padding: '1px 2px' };
+        : { padding: '1px 2px', backgroundColor: '#d1d5db' };
     
     // Определяем стили закрепления для колонок
     const getFrozenStyle = (col: ColumnId) => getFrozenColumnStyle(col, columnWidths);
@@ -4422,7 +4426,8 @@ function renderHeadWithFilter(label: string, col: ColumnId, _filters: any, isFil
                 paddingRight: '0.5em', 
                 paddingLeft: '0.5em', 
                 position: 'relative',
-                ...getFrozenStyle(col)
+                ...getFrozenStyle(col),
+                backgroundColor: '#f3f4f6'
             }}
         >
             <div className="flex items-center justify-between">
