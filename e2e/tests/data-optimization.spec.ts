@@ -140,7 +140,7 @@ test.describe('Data Optimization Tests', () => {
 
     // Находим первую строку ресурса (используем существующий ресурс)
     const testResourceId = 'dddddddd-0000-0000-0000-000000000002';
-    const resourceCell = page.getByTestId(`resource-cell-${testResourceId}`);
+    const resourceCell = page.getByTestId(`fn-cell-${testResourceId}`);
     await expect(resourceCell).toBeVisible({ timeout: 5000 });
 
     // Редактируем название ресурса
@@ -240,7 +240,7 @@ test.describe('Data Optimization Tests', () => {
 
     // Сразу редактируем ресурс (в пределах 2 секунд)
     const testResourceId = 'dddddddd-0000-0000-0000-000000000002';
-    const resourceCell = page.getByTestId(`resource-cell-${testResourceId}`);
+    const resourceCell = page.getByTestId(`fn-cell-${testResourceId}`);
     await expect(resourceCell).toBeVisible({ timeout: 5000 });
 
     await resourceCell.dblclick();

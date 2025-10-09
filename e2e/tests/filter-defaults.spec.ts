@@ -15,20 +15,17 @@ test.describe('Filter Defaults for New Items', () => {
     await page.waitForTimeout(1000);
 
     // Шаг 2: Открываем фильтр по колонке Team
-    // Находим заголовок Team и кнопку фильтра
-    const teamHeader = page.locator('th').filter({ hasText: /^Team/ }).first();
+    const teamHeader = page.getByTestId('header-team');
     await expect(teamHeader).toBeVisible({ timeout: 5000 });
     
     // Находим кнопку фильтра в заголовке
-    const filterButton = teamHeader.locator('button[title*="Фильтр"]').or(teamHeader.locator('button').first());
+    const filterButton = page.getByTestId('filter-team-button');
     await filterButton.click();
     await page.waitForTimeout(500);
 
     // Шаг 3: Выбираем команду "Demo" в фильтре
-    // Ищем чекбокс для "Demo"
-    const demoLabel = page.locator('label').filter({ hasText: /^Demo$/ }).first();
-    await expect(demoLabel).toBeVisible({ timeout: 2000 });
-    const demoCheckbox = demoLabel.locator('input[type="checkbox"]');
+    const demoCheckbox = page.getByTestId('filter-checkbox-Demo');
+    await expect(demoCheckbox).toBeVisible({ timeout: 2000 });
     await demoCheckbox.click();
     
     // Закрываем фильтр, кликнув вне его
@@ -36,11 +33,11 @@ test.describe('Filter Defaults for New Items', () => {
     await page.waitForTimeout(500);
 
     // Шаг 4: Добавляем новый ресурс
-    const addButton = page.locator('button', { hasText: '+ Добавить' }).first();
+    const addButton = page.getByTestId('add-button');
     await expect(addButton).toBeVisible({ timeout: 5000 });
     await addButton.click();
 
-    const resourceButton = page.locator('button', { hasText: 'Ресурс' }).first();
+    const resourceButton = page.getByTestId('add-resource-button');
     await expect(resourceButton).toBeVisible({ timeout: 2000 });
     await resourceButton.click();
 
@@ -66,14 +63,15 @@ test.describe('Filter Defaults for New Items', () => {
     // Ищем последнюю строку (новый ресурс)
     const newResourceRow = allRows.nth(rowCount - 1);
     await expect(newResourceRow).toBeVisible({ timeout: 3000 });
+    const newResourceId = await newResourceRow.getAttribute('data-row-id');
 
     // Шаг 6: Проверяем, что команда "Demo" уже установлена
-    const teamCell = newResourceRow.locator('td').nth(2); // Team - 3-я колонка
+    const teamCell = page.getByTestId(`team-cell-${newResourceId}`);
     await expect(teamCell).toContainText('Demo', { timeout: 2000 });
     console.log('✅ New resource has Team="Demo" from filter defaults');
 
     // Шаг 7: Добавляем Fn чтобы сохранить ресурс
-    const fnCell = newResourceRow.locator('td').nth(3); // Fn - 4-я колонка
+    const fnCell = page.getByTestId(`fn-cell-${newResourceId}`);
     await fnCell.click({ clickCount: 2 });
     await page.waitForTimeout(300);
     await page.keyboard.type(fnValue);
@@ -82,19 +80,16 @@ test.describe('Filter Defaults for New Items', () => {
     console.log(`Resource with FN="${fnValue}" and Team="Demo" added`);
 
     // Шаг 8: Проверяем, что ресурс виден в отфильтрованной таблице
-    const fnCell2 = page.locator('td').filter({ hasText: fnValue });
-    await expect(fnCell2).toBeVisible({ timeout: 5000 });
+    await expect(fnCell).toContainText(fnValue, { timeout: 5000 });
     console.log('✅ New resource is visible with filter active');
     
     // Шаг 9: Очищаем фильтр чтобы увидеть все элементы
-    const teamHeader2 = page.locator('th').filter({ hasText: /^Team/ }).first();
-    const filterButton2 = teamHeader2.locator('button[title*="Фильтр"]').or(teamHeader2.locator('button').first());
+    const filterButton2 = page.getByTestId('filter-team-button');
     await filterButton2.click();
     await page.waitForTimeout(300);
     
     // Снимаем галку с Demo
-    const demoLabel2 = page.locator('label').filter({ hasText: /^Demo$/ }).first();
-    const demoCheckbox2 = demoLabel2.locator('input[type="checkbox"]');
+    const demoCheckbox2 = page.getByTestId('filter-checkbox-Demo');
     await demoCheckbox2.click();
     
     // Закрываем фильтр
@@ -102,18 +97,15 @@ test.describe('Filter Defaults for New Items', () => {
     await page.waitForTimeout(500);
 
     // Шаг 10: Проверяем, что ресурс все еще виден после снятия фильтра
-    await expect(fnCell2).toBeVisible({ timeout: 5000 });
-    
-    const savedResourceRow = fnCell2.locator('xpath=ancestor::tr');
-    const savedTeamCell = savedResourceRow.locator('td').nth(2);
-    await expect(savedTeamCell).toContainText('Demo');
+    await expect(fnCell).toContainText(fnValue, { timeout: 5000 });
+    await expect(teamCell).toContainText('Demo');
     console.log('✅ Resource with Team="Demo" is visible without filter');
 
     // Шаг 11: Удаляем ресурс
-    await savedResourceRow.click({ button: 'right' });
+    await newResourceRow.click({ button: 'right', force: true });
     await page.waitForTimeout(500);
 
-    const deleteButton = page.locator('button').filter({ hasText: /Удалить|Delete/i }).first();
+    const deleteButton = page.getByTestId('delete-row-button');
     await expect(deleteButton).toBeVisible({ timeout: 3000 });
     await deleteButton.click();
 
@@ -135,17 +127,16 @@ test.describe('Filter Defaults for New Items', () => {
     await page.waitForTimeout(1000);
 
     // Шаг 2: Открываем фильтр по колонке Team
-    const teamHeader = page.locator('th').filter({ hasText: /^Team/ }).first();
+    const teamHeader = page.getByTestId('header-team');
     await expect(teamHeader).toBeVisible({ timeout: 5000 });
     
-    const filterButton = teamHeader.locator('button[title*="Фильтр"]').or(teamHeader.locator('button').first());
+    const filterButton = page.getByTestId('filter-team-button');
     await filterButton.click();
     await page.waitForTimeout(500);
 
     // Шаг 3: Выбираем команду "Test" в фильтре
-    const testLabel = page.locator('label').filter({ hasText: /^Test$/ }).first();
-    await expect(testLabel).toBeVisible({ timeout: 2000 });
-    const testCheckbox = testLabel.locator('input[type="checkbox"]');
+    const testCheckbox = page.getByTestId('filter-checkbox-Test');
+    await expect(testCheckbox).toBeVisible({ timeout: 2000 });
     await testCheckbox.click();
     
     // Закрываем фильтр
@@ -153,11 +144,11 @@ test.describe('Filter Defaults for New Items', () => {
     await page.waitForTimeout(500);
 
     // Шаг 4: Добавляем новую задачу
-    const addButton = page.locator('button', { hasText: '+ Добавить' }).first();
+    const addButton = page.getByTestId('add-button');
     await expect(addButton).toBeVisible({ timeout: 5000 });
     await addButton.click();
 
-    const taskButton = page.locator('button', { hasText: 'Задача' }).first();
+    const taskButton = page.getByTestId('add-task-button');
     await expect(taskButton).toBeVisible({ timeout: 2000 });
     await taskButton.click();
 
@@ -183,14 +174,15 @@ test.describe('Filter Defaults for New Items', () => {
     // Ищем последнюю строку (новая задача)
     const newTaskRow = allRows.nth(rowCount - 1);
     await expect(newTaskRow).toBeVisible({ timeout: 3000 });
+    const newTaskId = await newTaskRow.getAttribute('data-row-id');
 
     // Шаг 6: Проверяем, что команда "Test" уже установлена
-    const teamCell = newTaskRow.locator('td').nth(5); // Team - 6-я колонка для задач
+    const teamCell = page.getByTestId(`team-cell-${newTaskId}`);
     await expect(teamCell).toContainText('Test', { timeout: 2000 });
     console.log('✅ New task has Team="Test" from filter defaults');
 
     // Шаг 7: Добавляем название задачи чтобы сохранить
-    const taskCell = newTaskRow.locator('td').nth(4); // Task - 5-я колонка
+    const taskCell = page.getByTestId(`task-cell-${newTaskId}`);
     await taskCell.click({ clickCount: 2 });
     await page.waitForTimeout(300);
     await page.keyboard.type(taskName);
@@ -199,19 +191,16 @@ test.describe('Filter Defaults for New Items', () => {
     console.log(`Task "${taskName}" with Team="Test" added`);
 
     // Шаг 8: Проверяем, что задача видна в отфильтрованной таблице
-    const taskCell2 = page.locator('td').filter({ hasText: taskName });
-    await expect(taskCell2).toBeVisible({ timeout: 5000 });
+    await expect(taskCell).toContainText(taskName, { timeout: 5000 });
     console.log('✅ New task is visible with filter active');
     
     // Шаг 9: Очищаем фильтр чтобы увидеть все элементы
-    const teamHeader2 = page.locator('th').filter({ hasText: /^Team/ }).first();
-    const filterButton2 = teamHeader2.locator('button[title*="Фильтр"]').or(teamHeader2.locator('button').first());
+    const filterButton2 = page.getByTestId('filter-team-button');
     await filterButton2.click();
     await page.waitForTimeout(300);
     
     // Снимаем галку с Test
-    const testLabel2 = page.locator('label').filter({ hasText: /^Test$/ }).first();
-    const testCheckbox2 = testLabel2.locator('input[type="checkbox"]');
+    const testCheckbox2 = page.getByTestId('filter-checkbox-Test');
     await testCheckbox2.click();
     
     // Закрываем фильтр
@@ -219,18 +208,15 @@ test.describe('Filter Defaults for New Items', () => {
     await page.waitForTimeout(500);
 
     // Шаг 10: Проверяем, что задача все еще видна после снятия фильтра
-    await expect(taskCell2).toBeVisible({ timeout: 5000 });
-    
-    const savedTaskRow = taskCell2.locator('xpath=ancestor::tr');
-    const savedTeamCell = savedTaskRow.locator('td').nth(5);
-    await expect(savedTeamCell).toContainText('Test');
+    await expect(taskCell).toContainText(taskName, { timeout: 5000 });
+    await expect(teamCell).toContainText('Test');
     console.log('✅ Task with Team="Test" is visible without filter');
 
     // Шаг 11: Удаляем задачу
-    await savedTaskRow.click({ button: 'right' });
+    await newTaskRow.click({ button: 'right', force: true });
     await page.waitForTimeout(500);
 
-    const deleteButton = page.locator('button').filter({ hasText: /Удалить|Delete/i }).first();
+    const deleteButton = page.getByTestId('delete-row-button');
     await expect(deleteButton).toBeVisible({ timeout: 3000 });
     await deleteButton.click();
 
@@ -252,24 +238,22 @@ test.describe('Filter Defaults for New Items', () => {
     await page.waitForTimeout(1000);
 
     // Шаг 2: Открываем фильтр по колонке Team
-    const teamHeader = page.locator('th').filter({ hasText: /^Team/ }).first();
+    const teamHeader = page.getByTestId('header-team');
     await expect(teamHeader).toBeVisible({ timeout: 5000 });
     
-    const filterButton = teamHeader.locator('button[title*="Фильтр"]').or(teamHeader.locator('button').first());
+    const filterButton = page.getByTestId('filter-team-button');
     await filterButton.click();
     await page.waitForTimeout(500);
 
     // Шаг 3: Выбираем две команды в фильтре: Demo и Test
     // Сначала Demo
-    const demoLabel = page.locator('label').filter({ hasText: /^Demo$/ }).first();
-    await expect(demoLabel).toBeVisible({ timeout: 2000 });
-    const demoCheckbox = demoLabel.locator('input[type="checkbox"]');
+    const demoCheckbox = page.getByTestId('filter-checkbox-Demo');
+    await expect(demoCheckbox).toBeVisible({ timeout: 2000 });
     await demoCheckbox.click();
     
     // Затем Test
-    const testLabel = page.locator('label').filter({ hasText: /^Test$/ }).first();
-    await expect(testLabel).toBeVisible({ timeout: 2000 });
-    const testCheckbox = testLabel.locator('input[type="checkbox"]');
+    const testCheckbox = page.getByTestId('filter-checkbox-Test');
+    await expect(testCheckbox).toBeVisible({ timeout: 2000 });
     await testCheckbox.click();
     
     // Закрываем фильтр
@@ -277,11 +261,11 @@ test.describe('Filter Defaults for New Items', () => {
     await page.waitForTimeout(500);
 
     // Шаг 4: Добавляем новый ресурс
-    const addButton = page.locator('button', { hasText: '+ Добавить' }).first();
+    const addButton = page.getByTestId('add-button');
     await expect(addButton).toBeVisible({ timeout: 5000 });
     await addButton.click();
 
-    const resourceButton = page.locator('button', { hasText: 'Ресурс' }).first();
+    const resourceButton = page.getByTestId('add-resource-button');
     await expect(resourceButton).toBeVisible({ timeout: 2000 });
     await resourceButton.click();
 
@@ -307,9 +291,10 @@ test.describe('Filter Defaults for New Items', () => {
     // Ищем последнюю строку (новый ресурс)
     const newResourceRow = allRows.nth(rowCount - 1);
     await expect(newResourceRow).toBeVisible({ timeout: 3000 });
+    const newResourceId = await newResourceRow.getAttribute('data-row-id');
 
     // Шаг 6: Проверяем, что команда установлена на первое значение из фильтра (Demo)
-    const teamCell = newResourceRow.locator('td').nth(2);
+    const teamCell = page.getByTestId(`team-cell-${newResourceId}`);
     const teamText = await teamCell.textContent();
     console.log(`Team cell text: "${teamText}"`);
     
@@ -319,7 +304,7 @@ test.describe('Filter Defaults for New Items', () => {
     console.log(`✅ New resource has Team from filter defaults: "${teamText}"`);
 
     // Шаг 7: Добавляем Fn чтобы сохранить ресурс
-    const fnCell = newResourceRow.locator('td').nth(3);
+    const fnCell = page.getByTestId(`fn-cell-${newResourceId}`);
     await fnCell.click({ clickCount: 2 });
     await page.waitForTimeout(300);
     await page.keyboard.type(fnValue);
@@ -327,10 +312,10 @@ test.describe('Filter Defaults for New Items', () => {
 
     // Шаг 8: Удаляем ресурс (cleanup)
     await page.waitForTimeout(2000);
-    await newResourceRow.click({ button: 'right' });
+    await newResourceRow.click({ button: 'right', force: true });
     await page.waitForTimeout(500);
 
-    const deleteButton = page.locator('button').filter({ hasText: /Удалить|Delete/i }).first();
+    const deleteButton = page.getByTestId('delete-row-button');
     await expect(deleteButton).toBeVisible({ timeout: 3000 });
     await deleteButton.click();
 

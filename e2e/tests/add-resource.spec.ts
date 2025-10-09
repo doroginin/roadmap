@@ -80,7 +80,7 @@ test.describe('Add Resource functionality', () => {
     await page.waitForTimeout(500);
     
     // Находим ячейку team снова после прокрутки
-    const teamCell = newResourceRow.getByTestId(`team`);
+    const teamCell = newResourceRow.getByTestId(`team-cell-${newResourceId}`);
     
     // Кликаем два раза на ячейку team
     await teamCell.click({ clickCount: 2 });

@@ -332,12 +332,14 @@ export function TeamMultiSelect({ teams, selectedTeams, onSelect, onSaveValue, o
                       e.currentTarget.style.backgroundColor = 'transparent';
                     }
                   }}
+                  data-testid={`team-option-${team}`}
                 >
                   <input
                     type="checkbox"
                     style={{ marginRight: '8px' }}
                     checked={selectedTeams.includes(team)}
                     onChange={() => handleTeamSave(team)}
+                    data-testid={`team-checkbox-${team}`}
                   />
                   <span>{team}</span>
                 </label>

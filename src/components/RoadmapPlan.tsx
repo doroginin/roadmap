@@ -3497,7 +3497,7 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
                                     startEdit({rowId:r.id,col:"team"});
                                 }} onClick={()=>{
                                     setSel({rowId:r.id,col:"team"});
-                                }} data-testid={`team`}>
+                                }} data-testid={`team-cell-${r.id}`}>
                                 {editing?.rowId===r.id && editing?.col==="team" ? (
                                     <div className="w-full h-full">
                                         <TeamMultiSelect
@@ -3523,7 +3523,7 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
                                 </td>
 
                                 {/* Fn */}
-                                <td className={`px-2 py-1 align-middle text-center draggable-cell`} style={{ ...getCellBorderStyle(isSel(r.id,'fn')), ...getCellBorderStyleForDrag(r.id), ...getFrozenColumnStyle('fn', columnWidths), backgroundColor: getBg(teamFnColors[teamKeyFromResource(r as ResourceRow)]), color: getText(teamFnColors[teamKeyFromResource(r as ResourceRow)]) }} onMouseDown={markDragAllowed} onDoubleClick={()=>startEdit({rowId:r.id,col:"fn"})} onClick={()=>setSel({rowId:r.id,col:"fn"})} onContextMenu={(e)=>onContextMenuCellColor(e, r as ResourceRow, 'fn', 'resource')} data-testid={`resource-cell-${r.id}`}>
+                                <td className={`px-2 py-1 align-middle text-center draggable-cell`} style={{ ...getCellBorderStyle(isSel(r.id,'fn')), ...getCellBorderStyleForDrag(r.id), ...getFrozenColumnStyle('fn', columnWidths), backgroundColor: getBg(teamFnColors[teamKeyFromResource(r as ResourceRow)]), color: getText(teamFnColors[teamKeyFromResource(r as ResourceRow)]) }} onMouseDown={markDragAllowed} onDoubleClick={()=>startEdit({rowId:r.id,col:"fn"})} onClick={()=>setSel({rowId:r.id,col:"fn"})} onContextMenu={(e)=>onContextMenuCellColor(e, r as ResourceRow, 'fn', 'resource')} data-testid={`fn-cell-${r.id}`}>
                                     {editing?.rowId===r.id && editing?.col==="fn" ? (
                                         <input autoFocus className="w-full h-full box-border min-w-0 outline-none bg-transparent" style={{ border: 'none', padding: 0, margin: 0 }} defaultValue={r.fn} data-testid={`resource-input-${r.id}`}
                                                onKeyDown={(e)=>{
@@ -3738,7 +3738,7 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
                                     startEdit({rowId:r.id,col:"team"});
                                 }} onClick={()=>{
                                     setSel({rowId:r.id,col:"team"});
-                                }} data-testid={`team`}>
+                                }} data-testid={`team-cell-${r.id}`}>
                                     {editing?.rowId===r.id && editing?.col==="team" ? (
                                         <div className="w-full h-full">
                                             <Select
@@ -3768,7 +3768,7 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
                                 </td>
 
                                 {/* Fn */}
-                                <td className={`px-2 py-1 align-middle text-center draggable-cell`} style={{ ...getCellBorderStyle(isSel(r.id,'fn')), ...getCellBorderStyleForDrag(r.id), ...getFrozenColumnStyle('fn', columnWidths), backgroundColor: getBg(teamFnColors[teamKeyFromTask(r as TaskRow)]), color: getText(teamFnColors[teamKeyFromTask(r as TaskRow)]) }} onMouseDown={markDragAllowed} onDoubleClick={()=>startEdit({rowId:r.id,col:"fn"})} onClick={()=>setSel({rowId:r.id,col:"fn"})} onContextMenu={(e)=>onContextMenuCellColor(e, r as TaskRow, 'fn', 'task')}>
+                                <td className={`px-2 py-1 align-middle text-center draggable-cell`} style={{ ...getCellBorderStyle(isSel(r.id,'fn')), ...getCellBorderStyleForDrag(r.id), ...getFrozenColumnStyle('fn', columnWidths), backgroundColor: getBg(teamFnColors[teamKeyFromTask(r as TaskRow)]), color: getText(teamFnColors[teamKeyFromTask(r as TaskRow)]) }} onMouseDown={markDragAllowed} onDoubleClick={()=>startEdit({rowId:r.id,col:"fn"})} onClick={()=>setSel({rowId:r.id,col:"fn"})} onContextMenu={(e)=>onContextMenuCellColor(e, r as TaskRow, 'fn', 'task')} data-testid={`fn-cell-${r.id}`}>
                                     {editing?.rowId===r.id && editing?.col==="fn" ? (
                                         <Select
                                             options={functions.map(f => f.name)}
@@ -3995,11 +3995,11 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
             {/* Кнопка Добавить снизу - прилеплена к низу */}
             <div className="flex justify-start mt-auto" style={{ flexShrink: 0 }}>
                 <div className="relative">
-                    <button className="border rounded px-4 py-2" style={{backgroundColor: '#f3f4f6'}} onClick={()=>setAddMenuOpen(v=>!v)}>+ Добавить</button>
+                    <button className="border rounded px-4 py-2" style={{backgroundColor: '#f3f4f6'}} onClick={()=>setAddMenuOpen(v=>!v)} data-testid="add-button">+ Добавить</button>
                     {addMenuOpen && (
-                        <div className="absolute bottom-full mb-2 left-0 bg-white border rounded shadow p-1 w-40" style={{ zIndex: 1000 }}>
-                            <button className="w-full text-left px-2 py-1 hover:bg-gray-100" onClick={addResourceBottom}>Ресурс</button>
-                            <button className="w-full text-left px-2 py-1 hover:bg-gray-100" onClick={addTaskBottom}>Задача</button>
+                        <div className="absolute bottom-full mb-2 left-0 bg-white border rounded shadow p-1 w-40" style={{ zIndex: 1000 }} data-testid="add-menu">
+                            <button className="w-full text-left px-2 py-1 hover:bg-gray-100" onClick={addResourceBottom} data-testid="add-resource-button">Ресурс</button>
+                            <button className="w-full text-left px-2 py-1 hover:bg-gray-100" onClick={addTaskBottom} data-testid="add-task-button">Задача</button>
                         </div>
                     )}
                 </div>
@@ -4323,10 +4323,10 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
             <div className="fixed inset-0 z-40" onMouseDown={()=>setCtx(null)} />
             <div className="fixed z-50 bg-white shadow-lg rounded-md border border-gray-200 p-2" style={{left:ctx.x, top:ctx.y}} onMouseDown={(e)=>e.stopPropagation()}>
                 <div className="bg-white border rounded shadow text-sm">
-                    <button className="block w-full text-left px-3 py-1 hover:bg-gray-100" onClick={()=>duplicateRow(ctx.rowId)}>Дублировать</button>
-                    <button className="block w-full text-left px-3 py-1 hover:bg-gray-100" onClick={()=>deleteRow(ctx.rowId)}>Удалить</button>
-                    <button className="block w-full text-left px-3 py-1 hover:bg-gray-100" onClick={()=>addRowAbove(ctx.rowId)}>Добавить выше</button>
-                    <button className="block w-full text-left px-3 py-1 hover:bg-gray-100" onClick={()=>addRowBelow(ctx.rowId)}>Добавить ниже</button>
+                    <button className="block w-full text-left px-3 py-1 hover:bg-gray-100" onClick={()=>duplicateRow(ctx.rowId)} data-testid="duplicate-row-button">Дублировать</button>
+                    <button className="block w-full text-left px-3 py-1 hover:bg-gray-100" onClick={()=>deleteRow(ctx.rowId)} data-testid="delete-row-button">Удалить</button>
+                    <button className="block w-full text-left px-3 py-1 hover:bg-gray-100" onClick={()=>addRowAbove(ctx.rowId)} data-testid="add-row-above-button">Добавить выше</button>
+                    <button className="block w-full text-left px-3 py-1 hover:bg-gray-100" onClick={()=>addRowBelow(ctx.rowId)} data-testid="add-row-below-button">Добавить ниже</button>
                     {ctx.field && (
                         <button
                             className="block w-full text-left px-3 py-1 hover:bg-gray-100"
@@ -4465,6 +4465,7 @@ function renderHeadWithFilter(label: string, col: ColumnId, _filters: any, isFil
                 ...getFrozenStyle(col),
                 backgroundColor: '#f3f4f6'
             }}
+            data-testid={`header-${col}`}
         >
             <div className="flex items-center justify-between">
                 <span>{label}</span>
