@@ -25,8 +25,6 @@ export async function fetchRoadmapData(): Promise<ApiResponse<RoadmapData>> {
         version: 0,
         teams: [], 
         sprints: [], 
-        functions: [],
-        employees: [],
         resources: [],
         tasks: []
       }, 
@@ -81,6 +79,8 @@ export async function saveRoadmapChanges(
   userId?: string
 ): Promise<ApiResponse<SaveResponse>> {
   try {
+    console.log('📤 saveRoadmapChanges: sending changes', JSON.stringify(changes, null, 2));
+    
     const response = await fetch(`${API_BASE_URL}/api/v1/data`, {
       method: 'PUT',
       headers: {

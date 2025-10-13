@@ -1,8 +1,8 @@
 import { useCallback, useState } from 'react';
-import type { Task, Resource, TeamData, Sprint, Function, Employee } from '../api/types';
+import type { Task, Resource, TeamData, Sprint } from '../api/types';
 
 // Типы для отслеживания изменений
-export type EntityType = 'task' | 'resource' | 'team' | 'sprint' | 'function' | 'employee';
+export type EntityType = 'task' | 'resource' | 'team' | 'sprint';
 
 export interface CellChange {
   type: 'cell';
@@ -42,15 +42,11 @@ export interface ChangeLog {
   resources?: Resource[];
   teams?: TeamData[];
   sprints?: Sprint[];
-  functions?: Function[];
-  employees?: Employee[];
   deleted?: {
     tasks?: string[];
     resources?: string[];
     teams?: string[];
     sprints?: string[];
-    functions?: string[];
-    employees?: string[];
   };
 }
 
@@ -176,6 +172,7 @@ export function useChangeTracker() {
           // CellChange - нужно собрать все изменения для одного объекта
           const existing = updated.get(change.id) || added.get(change.id);
           if (existing) {
+            // Обновляем существующую запись в added или updated
             existing[change.field] = change.newValue;
           } else {
             // Создаем новый объект с изменением
@@ -185,7 +182,7 @@ export function useChangeTracker() {
         }
       });
 
-      // Добавляем в changeLog
+      // Объединяем added и updated
       const allItems = [...added.values(), ...updated.values()];
       if (allItems.length > 0) {
         (changeLog as any)[`${entityType}s`] = allItems;
@@ -200,8 +197,9 @@ export function useChangeTracker() {
       changeLog.deleted = deleted;
     }
 
+    console.log('🔍 buildChangeLog result:', changeLog);
     return changeLog;
-  }, [changes]);
+  }, [changes, hasUnsavedChanges]);
 
   // Очищаем изменения после успешного сохранения
   const clearChanges = useCallback(() => {

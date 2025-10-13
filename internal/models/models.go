@@ -46,34 +46,16 @@ type Sprint struct {
 	UpdatedAt time.Time `json:"updatedAt" db:"updated_at"`
 }
 
-// Function represents a function in the system
-type Function struct {
-	ID        uuid.UUID `json:"id" db:"id"`
-	Name      *string   `json:"name,omitempty" db:"name"`
-	Color     *string   `json:"color,omitempty" db:"color"`
-	CreatedAt time.Time `json:"createdAt" db:"created_at"`
-	UpdatedAt time.Time `json:"updatedAt" db:"updated_at"`
-}
-
-// Employee represents an employee in the system
-type Employee struct {
-	ID        uuid.UUID `json:"id" db:"id"`
-	Name      *string   `json:"name,omitempty" db:"name"`
-	Color     *string   `json:"color,omitempty" db:"color"`
-	CreatedAt time.Time `json:"createdAt" db:"created_at"`
-	UpdatedAt time.Time `json:"updatedAt" db:"updated_at"`
-}
-
 // Resource represents a resource row
 type Resource struct {
 	ID           uuid.UUID        `json:"id" db:"id"`
-	Kind         RowKind          `json:"kind"`                                  // Computed field for API responses
-	TeamIDs      *pq.StringArray  `json:"team,omitempty" db:"team_ids"`          // Team names for display (populated from Team table)
-	TeamUUIDs    pq.StringArray   `json:"teamIds,omitempty"`                     // Team UUIDs for saving (populated separately)
-	FunctionID   *uuid.UUID       `json:"functionId,omitempty" db:"function_id"` // Function UUID for saving
-	Function     string           `json:"fn"`                                    // Function name for display (populated from Function table)
-	EmployeeID   *uuid.UUID       `json:"employeeId,omitempty" db:"employee_id"` // Employee UUID for saving
-	Employee     *string          `json:"empl,omitempty"`                        // Employee name for display (populated from Employee table)
+	Kind         RowKind          `json:"kind"`                                     // Computed field for API responses
+	TeamIDs      *pq.StringArray  `json:"team,omitempty" db:"team_ids"`             // Team names for display (populated from Team table)
+	TeamUUIDs    pq.StringArray   `json:"teamIds,omitempty"`                        // Team UUIDs for saving (populated separately)
+	Function     *string          `json:"fn,omitempty" db:"function"`               // Function name stored as string
+	Employee     *string          `json:"empl,omitempty" db:"employee"`             // Employee name stored as string
+	FnBgColor    *string          `json:"fnBgColor,omitempty" db:"fn_bg_color"`     // Function background color
+	FnTextColor  *string          `json:"fnTextColor,omitempty" db:"fn_text_color"` // Function text color
 	Weeks        *pq.Float64Array `json:"weeks,omitempty" db:"weeks"`
 	DisplayOrder *int             `json:"displayOrder,omitempty" db:"display_order"`
 	CreatedAt    time.Time        `json:"createdAt" db:"created_at"`
@@ -88,12 +70,10 @@ type Task struct {
 	SprintsAuto       *pq.StringArray  `json:"sprintsAuto,omitempty" db:"sprints_auto"`
 	Epic              *string          `json:"epic,omitempty" db:"epic"`
 	TaskName          *string          `json:"task,omitempty" db:"task_name"`
-	TeamID            *uuid.UUID       `json:"teamId,omitempty" db:"team_id"`         // Team UUID for saving
-	Team              string           `json:"team"`                                  // Team name for display (populated from Team table)
-	FunctionID        *uuid.UUID       `json:"functionId,omitempty" db:"function_id"` // Function UUID for saving
-	Function          string           `json:"fn"`                                    // Function name for display (populated from Function table)
-	EmployeeID        *uuid.UUID       `json:"employeeId,omitempty" db:"employee_id"` // Employee UUID for saving
-	Employee          *string          `json:"empl,omitempty"`                        // Employee name for display (populated from Employee table)
+	TeamID            *uuid.UUID       `json:"teamId,omitempty" db:"team_id"` // Team UUID for saving
+	Team              string           `json:"team"`                          // Team name for display (populated from Team table)
+	Function          *string          `json:"fn,omitempty" db:"function"`    // Function name stored as string
+	Employee          *string          `json:"empl,omitempty" db:"employee"`  // Employee name stored as string
 	PlanEmpl          *float64         `json:"planEmpl,omitempty" db:"plan_empl"`
 	PlanWeeks         *float64         `json:"planWeeks,omitempty" db:"plan_weeks"`
 	BlockerIDs        *pq.StringArray  `json:"blockerIds,omitempty" db:"blocker_ids"`
@@ -162,8 +142,6 @@ type DataResponse struct {
 	Version   int64      `json:"version"`
 	Teams     []Team     `json:"teams"`
 	Sprints   []Sprint   `json:"sprints"`
-	Functions []Function `json:"functions"`
-	Employees []Employee `json:"employees"`
 	Resources []Resource `json:"resources"`
 	Tasks     []Task     `json:"tasks"`
 }
@@ -185,11 +163,45 @@ type UpdateRequest struct {
 	UserID    string                 `json:"userId"` // Required field
 	Teams     []Team                 `json:"teams,omitempty"`
 	Sprints   []Sprint               `json:"sprints,omitempty"`
-	Functions []Function             `json:"functions,omitempty"`
-	Employees []Employee             `json:"employees,omitempty"`
-	Resources []Resource             `json:"resources,omitempty"`
-	Tasks     []Task                 `json:"tasks,omitempty"`
+	Resources []ResourceUpdate       `json:"resources,omitempty"`
+	Tasks     []TaskUpdate           `json:"tasks,omitempty"`
 	Deleted   map[string][]uuid.UUID `json:"deleted,omitempty"` // table_name -> array of IDs to delete
+}
+
+// ResourceUpdate represents a resource update request
+type ResourceUpdate struct {
+	ID           uuid.UUID        `json:"id"`
+	TeamIDs      *pq.StringArray  `json:"teamIds,omitempty"`
+	Function     *string          `json:"fn,omitempty"`
+	Employee     *string          `json:"empl,omitempty"`
+	FnBgColor    *string          `json:"fnBgColor,omitempty"`
+	FnTextColor  *string          `json:"fnTextColor,omitempty"`
+	Weeks        *pq.Float64Array `json:"weeks,omitempty"`
+	DisplayOrder *int             `json:"displayOrder,omitempty"`
+}
+
+// TaskUpdate represents a task update request
+type TaskUpdate struct {
+	ID                uuid.UUID        `json:"id"`
+	Status            *TaskStatus      `json:"status,omitempty"`
+	SprintsAuto       *pq.StringArray  `json:"sprintsAuto,omitempty"`
+	Epic              *string          `json:"epic,omitempty"`
+	TaskName          *string          `json:"task,omitempty"`
+	TeamID            *uuid.UUID       `json:"teamId,omitempty"`
+	Function          *string          `json:"fn,omitempty"`
+	Employee          *string          `json:"empl,omitempty"`
+	PlanEmpl          *float64         `json:"planEmpl,omitempty"`
+	PlanWeeks         *float64         `json:"planWeeks,omitempty"`
+	BlockerIDs        *pq.StringArray  `json:"blockerIds,omitempty"`
+	WeekBlockers      *pq.Int64Array   `json:"weekBlockers,omitempty"`
+	Fact              *float64         `json:"fact,omitempty"`
+	StartWeek         *int             `json:"startWeek,omitempty"`
+	EndWeek           *int             `json:"endWeek,omitempty"`
+	ExpectedStartWeek *int             `json:"expectedStartWeek,omitempty"`
+	ManualEdited      *bool            `json:"manualEdited,omitempty"`
+	AutoPlanEnabled   *bool            `json:"autoPlanEnabled,omitempty"`
+	Weeks             *pq.Float64Array `json:"weeks,omitempty"`
+	DisplayOrder      *int             `json:"displayOrder,omitempty"`
 }
 
 // UpdateResponse represents the response after updating data

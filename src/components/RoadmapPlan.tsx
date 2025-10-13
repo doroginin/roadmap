@@ -6,7 +6,7 @@ import { SaveStatus } from "./SaveStatus";
 import { normalizeColorValue, getBg, getText } from "./colorUtils";
 import { DEFAULT_BG } from "./colorDefaults";
 import { fetchRoadmapData } from "../api/roadmapApi";
-import type { RoadmapData, Function } from "../api/types";
+import type { RoadmapData } from "../api/types";
 import { generateUUID } from "../utils/uuid";
 
 // CSS стили для закрепления колонок
@@ -846,8 +846,67 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker, autoSave
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [rows, setRows] = useState<Row[]>([]);
-    const [functions, setFunctions] = useState<Function[]>([]);
     const [currentVersion, setCurrentVersion] = useState<number>(0);
+
+    // Функции для получения уникальных значений из данных
+    const getUniqueValues = useCallback((field: 'fn' | 'empl', teamFilter?: string) => {
+        const allRows = [...rows];
+        let filtered = allRows;
+        
+        // Если указан фильтр по команде, применяем его
+        if (teamFilter) {
+            filtered = allRows.filter(row => {
+                if (row.kind === 'task') {
+                    return (row as TaskRow).team === teamFilter;
+                }
+                if (row.kind === 'resource') {
+                    return (row as ResourceRow).team.includes(teamFilter);
+                }
+                return false;
+            });
+        }
+        
+        const values = new Set<string>();
+        filtered.forEach(row => {
+            const value = (row as any)[field];
+            if (value && typeof value === 'string' && value.trim()) {
+                values.add(value.trim());
+            }
+        });
+        
+        return Array.from(values).sort();
+    }, [rows]);
+
+    const getEmployeesForFunction = useCallback((fn: string, teamFilter?: string) => {
+        const allRows = [...rows];
+        let filtered = allRows;
+        
+        // Фильтруем по команде если указана
+        if (teamFilter) {
+            filtered = allRows.filter(row => {
+                if (row.kind === 'task') {
+                    return (row as TaskRow).team === teamFilter;
+                }
+                if (row.kind === 'resource') {
+                    return (row as ResourceRow).team.includes(teamFilter);
+                }
+                return false;
+            });
+        }
+        
+        // Фильтруем по функции
+        filtered = filtered.filter(row => (row as any).fn === fn);
+        
+        const employees = new Set<string>();
+        filtered.forEach(row => {
+            const empl = (row as any).empl;
+            if (empl && typeof empl === 'string' && empl.trim()) {
+                employees.add(empl.trim());
+            }
+        });
+        
+        return Array.from(employees).sort();
+    }, [rows]);
     
     // Helper function to prepare data for saving (convert names to UUIDs)
     const prepareDataForSave = useCallback((): RoadmapData | null => {
@@ -860,15 +919,11 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker, autoSave
                 return found?.id;
             }).filter(Boolean) as string[];
             
-            const functionUUID = functions.find(f => f.name === r.fn)?.id || r.functionId;
-            
             return {
                 id: r.id,
-                team: teamUUIDs.length > 0 ? teamUUIDs : undefined,
-                fn: r.fn,
-                functionId: functionUUID || undefined,
+                teamIds: teamUUIDs.length > 0 ? teamUUIDs : undefined,
+                fn: r.fn || undefined,
                 empl: r.empl || undefined,
-                employeeId: r.employeeId || undefined,
                 weeks: r.weeks || undefined,
                 displayOrder: r.displayOrder || undefined
             };
@@ -877,7 +932,6 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker, autoSave
         // Prepare tasks with UUIDs
         const preparedTasks = (tasks as TaskRow[]).map(t => {
             const teamUUID = teamData.find(team => team.name === t.team)?.id || t.teamId;
-            const functionUUID = functions.find(f => f.name === t.fn)?.id || t.functionId;
             
             return {
                 id: t.id,
@@ -886,10 +940,7 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker, autoSave
                 epic: t.epic || undefined,
                 task: t.task || undefined,
                 teamId: teamUUID || undefined,
-                team: t.team,
-                functionId: functionUUID || undefined,
-                fn: t.fn,
-                employeeId: t.employeeId || undefined,
+                fn: t.fn || undefined,
                 empl: t.empl || undefined,
                 planEmpl: t.planEmpl || undefined,
                 planWeeks: t.planWeeks || undefined,
@@ -916,14 +967,12 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker, autoSave
                 issueType: t.issueType
             })),
             sprints: sprints,
-            functions: functions,
-            employees: [],
             resources: preparedResources as any[],
             tasks: preparedTasks as any[]
         };
         
         return roadmapData;
-    }, [teamData, sprints, functions, currentVersion, rows]);
+    }, [teamData, sprints, currentVersion, rows]);
     
 
     // ===== Загрузка данных при монтировании компонента =====
@@ -973,7 +1022,6 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker, autoSave
                 setRows(allRows as Row[]);
                 setSprints(data.sprints || []);
                 setTeamData(data.teams || []);
-                setFunctions(data.functions || []);
                 setCurrentVersion(data.version || 0);
             } catch (err) {
                 setError(err instanceof Error ? err.message : 'Unknown error');
@@ -1002,7 +1050,7 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker, autoSave
                 onDataChange(dataToSave);
             }
         }
-    }, [rows, teamData, sprints, functions, onDataChange, prepareDataForSave]);
+    }, [rows, teamData, sprints, onDataChange, prepareDataForSave]);
 
     // ===== Последовательный пересчёт (как в формуле roadmap.js) =====
     type ResState = { res: ResourceRow; load: number[] };
@@ -3077,9 +3125,21 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
         // Находим текущую задачу для записи изменений
         const currentTask = computedRows.find(r => r.kind === "task" && r.id === id) as TaskRow | undefined;
         
+        // Расширяем patch с дополнительными полями для UUID-ов
+        const extendedPatch: any = { ...patch };
+        
+        // Если обновляется team (имя), также обновляем teamId (UUID)
+        if ('team' in patch && patch.team) {
+            const found = teamData.find(t => t.name === patch.team);
+            if (found?.id) {
+                extendedPatch.teamId = found.id;
+            }
+        }
+        
+        
         // Записываем изменения в лог
         if (changeTracker && currentTask) {
-            Object.entries(patch).forEach(([key, value]) => {
+            Object.entries(extendedPatch).forEach(([key, value]) => {
                 const oldValue = (currentTask as any)[key];
                 if (oldValue !== value) {
                     changeTracker.addCellChange('task', id, key, oldValue, value);
@@ -3088,7 +3148,7 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
         }
         
         setRows(prev => {
-            const newRows = prev.map(r => (r.kind === "task" && r.id === id) ? { ...r, ...patch } : r);
+            const newRows = prev.map(r => (r.kind === "task" && r.id === id) ? { ...r, ...extendedPatch } : r);
             return newRows;
         });
     }
@@ -3096,9 +3156,23 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
         // Находим текущий ресурс для записи изменений
         const currentResource = computedRows.find(r => r.kind === "resource" && r.id === id) as ResourceRow | undefined;
         
+        // Расширяем patch с дополнительными полями для UUID-ов
+        const extendedPatch: any = { ...patch };
+        
+        // Если обновляется team (массив имен), также обновляем teamIds (массив UUID)
+        if ('team' in patch && patch.team) {
+            const teamArray = patch.team as string[];
+            const teamUUIDs = teamArray.map(teamName => {
+                const found = teamData.find(t => t.name === teamName);
+                return found?.id;
+            }).filter(Boolean) as string[];
+            extendedPatch.teamIds = teamUUIDs;
+        }
+        
+        
         // Записываем изменения в лог
         if (changeTracker && currentResource) {
-            Object.entries(patch).forEach(([key, value]) => {
+            Object.entries(extendedPatch).forEach(([key, value]) => {
                 const oldValue = (currentResource as any)[key];
                 if (oldValue !== value) {
                     changeTracker.addCellChange('resource', id, key, oldValue, value);
@@ -3107,7 +3181,7 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
         }
         
         setRows(prev => {
-            const newRows = prev.map(r => (r.kind === "resource" && r.id === id) ? { ...r, ...patch } : r);
+            const newRows = prev.map(r => (r.kind === "resource" && r.id === id) ? { ...r, ...extendedPatch } : r);
             return newRows;
         });
     }
@@ -3140,17 +3214,33 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
         // Для ресурсов team - это массив, поэтому обрабатываем особым образом
         const teamValue = defaults.team ? [defaults.team] : [];
         
+        // Получаем UUID команд
+        const teamUUIDs = teamValue.map(teamName => {
+            const found = teamData.find(t => t.name === teamName);
+            return found?.id;
+        }).filter(Boolean) as string[];
+        
         return { 
             id: generateUUID(), 
             kind: "resource", 
-            team: teamValue, 
-            fn: (defaults.fn || "") as Fn, 
+            team: teamValue,
+            teamIds: teamUUIDs,
+            fn: (defaults.fn || "") as Fn,
             weeks: Array(TOTAL_WEEKS).fill(0) 
         };
     }
     
     function newTask(): TaskRow {
         const defaults = getFilterDefaults();
+        
+        // Получаем UUID команды
+        let teamId: string | undefined;
+        if (defaults.team) {
+            const found = teamData.find(t => t.name === defaults.team);
+            if (found?.id) {
+                teamId = found.id;
+            }
+        }
         
         return {
             id: generateUUID(),
@@ -3160,6 +3250,7 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
             epic: defaults.epic || "",
             task: "",
             team: defaults.team || "",
+            teamId: teamId,
             fn: (defaults.fn || "") as Fn,
             planEmpl: 0,
             planWeeks: 0,
@@ -3178,50 +3269,153 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
     // ====== Локальное состояние меню добавления ======
     const [addMenuOpen, setAddMenuOpen] = useState<boolean>(false);
     
-    function addResourceBottom() { setRows(prev => { const split = splitRows(prev); return [...split.resources, newResource(), ...split.tasks]; }); setAddMenuOpen(false); }
-    function addTaskBottom() { setRows(prev => { const split = splitRows(prev); return [...split.resources, ...split.tasks, newTask()]; }); setAddMenuOpen(false); }
+    // Функция для конвертации ResourceRow в формат API
+    function resourceRowToApi(row: ResourceRow) {
+        return {
+            id: row.id,
+            teamIds: row.teamIds || [],
+            functionId: row.functionId,
+            employeeId: row.employeeId,
+            weeks: row.weeks,
+            displayOrder: row.displayOrder
+        };
+    }
+    
+    // Функция для конвертации TaskRow в формат API
+    function taskRowToApi(row: TaskRow) {
+        return {
+            id: row.id,
+            status: row.status,
+            sprintsAuto: row.sprintsAuto,
+            epic: row.epic,
+            task: row.task,
+            teamId: row.teamId,
+            functionId: row.functionId,
+            employeeId: row.employeeId,
+            planEmpl: row.planEmpl,
+            planWeeks: row.planWeeks,
+            blockerIds: row.blockerIds,
+            weekBlockers: row.weekBlockers,
+            fact: row.fact,
+            startWeek: row.startWeek,
+            endWeek: row.endWeek,
+            expectedStartWeek: row.expectedStartWeek,
+            manualEdited: row.manualEdited,
+            autoPlanEnabled: row.autoPlanEnabled,
+            weeks: row.weeks,
+            displayOrder: row.displayOrder
+        };
+    }
+    
+    function addResourceBottom() { 
+        const newRes = newResource();
+        setRows(prev => { 
+            const split = splitRows(prev); 
+            return [...split.resources, newRes, ...split.tasks]; 
+        }); 
+        setAddMenuOpen(false);
+        // Регистрируем добавление в changeTracker
+        if (changeTracker) {
+            changeTracker.addRowChange('resource', newRes.id, 'added', resourceRowToApi(newRes));
+        }
+    }
+    
+    function addTaskBottom() { 
+        const newT = newTask();
+        setRows(prev => { 
+            const split = splitRows(prev); 
+            return [...split.resources, ...split.tasks, newT]; 
+        }); 
+        setAddMenuOpen(false);
+        // Регистрируем добавление в changeTracker
+        if (changeTracker) {
+            changeTracker.addRowChange('task', newT.id, 'added', taskRowToApi(newT));
+        }
+    }
 
     // ===== Контекстные действия над строками (реализация) =====
     function duplicateRow(rowId: ID) {
+        const sourceRow = computedRows.find(r => r.id === rowId);
+        if (!sourceRow) return;
+        
+        const copy: Row = sourceRow.kind === 'task'
+            ? { ...(sourceRow as TaskRow), id: generateUUID(), blockerIds: [...(sourceRow as TaskRow).blockerIds], weekBlockers: [...(sourceRow as TaskRow).weekBlockers], expectedStartWeek: (sourceRow as TaskRow).expectedStartWeek }
+            : { ...(sourceRow as ResourceRow), id: generateUUID(), weeks: [...(sourceRow as ResourceRow).weeks] };
+        
         setRows(prev => {
             const idx = prev.findIndex(r => r.id === rowId);
             if (idx < 0) return prev;
-            const row = prev[idx];
-            const copy: Row = row.kind === 'task'
-                ? { ...(row as TaskRow), id: generateUUID(), blockerIds: [...(row as TaskRow).blockerIds], weekBlockers: [...(row as TaskRow).weekBlockers], expectedStartWeek: (row as TaskRow).expectedStartWeek }
-        : { ...(row as ResourceRow), id: generateUUID(), weeks: [...(row as ResourceRow).weeks] };
             const next = prev.slice();
             next.splice(idx + 1, 0, copy);
             return next;
         });
+        
+        // Регистрируем добавление в changeTracker
+        if (changeTracker) {
+            if (copy.kind === 'resource') {
+                changeTracker.addRowChange('resource', copy.id, 'added', resourceRowToApi(copy as ResourceRow));
+            } else {
+                changeTracker.addRowChange('task', copy.id, 'added', taskRowToApi(copy as TaskRow));
+            }
+        }
         setCtx(null);
     }
     function deleteRow(rowId: ID) {
+        // Находим строку для регистрации удаления
+        const row = computedRows.find(r => r.id === rowId);
+        if (row && changeTracker) {
+            const entityType = row.kind === 'resource' ? 'resource' : 'task';
+            changeTracker.addRowChange(entityType, rowId, 'deleted');
+        }
         setRows(prev => prev.filter(r => r.id !== rowId));
         setCtx(null);
     }
     function addRowAbove(rowId: ID) {
+        const referenceRow = computedRows.find(r => r.id === rowId);
+        if (!referenceRow) return;
+        
+        const insert = referenceRow.kind === 'task' ? newTask() : newResource();
+        
         setRows(prev => {
             const idx = prev.findIndex(r => r.id === rowId);
             if (idx < 0) return prev;
-            const row = prev[idx];
-            const insert = row.kind === 'task' ? newTask() : newResource();
             const next = prev.slice();
             next.splice(idx, 0, insert);
             return next;
         });
+        
+        // Регистрируем добавление в changeTracker
+        if (changeTracker) {
+            if (insert.kind === 'resource') {
+                changeTracker.addRowChange('resource', insert.id, 'added', resourceRowToApi(insert as ResourceRow));
+            } else {
+                changeTracker.addRowChange('task', insert.id, 'added', taskRowToApi(insert as TaskRow));
+            }
+        }
         setCtx(null);
     }
     function addRowBelow(rowId: ID) {
+        const referenceRow = computedRows.find(r => r.id === rowId);
+        if (!referenceRow) return;
+        
+        const insert = referenceRow.kind === 'task' ? newTask() : newResource();
+        
         setRows(prev => {
             const idx = prev.findIndex(r => r.id === rowId);
             if (idx < 0) return prev;
-            const row = prev[idx];
-            const insert = row.kind === 'task' ? newTask() : newResource();
             const next = prev.slice();
             next.splice(idx + 1, 0, insert);
             return next;
         });
+        
+        // Регистрируем добавление в changeTracker
+        if (changeTracker) {
+            if (insert.kind === 'resource') {
+                changeTracker.addRowChange('resource', insert.id, 'added', resourceRowToApi(insert as ResourceRow));
+            } else {
+                changeTracker.addRowChange('task', insert.id, 'added', taskRowToApi(insert as TaskRow));
+            }
+        }
         setCtx(null);
     }
 
@@ -3527,11 +3721,11 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
                                     {editing?.rowId===r.id && editing?.col==="fn" ? (
                                         <input autoFocus className="w-full h-full box-border min-w-0 outline-none bg-transparent" style={{ border: 'none', padding: 0, margin: 0 }} defaultValue={r.fn} data-testid={`resource-input-${r.id}`}
                                                onKeyDown={(e)=>{
-                                                    if(e.key==='Enter'){ updateResource(r.id,{fn:(e.target as HTMLInputElement).value as Fn}); commitEdit(); }
-                                                    if (e.key === 'Tab' && e.shiftKey) { e.preventDefault(); e.stopPropagation(); updateResource(r.id,{fn:(e.target as HTMLInputElement).value as Fn}); navigateInEditMode('prev', r.id, 'fn'); return; }
-                                                    if(e.key==='Tab'){ e.preventDefault(); updateResource(r.id,{fn:(e.target as HTMLInputElement).value as Fn}); navigateInEditMode('next', r.id, 'fn'); }
-                                                    if(e.key==='Escape'){ cancelEditRef.current=true; stopEdit(); }
-                                               }}
+                                                   if(e.key==='Enter'){ updateResource(r.id,{fn:(e.target as HTMLInputElement).value as Fn}); commitEdit(); }
+                                                   if (e.key === 'Tab' && e.shiftKey) { e.preventDefault(); e.stopPropagation(); updateResource(r.id,{fn:(e.target as HTMLInputElement).value as Fn}); navigateInEditMode('prev', r.id, 'fn'); return; }
+                                                   if(e.key==='Tab'){ e.preventDefault(); updateResource(r.id,{fn:(e.target as HTMLInputElement).value as Fn}); navigateInEditMode('next', r.id, 'fn'); }
+                                                   if(e.key==='Escape'){ cancelEditRef.current=true; stopEdit(); }
+                                              }}
                                                onBlur={(e)=>{ if(!cancelEditRef.current){ updateResource(r.id,{fn:(e.target as HTMLInputElement).value as Fn}); } stopEdit(); }} />
                                     ) : (
                                         <div className="w-full overflow-hidden" title={r.fn}>
@@ -3549,7 +3743,7 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
                                                    if (e.key === 'Tab' && e.shiftKey) { e.preventDefault(); e.stopPropagation(); updateResource(r.id,{empl:(e.target as HTMLInputElement).value || undefined}); navigateInEditMode('prev', r.id, 'empl'); return; }
                                                    if(e.key==='Tab'){ e.preventDefault(); updateResource(r.id,{empl:(e.target as HTMLInputElement).value || undefined}); navigateInEditMode('next', r.id, 'empl'); }
                                                    if(e.key==='Escape'){ cancelEditRef.current=true; stopEdit(); }
-                                               }}
+                                              }}
                                                onBlur={(e)=>{ if(!cancelEditRef.current){ updateResource(r.id,{empl:(e.target as HTMLInputElement).value || undefined}); } stopEdit(); }} />
                                     ) : (
                                         <div className="w-full overflow-hidden" title={(r as ResourceRow).empl || ''}>
@@ -3771,16 +3965,14 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
                                 <td className={`px-2 py-1 align-middle text-center draggable-cell`} style={{ ...getCellBorderStyle(isSel(r.id,'fn')), ...getCellBorderStyleForDrag(r.id), ...getFrozenColumnStyle('fn', columnWidths), backgroundColor: getBg(teamFnColors[teamKeyFromTask(r as TaskRow)]), color: getText(teamFnColors[teamKeyFromTask(r as TaskRow)]) }} onMouseDown={markDragAllowed} onDoubleClick={()=>startEdit({rowId:r.id,col:"fn"})} onClick={()=>setSel({rowId:r.id,col:"fn"})} onContextMenu={(e)=>onContextMenuCellColor(e, r as TaskRow, 'fn', 'task')} data-testid={`fn-cell-${r.id}`}>
                                     {editing?.rowId===r.id && editing?.col==="fn" ? (
                                         <Select
-                                            options={functions.map(f => f.name)}
-                                            selectedValue={r.fn}
+                                            options={getUniqueValues('fn', (r as TaskRow).team)}
+                                            selectedValue={r.fn || ''}
                                             onSelect={(value) => { 
-                                                const selectedFunction = functions.find(f => f.name === value);
-                                                updateTask(r.id, {fn: value as Fn, functionId: selectedFunction?.id}); 
+                                                updateTask(r.id, {fn: value as Fn}); 
                                                 commitEdit(); 
                                             }}
                                             onSaveValue={(value) => { 
-                                                const selectedFunction = functions.find(f => f.name === value);
-                                                updateTask(r.id, {fn: value as Fn, functionId: selectedFunction?.id}); 
+                                                updateTask(r.id, {fn: value as Fn}); 
                                             }}
                                             onTabNext={() => { updateTask(r.id, {fn: r.fn}); return navigateInEditMode('next', r.id, 'fn'); }}
                                             onTabPrev={() => { updateTask(r.id, {fn: r.fn}); return navigateInEditMode('prev', r.id, 'fn'); }}
@@ -3798,14 +3990,22 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
                                 {/* Empl */}
                                 <td className={`px-2 py-1 align-middle text-center ${getCellBgClass(hasMismatch)} ${getCellBorderClass(r.id)} draggable-cell`} style={{...getCellBorderStyle(isSel(r.id,'empl')), ...getCellBorderStyleForDrag(r.id), ...getCellBgStyle(hasMismatch), ...getFrozenColumnStyle('empl', columnWidths)}} onMouseDown={markDragAllowed} onDoubleClick={()=>startEdit({rowId:r.id,col:"empl"})} onClick={()=>setSel({rowId:r.id,col:"empl"})}>
                                     {editing?.rowId===r.id && editing?.col==="empl" ? (
-                                        <input autoFocus className="w-full h-full box-border min-w-0 outline-none bg-transparent" style={{ border: 'none', padding: 0, margin: 0 }} defaultValue={(r as TaskRow).empl || ""}
-                                               onKeyDown={(e)=>{
-                                                   if(e.key==='Enter'){ updateTask(r.id,{empl:(e.target as HTMLInputElement).value || undefined}); commitEdit(); }
-                                                   if (e.key === 'Tab' && e.shiftKey) { e.preventDefault(); e.stopPropagation(); updateTask(r.id,{empl:(e.target as HTMLInputElement).value || undefined}); navigateInEditMode('prev', r.id, 'empl'); return; }
-                                                   if(e.key==='Tab'){ e.preventDefault(); updateTask(r.id,{empl:(e.target as HTMLInputElement).value || undefined}); navigateInEditMode('next', r.id, 'empl'); }
-                                                   if(e.key==='Escape'){ cancelEditRef.current=true; stopEdit(); }
-                                              }}
-                                               onBlur={(e)=>{ if(!cancelEditRef.current){ updateTask(r.id,{empl:(e.target as HTMLInputElement).value || undefined}); } stopEdit(); }} />
+                                        <Select
+                                            options={getEmployeesForFunction((r as TaskRow).fn || '', (r as TaskRow).team)}
+                                            selectedValue={(r as TaskRow).empl || ''}
+                                            onSelect={(value) => { 
+                                                updateTask(r.id, {empl: value || undefined}); 
+                                                commitEdit(); 
+                                            }}
+                                            onSaveValue={(value) => { 
+                                                updateTask(r.id, {empl: value || undefined}); 
+                                            }}
+                                            onTabNext={() => { updateTask(r.id, {empl: (r as TaskRow).empl}); return navigateInEditMode('next', r.id, 'empl'); }}
+                                            onTabPrev={() => { updateTask(r.id, {empl: (r as TaskRow).empl}); return navigateInEditMode('prev', r.id, 'empl'); }}
+                                            onEscape={() => { cancelEditRef.current=true; stopEdit(); }}
+                                            placeholder="Выберите сотрудника"
+                                            searchPlaceholder="Поиск сотрудника..."
+                                        />
                                     ) : (
                                         <div className="w-full overflow-hidden" title={(r as TaskRow).empl || ''}>
                                             <span className="block truncate">{(r as TaskRow).empl || ''}</span>

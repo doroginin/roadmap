@@ -51,20 +51,6 @@ func (r *Repository) GetAllData() (*models.DataResponse, error) {
 	}
 	response.Sprints = sprints
 
-	// Get functions
-	functions, err := r.GetFunctions()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get functions: %w", err)
-	}
-	response.Functions = functions
-
-	// Get employees
-	employees, err := r.GetEmployees()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get employees: %w", err)
-	}
-	response.Employees = employees
-
 	// Get resources
 	resources, err := r.GetResources()
 	if err != nil {
@@ -138,74 +124,14 @@ func (r *Repository) GetSprints() ([]models.Sprint, error) {
 	return sprints, rows.Err()
 }
 
-// GetFunctions returns all functions
-func (r *Repository) GetFunctions() ([]models.Function, error) {
-	rows, err := r.db.Query(`
-		SELECT id, name, color, created_at, updated_at 
-		FROM functions 
-		ORDER BY name
-	`)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var functions []models.Function
-	for rows.Next() {
-		var function models.Function
-		err := rows.Scan(
-			&function.ID, &function.Name, &function.Color,
-			&function.CreatedAt, &function.UpdatedAt,
-		)
-		if err != nil {
-			return nil, err
-		}
-		functions = append(functions, function)
-	}
-
-	return functions, rows.Err()
-}
-
-// GetEmployees returns all employees
-func (r *Repository) GetEmployees() ([]models.Employee, error) {
-	rows, err := r.db.Query(`
-		SELECT id, name, color, created_at, updated_at 
-		FROM employees 
-		ORDER BY name
-	`)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var employees []models.Employee
-	for rows.Next() {
-		var employee models.Employee
-		err := rows.Scan(
-			&employee.ID, &employee.Name, &employee.Color,
-			&employee.CreatedAt, &employee.UpdatedAt,
-		)
-		if err != nil {
-			return nil, err
-		}
-		employees = append(employees, employee)
-	}
-
-	return employees, rows.Err()
-}
-
-// GetResources returns all resources with populated team and function names
+// GetResources returns all resources
 func (r *Repository) GetResources() ([]models.Resource, error) {
 	rows, err := r.db.Query(`
 		SELECT 
-			r.id, r.team_ids, r.function_id, r.employee_id, r.weeks, 
-			r.display_order, r.created_at, r.updated_at,
-			f.name as function_name,
-			e.name as employee_name
-		FROM resources r
-		LEFT JOIN functions f ON r.function_id = f.id
-		LEFT JOIN employees e ON r.employee_id = e.id
-		ORDER BY COALESCE(r.display_order, 0), r.created_at
+			id, team_ids, function, employee, fn_bg_color, fn_text_color, weeks, 
+			display_order, created_at, updated_at
+		FROM resources
+		ORDER BY COALESCE(display_order, 0), created_at
 	`)
 	if err != nil {
 		return nil, err
@@ -221,18 +147,17 @@ func (r *Repository) GetResources() ([]models.Resource, error) {
 	var resources []models.Resource
 	for rows.Next() {
 		var resource models.Resource
-		var functionName sql.NullString
-		var employeeName sql.NullString
 		var teamIDs pq.StringArray
-		var functionID sql.NullString
-		var employeeID sql.NullString
+		var function sql.NullString
+		var employee sql.NullString
+		var fnBgColor sql.NullString
+		var fnTextColor sql.NullString
 		var weeks pq.Float64Array
 		var displayOrder sql.NullInt32
 
 		err := rows.Scan(
-			&resource.ID, &teamIDs, &functionID, &employeeID, &weeks,
+			&resource.ID, &teamIDs, &function, &employee, &fnBgColor, &fnTextColor, &weeks,
 			&displayOrder, &resource.CreatedAt, &resource.UpdatedAt,
-			&functionName, &employeeName,
 		)
 		if err != nil {
 			return nil, err
@@ -245,15 +170,17 @@ func (r *Repository) GetResources() ([]models.Resource, error) {
 		if teamIDs != nil {
 			resource.TeamIDs = &teamIDs
 		}
-		if functionID.Valid {
-			if id, err := uuid.Parse(functionID.String); err == nil {
-				resource.FunctionID = &id
-			}
+		if function.Valid {
+			resource.Function = &function.String
 		}
-		if employeeID.Valid {
-			if id, err := uuid.Parse(employeeID.String); err == nil {
-				resource.EmployeeID = &id
-			}
+		if employee.Valid {
+			resource.Employee = &employee.String
+		}
+		if fnBgColor.Valid {
+			resource.FnBgColor = &fnBgColor.String
+		}
+		if fnTextColor.Valid {
+			resource.FnTextColor = &fnTextColor.String
 		}
 		if weeks != nil {
 			resource.Weeks = &weeks
@@ -261,14 +188,6 @@ func (r *Repository) GetResources() ([]models.Resource, error) {
 		if displayOrder.Valid {
 			order := int(displayOrder.Int32)
 			resource.DisplayOrder = &order
-		}
-
-		// Set display names
-		if functionName.Valid {
-			resource.Function = functionName.String
-		}
-		if employeeName.Valid {
-			resource.Employee = &employeeName.String
 		}
 
 		// Save original team UUIDs before converting to names
@@ -295,22 +214,18 @@ func (r *Repository) GetResources() ([]models.Resource, error) {
 	return resources, rows.Err()
 }
 
-// GetTasks returns all tasks with populated team and function names
+// GetTasks returns all tasks with populated team names
 func (r *Repository) GetTasks() ([]models.Task, error) {
 	rows, err := r.db.Query(`
 		SELECT 
 			t.id, t.status, t.sprints_auto, t.epic, t.task_name, 
-			t.team_id, t.function_id, t.employee_id, t.plan_empl, t.plan_weeks,
+			t.team_id, t.function, t.employee, t.plan_empl, t.plan_weeks,
 			t.blocker_ids, t.week_blockers, t.fact, t.start_week, t.end_week,
 			t.expected_start_week, t.manual_edited, t.auto_plan_enabled, t.weeks,
 			t.display_order, t.created_at, t.updated_at,
-			tm.name as team_name,
-			f.name as function_name,
-			e.name as employee_name
+			tm.name as team_name
 		FROM tasks t
 		LEFT JOIN teams tm ON t.team_id = tm.id
-		LEFT JOIN functions f ON t.function_id = f.id
-		LEFT JOIN employees e ON t.employee_id = e.id
 		ORDER BY COALESCE(t.display_order, 0), t.created_at
 	`)
 	if err != nil {
@@ -321,13 +236,13 @@ func (r *Repository) GetTasks() ([]models.Task, error) {
 	var tasks []models.Task
 	for rows.Next() {
 		var task models.Task
-		var teamName, functionName sql.NullString
-		var employeeName sql.NullString
+		var teamName sql.NullString
 		var status sql.NullString
 		var sprintsAuto pq.StringArray
 		var epic sql.NullString
 		var taskName sql.NullString
-		var teamID, functionID, employeeID sql.NullString
+		var teamID sql.NullString
+		var function, employee sql.NullString
 		var planEmpl, planWeeks, fact sql.NullFloat64
 		var blockerIDs pq.StringArray
 		var weekBlockers pq.Int64Array
@@ -338,11 +253,11 @@ func (r *Repository) GetTasks() ([]models.Task, error) {
 
 		err := rows.Scan(
 			&task.ID, &status, &sprintsAuto, &epic, &taskName,
-			&teamID, &functionID, &employeeID, &planEmpl, &planWeeks,
+			&teamID, &function, &employee, &planEmpl, &planWeeks,
 			&blockerIDs, &weekBlockers, &fact, &startWeek, &endWeek,
 			&expectedStartWeek, &manualEdited, &autoPlanEnabled, &weeks,
 			&displayOrder, &task.CreatedAt, &task.UpdatedAt,
-			&teamName, &functionName, &employeeName,
+			&teamName,
 		)
 		if err != nil {
 			return nil, err
@@ -369,15 +284,11 @@ func (r *Repository) GetTasks() ([]models.Task, error) {
 				task.TeamID = &id
 			}
 		}
-		if functionID.Valid {
-			if id, err := uuid.Parse(functionID.String); err == nil {
-				task.FunctionID = &id
-			}
+		if function.Valid {
+			task.Function = &function.String
 		}
-		if employeeID.Valid {
-			if id, err := uuid.Parse(employeeID.String); err == nil {
-				task.EmployeeID = &id
-			}
+		if employee.Valid {
+			task.Employee = &employee.String
 		}
 		if planEmpl.Valid {
 			task.PlanEmpl = &planEmpl.Float64
@@ -423,12 +334,6 @@ func (r *Repository) GetTasks() ([]models.Task, error) {
 		// Set display names
 		if teamName.Valid {
 			task.Team = teamName.String
-		}
-		if functionName.Valid {
-			task.Function = functionName.String
-		}
-		if employeeName.Valid {
-			task.Employee = &employeeName.String
 		}
 
 		tasks = append(tasks, task)
@@ -562,45 +467,17 @@ func (r *Repository) UpdateData(tx *sql.Tx, req *models.UpdateRequest) error {
 		}
 	}
 
-	// Update functions
-	for _, function := range req.Functions {
-		_, err := tx.Exec(`
-			INSERT INTO functions (id, name, color)
-			VALUES ($1, $2, $3)
-			ON CONFLICT (id) DO UPDATE SET
-				name = COALESCE(EXCLUDED.name, functions.name),
-				color = COALESCE(EXCLUDED.color, functions.color),
-				updated_at = NOW()
-		`, function.ID, function.Name, function.Color)
-		if err != nil {
-			return fmt.Errorf("failed to update function %s: %w", function.ID, err)
-		}
-	}
-
-	// Update employees
-	for _, employee := range req.Employees {
-		_, err := tx.Exec(`
-			INSERT INTO employees (id, name, color)
-			VALUES ($1, $2, $3)
-			ON CONFLICT (id) DO UPDATE SET
-				name = COALESCE(EXCLUDED.name, employees.name),
-				color = COALESCE(EXCLUDED.color, employees.color),
-				updated_at = NOW()
-		`, employee.ID, employee.Name, employee.Color)
-		if err != nil {
-			return fmt.Errorf("failed to update employee %s: %w", employee.ID, err)
-		}
-	}
-
 	// Update resources
 	for _, resource := range req.Resources {
 		_, err := tx.Exec(`
-			INSERT INTO resources (id, team_ids, function_id, employee_id, weeks, display_order)
-			VALUES ($1, $2, $3, $4, $5, $6)
+			INSERT INTO resources (id, team_ids, function, employee, fn_bg_color, fn_text_color, weeks, display_order)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 			ON CONFLICT (id) DO UPDATE SET
 				team_ids = COALESCE(EXCLUDED.team_ids, resources.team_ids),
-				function_id = COALESCE(EXCLUDED.function_id, resources.function_id),
-				employee_id = COALESCE(EXCLUDED.employee_id, resources.employee_id),
+				function = COALESCE(EXCLUDED.function, resources.function),
+				employee = COALESCE(EXCLUDED.employee, resources.employee),
+				fn_bg_color = COALESCE(EXCLUDED.fn_bg_color, resources.fn_bg_color),
+				fn_text_color = COALESCE(EXCLUDED.fn_text_color, resources.fn_text_color),
 				weeks = COALESCE(EXCLUDED.weeks, resources.weeks),
 				display_order = COALESCE(EXCLUDED.display_order, resources.display_order),
 				updated_at = NOW()
@@ -611,7 +488,7 @@ func (r *Repository) UpdateData(tx *sql.Tx, req *models.UpdateRequest) error {
 				}
 				return nil
 			}(),
-			resource.FunctionID, resource.EmployeeID,
+			resource.Function, resource.Employee, resource.FnBgColor, resource.FnTextColor,
 			func() interface{} {
 				if resource.Weeks != nil {
 					return pq.Array(*resource.Weeks)
@@ -628,7 +505,7 @@ func (r *Repository) UpdateData(tx *sql.Tx, req *models.UpdateRequest) error {
 	for _, task := range req.Tasks {
 		_, err := tx.Exec(`
 			INSERT INTO tasks (
-				id, status, sprints_auto, epic, task_name, team_id, function_id, employee_id,
+				id, status, sprints_auto, epic, task_name, team_id, function, employee,
 				plan_empl, plan_weeks, blocker_ids, week_blockers, fact, start_week, end_week,
 				expected_start_week, manual_edited, auto_plan_enabled, weeks, display_order
 			)
@@ -639,8 +516,8 @@ func (r *Repository) UpdateData(tx *sql.Tx, req *models.UpdateRequest) error {
 				epic = COALESCE(EXCLUDED.epic, tasks.epic),
 				task_name = COALESCE(EXCLUDED.task_name, tasks.task_name),
 				team_id = COALESCE(EXCLUDED.team_id, tasks.team_id),
-				function_id = COALESCE(EXCLUDED.function_id, tasks.function_id),
-				employee_id = COALESCE(EXCLUDED.employee_id, tasks.employee_id),
+				function = COALESCE(EXCLUDED.function, tasks.function),
+				employee = COALESCE(EXCLUDED.employee, tasks.employee),
 				plan_empl = COALESCE(EXCLUDED.plan_empl, tasks.plan_empl),
 				plan_weeks = COALESCE(EXCLUDED.plan_weeks, tasks.plan_weeks),
 				blocker_ids = COALESCE(EXCLUDED.blocker_ids, tasks.blocker_ids),
@@ -662,7 +539,7 @@ func (r *Repository) UpdateData(tx *sql.Tx, req *models.UpdateRequest) error {
 				return nil
 			}(),
 			task.Epic, task.TaskName,
-			task.TeamID, task.FunctionID, task.EmployeeID, task.PlanEmpl, task.PlanWeeks,
+			task.TeamID, task.Function, task.Employee, task.PlanEmpl, task.PlanWeeks,
 			func() interface{} {
 				if task.BlockerIDs != nil {
 					return pq.Array(*task.BlockerIDs)

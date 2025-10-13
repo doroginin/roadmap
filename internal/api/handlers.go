@@ -103,8 +103,8 @@ func (h *Handlers) UpdateData(c *gin.Context) {
 	}
 
 	// Debug request content
-	fmt.Printf("UpdateData: Request content - Teams: %d, Sprints: %d, Functions: %d, Employees: %d, Resources: %d, Tasks: %d\n",
-		len(req.Teams), len(req.Sprints), len(req.Functions), len(req.Employees), len(req.Resources), len(req.Tasks))
+	fmt.Printf("UpdateData: Request content - Teams: %d, Sprints: %d, Resources: %d, Tasks: %d\n",
+		len(req.Teams), len(req.Sprints), len(req.Resources), len(req.Tasks))
 
 	// Validate that at least one entity has changes (not just ID)
 	if !h.hasValidChanges(&req) {
@@ -166,24 +166,14 @@ func (h *Handlers) hasValidChanges(req *models.UpdateRequest) bool {
 		}
 	}
 
-	// Check functions
-	for _, function := range req.Functions {
-		if function.Name != nil || function.Color != nil {
-			return true
-		}
-	}
-
-	// Check employees
-	for _, employee := range req.Employees {
-		if employee.Name != nil || employee.Color != nil {
-			return true
-		}
-	}
-
 	// Check resources
-	for _, resource := range req.Resources {
-		if resource.TeamIDs != nil || resource.FunctionID != nil || resource.EmployeeID != nil ||
+	for i, resource := range req.Resources {
+		fmt.Printf("hasValidChanges: Checking resource %d: TeamIDs=%v, Function=%v, Employee=%v, FnBgColor=%v, FnTextColor=%v, Weeks=%v, DisplayOrder=%v\n",
+			i, resource.TeamIDs, resource.Function, resource.Employee, resource.FnBgColor, resource.FnTextColor, resource.Weeks, resource.DisplayOrder)
+		if resource.TeamIDs != nil || resource.Function != nil || resource.Employee != nil ||
+			resource.FnBgColor != nil || resource.FnTextColor != nil ||
 			resource.Weeks != nil || resource.DisplayOrder != nil {
+			fmt.Printf("hasValidChanges: Found valid changes in resource %d\n", i)
 			return true
 		}
 	}
@@ -191,10 +181,10 @@ func (h *Handlers) hasValidChanges(req *models.UpdateRequest) bool {
 	// Check tasks
 	for i, task := range req.Tasks {
 		fmt.Printf("hasValidChanges: Checking task %d: TaskName=%v, Status=%v\n", i, task.TaskName, task.Status)
-		fmt.Printf("hasValidChanges: Task %d fields: TaskName=%v, Status=%v, Epic=%v, TeamID=%v, FunctionID=%v\n",
-			i, task.TaskName, task.Status, task.Epic, task.TeamID, task.FunctionID)
+		fmt.Printf("hasValidChanges: Task %d fields: TaskName=%v, Status=%v, Epic=%v, TeamID=%v, Function=%v\n",
+			i, task.TaskName, task.Status, task.Epic, task.TeamID, task.Function)
 		if task.Status != nil || task.SprintsAuto != nil || task.Epic != nil || task.TaskName != nil ||
-			task.TeamID != nil || task.FunctionID != nil || task.EmployeeID != nil ||
+			task.TeamID != nil || task.Function != nil || task.Employee != nil ||
 			task.PlanEmpl != nil || task.PlanWeeks != nil || task.BlockerIDs != nil ||
 			task.WeekBlockers != nil || task.Fact != nil || task.StartWeek != nil ||
 			task.EndWeek != nil || task.ExpectedStartWeek != nil || task.ManualEdited != nil ||

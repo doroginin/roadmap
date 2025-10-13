@@ -12,33 +12,13 @@ BEGIN
         RAISE EXCEPTION 'Team "Demo" not found in database';
     END IF;
 
-    -- Добавляем функцию для тестов
-    INSERT INTO functions (id, name, color, created_at, updated_at)
-    VALUES (
-        'bbbbbbbb-0000-0000-0000-000000000001',
-        'Test Function',
-        '#FF5733',
-        NOW(),
-        NOW()
-    ) ON CONFLICT (id) DO NOTHING;
-
-    -- Добавляем сотрудника для тестов
-    INSERT INTO employees (id, name, color, created_at, updated_at)
-    VALUES (
-        'cccccccc-0000-0000-0000-000000000001',
-        'Test Employee',
-        '#33FF57',
-        NOW(),
-        NOW()
-    ) ON CONFLICT (id) DO NOTHING;
-
-    -- Добавляем тестовые ресурсы
-    INSERT INTO resources (id, team_ids, function_id, employee_id, weeks, display_order, created_at, updated_at)
+    -- Добавляем тестовые ресурсы (теперь function и employee - это строки)
+    INSERT INTO resources (id, team_ids, function, employee, weeks, display_order, created_at, updated_at)
     VALUES 
     (
         'dddddddd-0000-0000-0000-000000000002',
         ARRAY[demo_team_id]::uuid[],
-        'bbbbbbbb-0000-0000-0000-000000000001',
+        'Test Function',
         NULL,
         ARRAY[0.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
         2,
@@ -46,8 +26,8 @@ BEGIN
         NOW()
     ) ON CONFLICT (id) DO NOTHING;
 
-    -- Добавляем тестовые задачи
-    INSERT INTO tasks (id, status, sprints_auto, epic, task_name, team_id, function_id, employee_id, plan_empl, plan_weeks, blocker_ids, week_blockers, fact, start_week, end_week, expected_start_week, manual_edited, auto_plan_enabled, weeks, display_order, created_at, updated_at)
+    -- Добавляем тестовые задачи (теперь function и employee - это строки)
+    INSERT INTO tasks (id, status, sprints_auto, epic, task_name, team_id, function, employee, plan_empl, plan_weeks, blocker_ids, week_blockers, fact, start_week, end_week, expected_start_week, manual_edited, auto_plan_enabled, weeks, display_order, created_at, updated_at)
     VALUES 
     (
         'aaaaaaaa-0000-0000-0000-000000000001',
@@ -56,8 +36,8 @@ BEGIN
         'Test Epic',
         'Test Task 1 - Data Optimization',
         demo_team_id,
-        'bbbbbbbb-0000-0000-0000-000000000001',
-        'cccccccc-0000-0000-0000-000000000001',
+        'Test Function',
+        'Test Employee',
         1.0,
         2.0,
         ARRAY[]::uuid[],
@@ -80,7 +60,7 @@ BEGIN
         'Test Epic',
         'Test Task 2 - Resource Test',
         demo_team_id,
-        'bbbbbbbb-0000-0000-0000-000000000001',
+        'Test Function',
         NULL,
         1.0,
         1.0,
@@ -104,8 +84,8 @@ BEGIN
         'Test Epic',
         'Test Task 3 - Multiple Changes',
         demo_team_id,
-        'bbbbbbbb-0000-0000-0000-000000000001',
-        'cccccccc-0000-0000-0000-000000000001',
+        'Test Function',
+        'Test Employee',
         1.0,
         3.0,
         ARRAY[]::uuid[],

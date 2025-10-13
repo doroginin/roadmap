@@ -2,40 +2,30 @@ export interface RoadmapData {
   version: number;
   teams: TeamData[];
   sprints: Sprint[];
-  functions: Function[];
-  employees: Employee[];
   resources: Resource[];
   tasks: Task[];
 }
 
 export interface Resource {
   id: string;
-  kind: "resource";
-  team?: string[]; // Team names for display
-  teamIds?: string[]; // Team UUIDs for saving (optional for backward compatibility)
-  fn: string; // Function name for display
-  functionId?: string; // Function UUID for saving
-  empl?: string; // Employee name for display
-  employeeId?: string; // Employee UUID for saving
+  teamIds?: string[]; // Team UUIDs for saving
+  fn?: string; // Function name
+  empl?: string; // Employee name
+  fnBgColor?: string; // Function background color (hex)
+  fnTextColor?: string; // Function text color (hex)
   weeks?: number[];
   displayOrder?: number;
-  createdAt: string;
-  updatedAt: string;
 }
 
 export interface Task {
   id: string;
-  kind: "task";
   status?: "Todo" | "Backlog" | "Cancelled";
   sprintsAuto?: string[];
   epic?: string;
   task?: string;
-  team: string; // Team name for display
   teamId?: string; // Team UUID for saving
-  fn: string; // Function name for display
-  functionId?: string; // Function UUID for saving
-  empl?: string; // Employee name for display
-  employeeId?: string; // Employee UUID for saving
+  fn?: string; // Function name
+  empl?: string; // Employee name
   planEmpl?: number;
   planWeeks?: number;
   blockerIds?: string[];
@@ -48,25 +38,8 @@ export interface Task {
   autoPlanEnabled?: boolean;
   weeks?: number[];
   displayOrder?: number;
-  createdAt: string;
-  updatedAt: string;
 }
 
-export interface Function {
-  id: string;
-  name: string;
-  color?: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface Employee {
-  id: string;
-  name: string;
-  color?: string;
-  createdAt: string;
-  updatedAt: string;
-}
 
 export interface Sprint {
   code: string;

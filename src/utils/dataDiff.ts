@@ -1,4 +1,4 @@
-import type { RoadmapData, Task, Resource, TeamData, Sprint, Function, Employee } from '../api/types';
+import type { RoadmapData, Task, Resource, TeamData, Sprint } from '../api/types';
 
 // Интерфейс для отслеживания изменений
 export interface DataChanges {
@@ -6,15 +6,11 @@ export interface DataChanges {
   resources?: Resource[];
   teams?: TeamData[];
   sprints?: Sprint[];
-  functions?: Function[];
-  employees?: Employee[];
   deleted?: {
     tasks?: string[];
     resources?: string[];
     teams?: string[];
     sprints?: string[];
-    functions?: string[];
-    employees?: string[];
   };
 }
 
@@ -201,23 +197,6 @@ export function calculateDataChanges(
     changes.deleted = { ...changes.deleted, sprints: sprintChanges.deleted };
   }
   
-  // Сравниваем функции
-  const functionChanges = compareArraysById(oldData.functions, newData.functions);
-  if (functionChanges.added.length > 0 || functionChanges.updated.length > 0) {
-    changes.functions = [...functionChanges.added, ...functionChanges.updated];
-  }
-  if (functionChanges.deleted.length > 0) {
-    changes.deleted = { ...changes.deleted, functions: functionChanges.deleted };
-  }
-  
-  // Сравниваем сотрудников
-  const employeeChanges = compareArraysById(oldData.employees, newData.employees);
-  if (employeeChanges.added.length > 0 || employeeChanges.updated.length > 0) {
-    changes.employees = [...employeeChanges.added, ...employeeChanges.updated];
-  }
-  if (employeeChanges.deleted.length > 0) {
-    changes.deleted = { ...changes.deleted, employees: employeeChanges.deleted };
-  }
   
   return changes;
 }
@@ -229,13 +208,9 @@ export function hasChanges(changes: DataChanges): boolean {
     changes.resources?.length ||
     changes.teams?.length ||
     changes.sprints?.length ||
-    changes.functions?.length ||
-    changes.employees?.length ||
     changes.deleted?.tasks?.length ||
     changes.deleted?.resources?.length ||
     changes.deleted?.teams?.length ||
-    changes.deleted?.sprints?.length ||
-    changes.deleted?.functions?.length ||
-    changes.deleted?.employees?.length
+    changes.deleted?.sprints?.length
   );
 }
