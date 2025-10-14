@@ -1,12 +1,8 @@
-.PHONY: build run test clean docker-up docker-down migrate migrate-file migrate-status e2e e2e-ui
+.PHONY: build run test migrate migrate-file migrate-status e2e e2e-ui dev
 
 # Build the application
 build:
 	go build -o bin/roadmap cmd/service/main.go
-
-# Run the application
-run:
-	go run cmd/service/main.go
 
 # Run tests
 test:
@@ -19,18 +15,6 @@ e2e:
 # Run e2e tests ui
 e2e-ui:
 	cd ./e2e && npm run test:ui
-
-# Clean build artifacts
-clean:
-	rm -rf bin/
-
-# Start services with Docker Compose
-docker-up:
-	docker-compose up -d
-
-# Stop services
-docker-down:
-	docker-compose down
 
 # Run database migrations
 migrate:
@@ -55,11 +39,6 @@ migrate-status:
 	@echo "Checking database connection and migration status..."
 	@docker-compose exec -T postgres psql -U user -d roadmap -c "\dt" || echo "Database not accessible or no tables found"
 
-# Install dependencies
-deps:
-	go mod download
-	go mod tidy
-
 # Format code
 fmt:
 	go fmt ./...
@@ -68,10 +47,12 @@ fmt:
 lint:
 	golangci-lint run
 
-# Development setup
-dev-setup: deps
-	@echo "Development environment setup complete"
-	@echo "1. Copy .env.example to .env and configure your database"
-	@echo "2. Run 'make docker-up' to start PostgreSQL"
-	@echo "3. Run database migrations manually"
-	@echo "4. Run 'make run' to start the server"
+# Start development environment (database + frontend)
+dev:
+	@docker-compose up -d postgres
+	@npm run build
+	@npm run dev
+
+# Run the application
+run:
+	go run cmd/service/main.go
