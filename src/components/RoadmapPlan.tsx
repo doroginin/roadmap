@@ -637,7 +637,7 @@ function ArrowOverlay({
         <svg
             width={w}
             height={h}
-            style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 5 }}
+            style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 1 }}
         >
             <defs>
                 <marker id="arrow-head-normal" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="3" markerHeight="3" orient="auto-start-reverse">

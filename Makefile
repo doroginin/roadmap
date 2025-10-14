@@ -1,4 +1,4 @@
-.PHONY: build run test migrate migrate-file migrate-status e2e e2e-ui dev
+.PHONY: build run test migrate migrate-file migrate-status e2e e2e-ui dev stop-dev
 
 # Build the application
 build:
@@ -47,11 +47,47 @@ fmt:
 lint:
 	golangci-lint run
 
-# Start development environment (database + frontend)
+# Start development environment (database + frontend + backend)
 dev:
-	@docker-compose up -d postgres
+	@echo "Starting development environment..."
+	@$(MAKE) stop-dev
+	@echo "Starting database..."
+	@docker-compose build
+	@docker-compose up -d
+	@echo "Building frontend..."
 	@npm run build
-	@npm run dev
+	@echo "Starting frontend in background..."
+	@npm run dev &
+	@echo "Development environment started!"
+	@echo "Frontend is running in background. Use 'make stop-dev' to stop all processes."
+
+# Stop development environment
+stop-dev:
+	@echo "Stopping development environment..."
+	@pkill -f "vite" || true
+	@docker-compose down || true
+	@echo "Development environment stopped!"
+
+
+# Start debug environment (database + frontend)
+debug:
+	@echo "Starting development environment..."
+	@$(MAKE) stop-dev
+	@echo "Starting database..."
+	@docker-compose up -d postgres
+	@echo "Building frontend..."
+	@npm run build
+	@echo "Starting frontend in background..."
+	@npm run dev &
+	@echo "Development environment started!"
+	@echo "Frontend is running in background. Use 'make stop-dev' to stop all processes."
+
+# Stop development environment
+stop-debug:
+	@echo "Stopping development environment..."
+	@pkill -f "vite" || true
+	@docker-compose down || true
+	@echo "Development environment stopped!"
 
 # Run the application
 run:
