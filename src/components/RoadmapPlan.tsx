@@ -13,10 +13,10 @@ import { generateUUID } from "../utils/uuid";
 
 
 // Функция для получения стилей закрепления колонок с динамическим расчетом позиций
-const getFrozenColumnStyle = (col: string, columnWidths: Record<string, number>) => {
+const getFrozenColumnStyle = (col: string, columnWidths: Record<string, number>, rowType?: 'resource' | 'task') => {
     const baseStyle = {
         position: 'sticky' as const,
-        zIndex: 15, // Выше ресурсных строк, но ниже шапки
+        zIndex: rowType === 'task' ? 6 : 8, // 6 для задач, 8 для ресурсов
         backgroundColor: 'white',
         flexShrink: 0,
         minWidth: 'fit-content'
@@ -637,7 +637,7 @@ function ArrowOverlay({
         <svg
             width={w}
             height={h}
-            style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 1 }}
+            style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 4 }}
         >
             <defs>
                 <marker id="arrow-head-normal" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="3" markerHeight="3" orient="auto-start-reverse">
@@ -3511,7 +3511,7 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
                         <thead ref={theadRef} style={{ 
                             position: 'sticky',
                             top: 0,
-                            zIndex: 20, // Выше всех остальных элементов
+                            zIndex: 8, // Общий z-index для шапки и ресурсов
                             backgroundColor: '#f3f4f6'
                         }}>
                         <tr style={{ borderBottom: '1px solid rgb(226, 232, 240)' }}>
@@ -3826,7 +3826,6 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
                         {/* Обычная область для задач */}
                         <tbody className="divide-y divide-gray-200" style={{ 
                             position: 'relative',
-                            zIndex: 1,
                             backgroundColor: 'white'
                         }}>
                         {/* Задачи */}
@@ -3841,7 +3840,6 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
                                 style={{ 
                                     height: '24px', 
                                     position: 'relative',
-                                    zIndex: 1,
                                     ...(hasMismatch ? { backgroundColor: '#fee2e2' } : {}) 
                                 }}
                                 data-row-id={r.id}
@@ -3854,14 +3852,14 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
                                 onContextMenu={(e)=>onContextMenuRow(e,r)}
                             >
                                 {/* Тип */}
-                                <td className={`px-2 py-1 align-middle ${getCellBgClass(hasMismatch)} ${getCellBorderClass(r.id)} draggable-cell`} style={{...getCellBorderStyle(isSel(r.id,'type')), ...getCellBorderStyleForDrag(r.id), ...getCellBgStyle(hasMismatch), ...getFrozenColumnStyle('type', columnWidths)}} onMouseDown={markDragAllowed}>
+                                <td className={`px-2 py-1 align-middle ${getCellBgClass(hasMismatch)} ${getCellBorderClass(r.id)} draggable-cell`} style={{...getCellBorderStyle(isSel(r.id,'type')), ...getCellBorderStyleForDrag(r.id), ...getCellBgStyle(hasMismatch), ...getFrozenColumnStyle('type', columnWidths, 'task')}} onMouseDown={markDragAllowed}>
                                     <div className="w-full overflow-hidden" title="Задача">
                                         <span className="block truncate">Задача</span>
                                     </div>
                                 </td>
 
                                 {/* Status */}
-                                <td className={`px-2 py-1 align-middle text-center ${getCellBgClass(hasMismatch)} ${getCellBorderClass(r.id)} draggable-cell`} style={{...getCellBorderStyle(isSel(r.id,'status')), ...getCellBorderStyleForDrag(r.id), ...getCellBgStyle(hasMismatch), ...getFrozenColumnStyle('status', columnWidths)}} onMouseDown={markDragAllowed} onDoubleClick={()=>startEdit({rowId:r.id,col:"status"})} onClick={()=>setSel({rowId:r.id,col:"status"})}>
+                                <td className={`px-2 py-1 align-middle text-center ${getCellBgClass(hasMismatch)} ${getCellBorderClass(r.id)} draggable-cell`} style={{...getCellBorderStyle(isSel(r.id,'status')), ...getCellBorderStyleForDrag(r.id), ...getCellBgStyle(hasMismatch), ...getFrozenColumnStyle('status', columnWidths, 'task')}} onMouseDown={markDragAllowed} onDoubleClick={()=>startEdit({rowId:r.id,col:"status"})} onClick={()=>setSel({rowId:r.id,col:"status"})}>
                                     {editing?.rowId===r.id && editing?.col==="status" ? (
                                         <div className="w-full h-full">
                                             <Select
@@ -3885,14 +3883,14 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
                                </td>
 
                                 {/* Sprints readonly */}
-                                <td className={`px-2 py-1 align-middle ${getCellBgClass(hasMismatch)} ${getCellBorderClass(r.id)} draggable-cell`} style={{width: getCellWidth("sprintsAuto"), minWidth: getCellWidth("sprintsAuto"), maxWidth: getCellWidth("sprintsAuto"), borderLeft: '1px solid rgb(226, 232, 240)', ...getCellBorderStyle(isSel(r.id,'sprintsAuto')), ...getCellBorderStyleForDrag(r.id), ...getCellBgStyle(hasMismatch), ...getFrozenColumnStyle('sprintsAuto', columnWidths)}} onMouseDown={markDragAllowed}>
+                                <td className={`px-2 py-1 align-middle ${getCellBgClass(hasMismatch)} ${getCellBorderClass(r.id)} draggable-cell`} style={{width: getCellWidth("sprintsAuto"), minWidth: getCellWidth("sprintsAuto"), maxWidth: getCellWidth("sprintsAuto"), borderLeft: '1px solid rgb(226, 232, 240)', ...getCellBorderStyle(isSel(r.id,'sprintsAuto')), ...getCellBorderStyleForDrag(r.id), ...getCellBgStyle(hasMismatch), ...getFrozenColumnStyle('sprintsAuto', columnWidths, 'task')}} onMouseDown={markDragAllowed}>
                                     <div className="w-full overflow-hidden" title={(r as TaskRow).sprintsAuto.join(", ")||""}>
                                         <span className="block truncate">{(r as TaskRow).sprintsAuto.join(", ")||""}</span>
                                     </div>
                                 </td>
 
                                 {/* Epic */}
-                                <td className={`px-2 py-1 align-middle ${getCellBgClass(hasMismatch)} ${getCellBorderClass(r.id)} draggable-cell`} style={{...getCellBorderStyle(isSel(r.id,'epic')), ...getCellBorderStyleForDrag(r.id), ...getCellBgStyle(hasMismatch), ...getFrozenColumnStyle('epic', columnWidths)}} onMouseDown={markDragAllowed} onDoubleClick={()=>startEdit({rowId:r.id,col:"epic"})} onClick={()=>setSel({rowId:r.id,col:"epic"})}>
+                                <td className={`px-2 py-1 align-middle ${getCellBgClass(hasMismatch)} ${getCellBorderClass(r.id)} draggable-cell`} style={{...getCellBorderStyle(isSel(r.id,'epic')), ...getCellBorderStyleForDrag(r.id), ...getCellBgStyle(hasMismatch), ...getFrozenColumnStyle('epic', columnWidths, 'task')}} onMouseDown={markDragAllowed} onDoubleClick={()=>startEdit({rowId:r.id,col:"epic"})} onClick={()=>setSel({rowId:r.id,col:"epic"})}>
                                     {editing?.rowId===r.id && editing?.col==="epic" ? (
                                         <input autoFocus className="w-full h-full box-border min-w-0 outline-none bg-transparent" style={{ border: 'none', padding: 0, margin: 0 }} defaultValue={(r as TaskRow).epic||""}
                                                onKeyDown={(e)=>{
@@ -3910,7 +3908,7 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
                                 </td>
 
                                 {/* Task */}
-                                <td className={`px-2 py-1 align-middle ${getCellBgClass(hasMismatch)} ${getCellBorderClass(r.id)} draggable-cell`} style={{width: getCellWidth("task"), minWidth: getCellWidth("task"), maxWidth: getCellWidth("task"), ...getCellBorderStyle(isSel(r.id,'task')), ...getCellBorderStyleForDrag(r.id), ...getCellBgStyle(hasMismatch), ...getFrozenColumnStyle('task', columnWidths)}} onMouseDown={markDragAllowed} onDoubleClick={()=>startEdit({rowId:r.id,col:"task"})} onClick={()=>setSel({rowId:r.id,col:"task"})} data-testid={`task-cell-${r.id}`}>
+                                <td className={`px-2 py-1 align-middle ${getCellBgClass(hasMismatch)} ${getCellBorderClass(r.id)} draggable-cell`} style={{width: getCellWidth("task"), minWidth: getCellWidth("task"), maxWidth: getCellWidth("task"), ...getCellBorderStyle(isSel(r.id,'task')), ...getCellBorderStyleForDrag(r.id), ...getCellBgStyle(hasMismatch), ...getFrozenColumnStyle('task', columnWidths, 'task')}} onMouseDown={markDragAllowed} onDoubleClick={()=>startEdit({rowId:r.id,col:"task"})} onClick={()=>setSel({rowId:r.id,col:"task"})} data-testid={`task-cell-${r.id}`}>
                                     {editing?.rowId===r.id && editing?.col==="task" ? (
                                         <input autoFocus className="w-full h-full box-border min-w-0 outline-none bg-transparent" style={{ border: 'none', padding: 0, margin: 0 }} defaultValue={(r as TaskRow).task} data-testid={`task-input-${r.id}`}
                                                onKeyDown={(e)=>{
@@ -3928,7 +3926,7 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
                                 </td>
 
                                 {/* Team */}
-                                <td className={`px-2 py-1 align-middle ${getCellBgClass(hasMismatch)} ${getCellBorderClass(r.id)} draggable-cell`} style={{...getCellBorderStyle(isSel(r.id,'team')), ...getCellBorderStyleForDrag(r.id), ...getCellBgStyle(hasMismatch), ...getFrozenColumnStyle('team', columnWidths)}} onMouseDown={markDragAllowed} onDoubleClick={()=>{
+                                <td className={`px-2 py-1 align-middle ${getCellBgClass(hasMismatch)} ${getCellBorderClass(r.id)} draggable-cell`} style={{...getCellBorderStyle(isSel(r.id,'team')), ...getCellBorderStyleForDrag(r.id), ...getCellBgStyle(hasMismatch), ...getFrozenColumnStyle('team', columnWidths, 'task')}} onMouseDown={markDragAllowed} onDoubleClick={()=>{
                                     startEdit({rowId:r.id,col:"team"});
                                 }} onClick={()=>{
                                     setSel({rowId:r.id,col:"team"});
@@ -3962,7 +3960,7 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
                                 </td>
 
                                 {/* Fn */}
-                                <td className={`px-2 py-1 align-middle text-center draggable-cell`} style={{ ...getCellBorderStyle(isSel(r.id,'fn')), ...getCellBorderStyleForDrag(r.id), ...getFrozenColumnStyle('fn', columnWidths), backgroundColor: getBg(teamFnColors[teamKeyFromTask(r as TaskRow)]), color: getText(teamFnColors[teamKeyFromTask(r as TaskRow)]) }} onMouseDown={markDragAllowed} onDoubleClick={()=>startEdit({rowId:r.id,col:"fn"})} onClick={()=>setSel({rowId:r.id,col:"fn"})} onContextMenu={(e)=>onContextMenuCellColor(e, r as TaskRow, 'fn', 'task')} data-testid={`fn-cell-${r.id}`}>
+                                <td className={`px-2 py-1 align-middle text-center draggable-cell`} style={{ ...getCellBorderStyle(isSel(r.id,'fn')), ...getCellBorderStyleForDrag(r.id), ...getFrozenColumnStyle('fn', columnWidths, 'task'), backgroundColor: getBg(teamFnColors[teamKeyFromTask(r as TaskRow)]), color: getText(teamFnColors[teamKeyFromTask(r as TaskRow)]) }} onMouseDown={markDragAllowed} onDoubleClick={()=>startEdit({rowId:r.id,col:"fn"})} onClick={()=>setSel({rowId:r.id,col:"fn"})} onContextMenu={(e)=>onContextMenuCellColor(e, r as TaskRow, 'fn', 'task')} data-testid={`fn-cell-${r.id}`}>
                                     {editing?.rowId===r.id && editing?.col==="fn" ? (
                                         <Select
                                             options={getUniqueValues('fn', (r as TaskRow).team)}
@@ -3988,7 +3986,7 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
                                 </td>
 
                                 {/* Empl */}
-                                <td className={`px-2 py-1 align-middle text-center ${getCellBgClass(hasMismatch)} ${getCellBorderClass(r.id)} draggable-cell`} style={{...getCellBorderStyle(isSel(r.id,'empl')), ...getCellBorderStyleForDrag(r.id), ...getCellBgStyle(hasMismatch), ...getFrozenColumnStyle('empl', columnWidths)}} onMouseDown={markDragAllowed} onDoubleClick={()=>startEdit({rowId:r.id,col:"empl"})} onClick={()=>setSel({rowId:r.id,col:"empl"})}>
+                                <td className={`px-2 py-1 align-middle text-center ${getCellBgClass(hasMismatch)} ${getCellBorderClass(r.id)} draggable-cell`} style={{...getCellBorderStyle(isSel(r.id,'empl')), ...getCellBorderStyleForDrag(r.id), ...getCellBgStyle(hasMismatch), ...getFrozenColumnStyle('empl', columnWidths, 'task')}} onMouseDown={markDragAllowed} onDoubleClick={()=>startEdit({rowId:r.id,col:"empl"})} onClick={()=>setSel({rowId:r.id,col:"empl"})}>
                                     {editing?.rowId===r.id && editing?.col==="empl" ? (
                                         <Select
                                             options={getEmployeesForFunction((r as TaskRow).fn || '', (r as TaskRow).team)}
@@ -4014,7 +4012,7 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
                                 </td>
 
                                 {/* Plan empl */}
-                                <td className={`px-2 py-1 align-middle text-center ${getCellBgClass(hasMismatch)} ${getCellBorderClass(r.id)} draggable-cell`} style={{...getCellBorderStyle(isSel(r.id,'planEmpl')), ...getCellBorderStyleForDrag(r.id), ...getCellBgStyle(hasMismatch), ...getFrozenColumnStyle('planEmpl', columnWidths)}} onMouseDown={markDragAllowed} onDoubleClick={()=>startEdit({rowId:r.id,col:"planEmpl"})} onClick={()=>setSel({rowId:r.id,col:"planEmpl"})}>
+                                <td className={`px-2 py-1 align-middle text-center ${getCellBgClass(hasMismatch)} ${getCellBorderClass(r.id)} draggable-cell`} style={{...getCellBorderStyle(isSel(r.id,'planEmpl')), ...getCellBorderStyleForDrag(r.id), ...getCellBgStyle(hasMismatch), ...getFrozenColumnStyle('planEmpl', columnWidths, 'task')}} onMouseDown={markDragAllowed} onDoubleClick={()=>startEdit({rowId:r.id,col:"planEmpl"})} onClick={()=>setSel({rowId:r.id,col:"planEmpl"})}>
                                     {editing?.rowId===r.id && editing?.col==="planEmpl" ? (
                                         <input autoFocus type="number" className="w-full h-full box-border min-w-0 outline-none bg-transparent" style={{ border: 'none', padding: 0, margin: 0 }} defaultValue={(r as TaskRow).planEmpl}
                                                onKeyDown={(e)=>{
@@ -4028,7 +4026,7 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
                                 </td>
 
                                 {/* Plan weeks */}
-                                <td className={`px-2 py-1 align-middle text-center ${getCellBgClass(hasMismatch)} ${getCellBorderClass(r.id)} draggable-cell`} style={{...getCellBorderStyle(isSel(r.id,'planWeeks')), ...getCellBorderStyleForDrag(r.id), ...getCellBgStyle(hasMismatch), ...getFrozenColumnStyle('planWeeks', columnWidths)}} onMouseDown={markDragAllowed} onDoubleClick={()=>startEdit({rowId:r.id,col:"planWeeks"})} onClick={()=>setSel({rowId:r.id,col:"planWeeks"})}>
+                                <td className={`px-2 py-1 align-middle text-center ${getCellBgClass(hasMismatch)} ${getCellBorderClass(r.id)} draggable-cell`} style={{...getCellBorderStyle(isSel(r.id,'planWeeks')), ...getCellBorderStyleForDrag(r.id), ...getCellBgStyle(hasMismatch), ...getFrozenColumnStyle('planWeeks', columnWidths, 'task')}} onMouseDown={markDragAllowed} onDoubleClick={()=>startEdit({rowId:r.id,col:"planWeeks"})} onClick={()=>setSel({rowId:r.id,col:"planWeeks"})}>
                                     {editing?.rowId===r.id && editing?.col==="planWeeks" ? (
                                         <input autoFocus type="number" className="w-full h-full box-border min-w-0 outline-none bg-transparent" style={{ border: 'none', padding: 0, margin: 0 }} defaultValue={(r as TaskRow).planWeeks}
                                                onKeyDown={(e)=>{
@@ -4042,7 +4040,7 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
                                 </td>
 
                     {/* Автоплан чекбокс */}
-                    <td className={`px-2 py-1 align-middle text-center ${getCellBgClass(hasMismatch)} ${getCellBorderClass(r.id)} draggable-cell`} style={{...getCellBorderStyle(isSel(r.id,'autoplan')), ...getCellBorderStyleForDrag(r.id), ...getCellBgStyle(hasMismatch), ...getFrozenColumnStyle('autoplan', columnWidths)}} onMouseDown={markDragAllowed} onClick={()=>setSel({rowId:r.id,col:"autoplan"})}>
+                    <td className={`px-2 py-1 align-middle text-center ${getCellBgClass(hasMismatch)} ${getCellBorderClass(r.id)} draggable-cell`} style={{...getCellBorderStyle(isSel(r.id,'autoplan')), ...getCellBorderStyleForDrag(r.id), ...getCellBgStyle(hasMismatch), ...getFrozenColumnStyle('autoplan', columnWidths, 'task')}} onMouseDown={markDragAllowed} onClick={()=>setSel({rowId:r.id,col:"autoplan"})}>
                         <label className="inline-flex items-center gap-2">
                             <input type="checkbox" checked={(r as TaskRow).autoPlanEnabled} onChange={e=>toggleAutoPlan(r.id, e.currentTarget.checked)} 
                                    onKeyDown={(e)=>{
@@ -4054,7 +4052,7 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
 
                     {/* Таймлайн с горизонтальным скроллом */}
                     {range(TOTAL_WEEKS).map(w => (
-                        <td key={w} id={cellId(r.id, w)} data-week-idx={w} className={`px-0 py-0 align-middle ${getCellBorderClass(r.id)} week-cell`} style={{width: '3.5rem', background: ((r as TaskRow).weeks[w] || 0) > 0 ? cellBgForTask(r as TaskRow) : undefined, color: ((r as TaskRow).weeks[w] || 0) > 0 ? getText(teamFnColors[teamKeyFromTask(r as TaskRow)]) : undefined, ...getCellBorderStyle(isSelWeek(r.id,w)), ...getCellBorderStyleForDrag(r.id), ...getWeekColumnHighlightStyle(w)}} onMouseDown={(e)=>onWeekCellMouseDown(e,r,w)} onMouseEnter={(e)=>onWeekCellMouseEnter(e,r,w)} onDoubleClick={(e)=>onWeekCellDoubleClick(e,r,w)}>
+                        <td key={w} id={cellId(r.id, w)} data-week-idx={w} className={`px-0 py-0 align-middle ${getCellBorderClass(r.id)} week-cell`} style={{width: '3.5rem', zIndex: 2, background: ((r as TaskRow).weeks[w] || 0) > 0 ? cellBgForTask(r as TaskRow) : undefined, color: ((r as TaskRow).weeks[w] || 0) > 0 ? getText(teamFnColors[teamKeyFromTask(r as TaskRow)]) : undefined, ...getCellBorderStyle(isSelWeek(r.id,w)), ...getCellBorderStyleForDrag(r.id), ...getWeekColumnHighlightStyle(w)}} onMouseDown={(e)=>onWeekCellMouseDown(e,r,w)} onMouseEnter={(e)=>onWeekCellMouseEnter(e,r,w)} onDoubleClick={(e)=>onWeekCellDoubleClick(e,r,w)}>
                             {editing?.rowId===r.id && typeof editing.col==='object' && editing.col.week===w ? (
                                 <input
                                     autoFocus
