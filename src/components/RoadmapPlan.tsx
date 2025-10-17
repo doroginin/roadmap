@@ -1981,10 +1981,12 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker, autoSave
     function getSprintCellBorderStyle(isSelected: boolean | null = false): React.CSSProperties {
         if (isSelected) {
             return {
-                borderTop: '2px solid gray',
-                borderRight: '2px solid gray',
-                borderBottom: '2px solid gray',
-                borderLeft: '2px solid gray',
+                borderTop: '1px solid rgb(226, 232, 240)',
+                borderRight: '1px solid rgb(226, 232, 240)',
+                borderBottom: '1px solid rgb(226, 232, 240)',
+                borderLeft: '1px solid rgb(226, 232, 240)',
+                outline: '2px solid gray',
+                outlineOffset: '-1px',
                 paddingRight: '0.5em',
                 paddingLeft: '0.5em'
             };
@@ -2003,10 +2005,12 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker, autoSave
     function getTeamCellBorderStyle(isSelected: boolean | null = false): React.CSSProperties {
         if (isSelected) {
             return {
-                borderTop: '2px solid gray',
-                borderRight: '2px solid gray',
-                borderBottom: '2px solid gray',
-                borderLeft: '2px solid gray',
+                borderTop: '1px solid rgb(226, 232, 240)',
+                borderRight: '1px solid rgb(226, 232, 240)',
+                borderBottom: '1px solid rgb(226, 232, 240)',
+                borderLeft: '1px solid rgb(226, 232, 240)',
+                outline: '2px solid gray',
+                outlineOffset: '-1px',
                 paddingRight: '0.5em',
                 paddingLeft: '0.5em'
             };
@@ -2229,10 +2233,12 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker, autoSave
     function getCellBorderStyle(isSelected: boolean | null = false): React.CSSProperties {
         if (isSelected) {
             return { 
-                borderTop: '2px solid gray',
-                borderRight: '2px solid gray',
-                borderBottom: '2px solid gray',
-                borderLeft: '2px solid gray'
+                borderTop: '1px solid rgb(226, 232, 240)',
+                borderRight: '1px solid rgb(226, 232, 240)',
+                borderBottom: '1px solid rgb(226, 232, 240)',
+                borderLeft: '1px solid rgb(226, 232, 240)',
+                outline: '2px solid gray',
+                outlineOffset: '-1px'
             };
         }
         return { 
