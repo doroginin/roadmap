@@ -34,7 +34,7 @@ test.describe('Frozen Columns Tests', () => {
 
     expect(typeColumnStyle.position).toBe('sticky');
     expect(typeColumnStyle.left).toBe('0px');
-    expect(typeColumnStyle.zIndex).toBe('15');
+    expect(typeColumnStyle.zIndex).toBe('8');
 
     // Проверяем стили для колонки Status
     const statusColumnStyle = await statusColumn.evaluate((el) => {
@@ -48,7 +48,7 @@ test.describe('Frozen Columns Tests', () => {
 
     expect(statusColumnStyle.position).toBe('sticky');
     expect(parseInt(statusColumnStyle.left)).toBeGreaterThan(0);
-    expect(statusColumnStyle.zIndex).toBe('15');
+    expect(statusColumnStyle.zIndex).toBe('8');
 
     // Проверяем стили для колонки Team
     const teamColumnStyle = await teamColumn.evaluate((el) => {
@@ -62,7 +62,7 @@ test.describe('Frozen Columns Tests', () => {
 
     expect(teamColumnStyle.position).toBe('sticky');
     expect(parseInt(teamColumnStyle.left)).toBeGreaterThan(0);
-    expect(teamColumnStyle.zIndex).toBe('15');
+    expect(teamColumnStyle.zIndex).toBe('8');
 
     // Проверяем стили для колонки Auto
     const autoColumnStyle = await autoColumn.evaluate((el) => {
@@ -76,7 +76,7 @@ test.describe('Frozen Columns Tests', () => {
 
     expect(autoColumnStyle.position).toBe('sticky');
     expect(parseInt(autoColumnStyle.left)).toBeGreaterThan(0);
-    expect(autoColumnStyle.zIndex).toBe('15');
+    expect(autoColumnStyle.zIndex).toBe('8');
   });
 
   test('should have frozen cells in resource rows', async ({ page }) => {
@@ -103,7 +103,7 @@ test.describe('Frozen Columns Tests', () => {
 
     expect(typeCellStyle.position).toBe('sticky');
     expect(typeCellStyle.left).toBe('0px');
-    expect(typeCellStyle.zIndex).toBe('15');
+    expect(typeCellStyle.zIndex).toBe('8');
 
     // Проверяем стили для ячейки Team
     const teamCellStyle = await teamCell.evaluate((el) => {
@@ -117,7 +117,7 @@ test.describe('Frozen Columns Tests', () => {
 
     expect(teamCellStyle.position).toBe('sticky');
     expect(parseInt(teamCellStyle.left)).toBeGreaterThan(0);
-    expect(teamCellStyle.zIndex).toBe('15');
+    expect(teamCellStyle.zIndex).toBe('8');
   });
 
   test('should have frozen cells in task rows', async ({ page }) => {
@@ -145,7 +145,7 @@ test.describe('Frozen Columns Tests', () => {
 
     expect(typeCellStyle.position).toBe('sticky');
     expect(typeCellStyle.left).toBe('0px');
-    expect(typeCellStyle.zIndex).toBe('15');
+    expect(typeCellStyle.zIndex).toBe('6');
 
     // Проверяем стили для ячейки Status
     const statusCellStyle = await statusCell.evaluate((el) => {
@@ -159,7 +159,7 @@ test.describe('Frozen Columns Tests', () => {
 
     expect(statusCellStyle.position).toBe('sticky');
     expect(parseInt(statusCellStyle.left)).toBeGreaterThan(0);
-    expect(statusCellStyle.zIndex).toBe('15');
+    expect(statusCellStyle.zIndex).toBe('6');
 
     // Проверяем стили для ячейки Team
     const teamCellStyle = await teamCell.evaluate((el) => {
@@ -173,7 +173,7 @@ test.describe('Frozen Columns Tests', () => {
 
     expect(teamCellStyle.position).toBe('sticky');
     expect(parseInt(teamCellStyle.left)).toBeGreaterThan(0);
-    expect(teamCellStyle.zIndex).toBe('15');
+    expect(teamCellStyle.zIndex).toBe('6');
   });
 
   test('should have frozen resource rows under header', async ({ page }) => {
@@ -241,7 +241,7 @@ test.describe('Frozen Columns Tests', () => {
 
     expect(sprintsColumnStyle.position).toBe('sticky');
     expect(parseInt(sprintsColumnStyle.left)).toBeGreaterThan(0);
-    expect(sprintsColumnStyle.zIndex).toBe('15');
+    expect(sprintsColumnStyle.zIndex).toBe('8');
 
     // Проверяем стили закрепления для колонки Task
     const taskColumnStyle = await taskColumn.evaluate((el) => {
@@ -255,7 +255,7 @@ test.describe('Frozen Columns Tests', () => {
 
     expect(taskColumnStyle.position).toBe('sticky');
     expect(parseInt(taskColumnStyle.left)).toBeGreaterThan(0);
-    expect(taskColumnStyle.zIndex).toBe('15');
+    expect(taskColumnStyle.zIndex).toBe('8');
   });
 
   test('should have correct z-index hierarchy for task rows', async ({ page }) => {
@@ -276,7 +276,7 @@ test.describe('Frozen Columns Tests', () => {
     });
     
     expect(taskTbodyStyle.position).toBe('relative');
-    expect(taskTbodyStyle.zIndex).toBe('1');
+    expect(taskTbodyStyle.zIndex).toBe('auto');
 
     // Находим первую строку задачи
     const taskRow = page.locator('tr').filter({ hasText: 'Задача' }).first();
@@ -292,6 +292,6 @@ test.describe('Frozen Columns Tests', () => {
     });
 
     expect(taskRowStyle.position).toBe('relative');
-    expect(taskRowStyle.zIndex).toBe('1');
+    expect(taskRowStyle.zIndex).toBe('auto');
   });
 });
