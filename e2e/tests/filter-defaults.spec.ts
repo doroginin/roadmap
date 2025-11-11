@@ -105,7 +105,7 @@ test.describe('Filter Defaults for New Items', () => {
     await newResourceRow.click({ button: 'right', force: true });
     await page.waitForTimeout(500);
 
-    const deleteButton = page.getByTestId('delete-row-button');
+    const deleteButton = page.getByTestId('context-menu-delete');
     await expect(deleteButton).toBeVisible({ timeout: 3000 });
     await deleteButton.click();
 
@@ -216,7 +216,7 @@ test.describe('Filter Defaults for New Items', () => {
     await newTaskRow.click({ button: 'right', force: true });
     await page.waitForTimeout(500);
 
-    const deleteButton = page.getByTestId('delete-row-button');
+    const deleteButton = page.getByTestId('context-menu-delete');
     await expect(deleteButton).toBeVisible({ timeout: 3000 });
     await deleteButton.click();
 
@@ -315,7 +315,7 @@ test.describe('Filter Defaults for New Items', () => {
     await newResourceRow.click({ button: 'right', force: true });
     await page.waitForTimeout(500);
 
-    const deleteButton = page.getByTestId('delete-row-button');
+    const deleteButton = page.getByTestId('context-menu-delete');
     await expect(deleteButton).toBeVisible({ timeout: 3000 });
     await deleteButton.click();
 

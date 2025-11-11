@@ -1810,23 +1810,36 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker, autoSave
                         
                         // Проверяем, изменилось ли значение
                         const hasChanged = !weeksArraysEqual(base, originalWeeks);
-                        
+
                         setRows(prev=>prev.map(x =>
                             (x.kind==='task' && x.id===row.id)
-                                ? { 
-                                    ...(x as TaskRow), 
+                                ? {
+                                    ...(x as TaskRow),
                                     weeks: base,
                                     // Устанавливаем флаги только если значение изменилось
                                     ...(hasChanged ? { manualEdited: true, autoPlanEnabled: false } : {})
                                 }
                                 : x
                         ));
+
+                        // Регистрируем изменение в changeTracker
+                        if (hasChanged && changeTracker) {
+                            changeTracker.addCellChange('task', row.id, 'weeks', originalWeeks, base);
+                        }
                     } else if (row?.kind === "resource") {
+                        const oldWeeks = (row as ResourceRow).weeks.slice();
+                        const newWeeks = (row as ResourceRow).weeks.map((vv,i)=> i===w? 0: vv);
+
                         setRows(prev=>prev.map(x =>
                             (x.kind==='resource' && x.id===row.id)
-                                ? { ...(x as ResourceRow), weeks: (x as ResourceRow).weeks.map((vv,i)=> i===w? 0: vv) }
+                                ? { ...(x as ResourceRow), weeks: newWeeks }
                                 : x
                         ));
+
+                        // Регистрируем изменение в changeTracker
+                        if (changeTracker && !weeksArraysEqual(oldWeeks, newWeeks)) {
+                            changeTracker.addCellChange('resource', row.id, 'weeks', oldWeeks, newWeeks);
+                        }
                     }
                 }
                 return;
@@ -2921,27 +2934,49 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker, autoSave
                                 ? { ...(r as TaskRow), autoPlanEnabled: true, manualEdited: false }
                                 : r
                         ));
+
+                        // Регистрируем изменения в changeTracker
+                        if (changeTracker) {
+                            changeTracker.addCellChange('task', taskId, 'autoPlanEnabled', t.autoPlanEnabled, true);
+                            changeTracker.addCellChange('task', taskId, 'manualEdited', t.manualEdited, false);
+                        }
                     } else {
                         // Планы отличаются - запрашиваем подтверждение
                         const ok = confirm("Включить автоплан? Текущий ручной план будет перезаписан.");
                         if (!ok) return; // отмена
 
+                        const oldWeeks = t.weeks.slice();
                         setRows(prev => prev.map(r =>
                             (r.kind === "task" && r.id === taskId)
                                 ? { ...(r as TaskRow), autoPlanEnabled: true, manualEdited: false, weeks: Array(TOTAL_WEEKS).fill(0) }
                                 : r
                         ));
+
+                        // Регистрируем изменения в changeTracker
+                        if (changeTracker) {
+                            changeTracker.addCellChange('task', taskId, 'autoPlanEnabled', t.autoPlanEnabled, true);
+                            changeTracker.addCellChange('task', taskId, 'manualEdited', t.manualEdited, false);
+                            changeTracker.addCellChange('task', taskId, 'weeks', oldWeeks, Array(TOTAL_WEEKS).fill(0));
+                        }
                     }
                 } else {
                     // Не удалось вычислить автоплан - запрашиваем подтверждение
                     const ok = confirm("Включить автоплан? Текущий ручной план будет перезаписан.");
                     if (!ok) return; // отмена
 
+                    const oldWeeks = t.weeks.slice();
                     setRows(prev => prev.map(r =>
                         (r.kind === "task" && r.id === taskId)
                             ? { ...(r as TaskRow), autoPlanEnabled: true, manualEdited: false, weeks: Array(TOTAL_WEEKS).fill(0) }
                             : r
                     ));
+
+                    // Регистрируем изменения в changeTracker
+                    if (changeTracker) {
+                        changeTracker.addCellChange('task', taskId, 'autoPlanEnabled', t.autoPlanEnabled, true);
+                        changeTracker.addCellChange('task', taskId, 'manualEdited', t.manualEdited, false);
+                        changeTracker.addCellChange('task', taskId, 'weeks', oldWeeks, Array(TOTAL_WEEKS).fill(0));
+                    }
                 }
             } else {
                 // Просто включаем автопланирование
@@ -2950,6 +2985,12 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker, autoSave
                         ? { ...(r as TaskRow), autoPlanEnabled: true, manualEdited: false }
                         : r
                 ));
+
+                // Регистрируем изменения в changeTracker
+                if (changeTracker) {
+                    changeTracker.addCellChange('task', taskId, 'autoPlanEnabled', t.autoPlanEnabled, true);
+                    changeTracker.addCellChange('task', taskId, 'manualEdited', t.manualEdited, false);
+                }
             }
         } else {
             // Отключение автопланирования - сохраняем текущие значения как ручные
@@ -2958,6 +2999,12 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker, autoSave
                     ? { ...(r as TaskRow), autoPlanEnabled: false, manualEdited: true, weeks: t.weeks.slice() }
                     : r
             ));
+
+            // Регистрируем изменения в changeTracker
+            if (changeTracker) {
+                changeTracker.addCellChange('task', taskId, 'autoPlanEnabled', t.autoPlanEnabled, false);
+                changeTracker.addCellChange('task', taskId, 'manualEdited', t.manualEdited, true);
+            }
         }
     }
 
@@ -3049,14 +3096,19 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
                     
                     // Проверяем, изменилось ли значение
                     const hasChanged = !weeksArraysEqual(base, originalWeeks);
-                    
+
                     // Обновляем сохраненные недели для следующей итерации
                     if (hasChanged && p.savedWeeks) {
                         p.savedWeeks = base.slice();
                     }
-                    
-                    return { 
-                        ...currentTask, 
+
+                    // Регистрируем изменение в changeTracker
+                    if (hasChanged && changeTracker) {
+                        changeTracker.addCellChange('task', currentTask.id, 'weeks', originalWeeks, base);
+                    }
+
+                    return {
+                        ...currentTask,
                         weeks: base,
                         // Устанавливаем флаги только если значение изменилось
                         ...(hasChanged ? { manualEdited: true, autoPlanEnabled: false } : {})
@@ -3077,10 +3129,17 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
             setRows(prev => prev.map(x => {
                 if (x.kind === "resource" && x.id === r.id) {
                     const currentResource = x as ResourceRow;
-                    
+                    const originalWeeks = currentResource.weeks.slice();
+
                     // Заполняем все ячейки между последней обработанной позицией и текущей
                     const base = fillWeeksBetween(currentResource.weeks, fromW, w, p.value);
-                    
+
+                    // Регистрируем изменение в changeTracker
+                    const hasChanged = !weeksArraysEqual(base, originalWeeks);
+                    if (hasChanged && changeTracker) {
+                        changeTracker.addCellChange('resource', currentResource.id, 'weeks', originalWeeks, base);
+                    }
+
                     return { ...currentResource, weeks: base };
                 }
                 return x;
@@ -3676,6 +3735,7 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
                                 className={"border-b bg-white"}
                                 style={{ height: '24px' }}
                                 data-row-id={r.id}
+                                data-row-kind="resource"
                                 data-testid={`resource`}
                                 onMouseDown={(e)=>onMouseDownRow(e,r)}
                                 onContextMenu={(e)=>onContextMenuRow(e,r)}
@@ -3784,22 +3844,40 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
                                                     onKeyDown={(e)=>{
                                                         if(e.key==='Enter'){
                                                             const val = clamp(parseInt((e.target as HTMLInputElement).value||"0"),0,99);
+                                                            const oldWeeks = (r as ResourceRow).weeks.slice();
+                                                            const newWeeks = (r as ResourceRow).weeks.map((vv,i)=> i===w? val: vv);
+
                                                             setRows(prev=>prev.map(x =>
                                                                 (x.kind==='resource' && x.id===r.id)
-                                                                    ? { ...(x as ResourceRow), weeks: (x as ResourceRow).weeks.map((vv,i)=> i===w? val: vv)}
+                                                                    ? { ...(x as ResourceRow), weeks: newWeeks}
                                                                     : x
                                                             ));
+
+                                                            // Регистрируем изменение в changeTracker
+                                                            if (changeTracker && !weeksArraysEqual(oldWeeks, newWeeks)) {
+                                                                changeTracker.addCellChange('resource', r.id, 'weeks', oldWeeks, newWeeks);
+                                                            }
+
                                                             commitEdit();
                                                         }
                                                         if (e.key === 'Tab' && e.shiftKey) { e.preventDefault(); e.stopPropagation(); commitEdit(); if (sel) focusPrevLeft(sel.rowId, sel.col); return; }
                                                         if(e.key==='Tab'){
                                                             e.preventDefault();
                                                             const val = clamp(parseInt((e.target as HTMLInputElement).value||"0"),0,99);
+                                                            const oldWeeks = (r as ResourceRow).weeks.slice();
+                                                            const newWeeks = (r as ResourceRow).weeks.map((vv,i)=> i===w? val: vv);
+
                                                             setRows(prev=>prev.map(x =>
                                                                 (x.kind==='resource' && x.id===r.id)
-                                                                    ? { ...(x as ResourceRow), weeks: (x as ResourceRow).weeks.map((vv,i)=> i===w? val: vv)}
+                                                                    ? { ...(x as ResourceRow), weeks: newWeeks}
                                                                     : x
                                                             ));
+
+                                                            // Регистрируем изменение в changeTracker
+                                                            if (changeTracker && !weeksArraysEqual(oldWeeks, newWeeks)) {
+                                                                changeTracker.addCellChange('resource', r.id, 'weeks', oldWeeks, newWeeks);
+                                                            }
+
                                                             focusNextRight(r.id, {week:w});
                                                         }
                                                         if(e.key==='Escape'){
@@ -3810,11 +3888,19 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
                                                     onBlur={(e)=>{
                                                         if(!cancelEditRef.current){
                                                             const val = clamp(parseInt((e.target as HTMLInputElement).value||"0"),0,99);
+                                                            const oldWeeks = (r as ResourceRow).weeks.slice();
+                                                            const newWeeks = (r as ResourceRow).weeks.map((vv,i)=> i===w? val: vv);
+
                                                             setRows(prev=>prev.map(x =>
                                                                 (x.kind==='resource' && x.id===r.id)
-                                                                    ? { ...(x as ResourceRow), weeks: (x as ResourceRow).weeks.map((vv,i)=> i===w? val: vv)}
+                                                                    ? { ...(x as ResourceRow), weeks: newWeeks}
                                                                     : x
                                                             ));
+
+                                                            // Регистрируем изменение в changeTracker
+                                                            if (changeTracker && !weeksArraysEqual(oldWeeks, newWeeks)) {
+                                                                changeTracker.addCellChange('resource', r.id, 'weeks', oldWeeks, newWeeks);
+                                                            }
                                                         }
                                                         stopEdit();
                                                     }}
@@ -3843,15 +3929,16 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
                             return (
                             <tr key={r.id}
                                 className={`border-b ${hasMismatch ? 'bg-red-100' : 'bg-white'}`}
-                                style={{ 
-                                    height: '24px', 
+                                style={{
+                                    height: '24px',
                                     position: 'relative',
-                                    ...(hasMismatch ? { backgroundColor: '#fee2e2' } : {}) 
+                                    ...(hasMismatch ? { backgroundColor: '#fee2e2' } : {})
                                 }}
                                 data-row-id={r.id}
+                                data-row-kind="task"
                                 data-testid={`task`}
-                                onMouseDown={(e)=>{ 
-                                    if (r.kind==='task') onTaskMouseDown(e, r as TaskRow); 
+                                onMouseDown={(e)=>{
+                                    if (r.kind==='task') onTaskMouseDown(e, r as TaskRow);
                                     onMouseDownRow(e, r);
                                 }}
                                 onMouseUp={(e)=>{ if (r.kind==='task') onTaskMouseUp(e, r as TaskRow); clearDragAllowed(); }}
@@ -4018,9 +4105,9 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
                                 </td>
 
                                 {/* Plan empl */}
-                                <td className={`px-2 py-1 align-middle text-center ${getCellBgClass(hasMismatch)} ${getCellBorderClass(r.id)} draggable-cell`} style={{...getCellBorderStyle(isSel(r.id,'planEmpl')), ...getCellBorderStyleForDrag(r.id), ...getCellBgStyle(hasMismatch), ...getFrozenColumnStyle('planEmpl', columnWidths, 'task')}} onMouseDown={markDragAllowed} onDoubleClick={()=>startEdit({rowId:r.id,col:"planEmpl"})} onClick={()=>setSel({rowId:r.id,col:"planEmpl"})}>
+                                <td data-testid={`planEmpl-cell-${r.id}`} className={`px-2 py-1 align-middle text-center ${getCellBgClass(hasMismatch)} ${getCellBorderClass(r.id)} draggable-cell`} style={{...getCellBorderStyle(isSel(r.id,'planEmpl')), ...getCellBorderStyleForDrag(r.id), ...getCellBgStyle(hasMismatch), ...getFrozenColumnStyle('planEmpl', columnWidths, 'task')}} onMouseDown={markDragAllowed} onDoubleClick={()=>startEdit({rowId:r.id,col:"planEmpl"})} onClick={()=>setSel({rowId:r.id,col:"planEmpl"})}>
                                     {editing?.rowId===r.id && editing?.col==="planEmpl" ? (
-                                        <input autoFocus type="number" className="w-full h-full box-border min-w-0 outline-none bg-transparent" style={{ border: 'none', padding: 0, margin: 0 }} defaultValue={(r as TaskRow).planEmpl}
+                                        <input data-testid={`planEmpl-input-${r.id}`} autoFocus type="number" className="w-full h-full box-border min-w-0 outline-none bg-transparent" style={{ border: 'none', padding: 0, margin: 0 }} defaultValue={(r as TaskRow).planEmpl}
                                                onKeyDown={(e)=>{
                                                    if(e.key==='Enter'){ updateTask(r.id,{planEmpl: clamp(parseFloat((e.target as HTMLInputElement).value||"0"),0,99)}); commitEdit(); }
                                                    if (e.key === 'Tab' && e.shiftKey) { e.preventDefault(); e.stopPropagation(); updateTask(r.id,{planEmpl: clamp(parseFloat((e.target as HTMLInputElement).value||"0"),0,99)}); navigateInEditMode('prev', r.id, 'planEmpl'); return; }
@@ -4032,9 +4119,9 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
                                 </td>
 
                                 {/* Plan weeks */}
-                                <td className={`px-2 py-1 align-middle text-center ${getCellBgClass(hasMismatch)} ${getCellBorderClass(r.id)} draggable-cell`} style={{...getCellBorderStyle(isSel(r.id,'planWeeks')), ...getCellBorderStyleForDrag(r.id), ...getCellBgStyle(hasMismatch), ...getFrozenColumnStyle('planWeeks', columnWidths, 'task')}} onMouseDown={markDragAllowed} onDoubleClick={()=>startEdit({rowId:r.id,col:"planWeeks"})} onClick={()=>setSel({rowId:r.id,col:"planWeeks"})}>
+                                <td data-testid={`planWeeks-cell-${r.id}`} className={`px-2 py-1 align-middle text-center ${getCellBgClass(hasMismatch)} ${getCellBorderClass(r.id)} draggable-cell`} style={{...getCellBorderStyle(isSel(r.id,'planWeeks')), ...getCellBorderStyleForDrag(r.id), ...getCellBgStyle(hasMismatch), ...getFrozenColumnStyle('planWeeks', columnWidths, 'task')}} onMouseDown={markDragAllowed} onDoubleClick={()=>startEdit({rowId:r.id,col:"planWeeks"})} onClick={()=>setSel({rowId:r.id,col:"planWeeks"})}>
                                     {editing?.rowId===r.id && editing?.col==="planWeeks" ? (
-                                        <input autoFocus type="number" className="w-full h-full box-border min-w-0 outline-none bg-transparent" style={{ border: 'none', padding: 0, margin: 0 }} defaultValue={(r as TaskRow).planWeeks}
+                                        <input data-testid={`planWeeks-input-${r.id}`} autoFocus type="number" className="w-full h-full box-border min-w-0 outline-none bg-transparent" style={{ border: 'none', padding: 0, margin: 0 }} defaultValue={(r as TaskRow).planWeeks}
                                                onKeyDown={(e)=>{
                                                    if(e.key==='Enter'){ updateTask(r.id,{planWeeks: clamp(parseInt((e.target as HTMLInputElement).value||"0"),0,TOTAL_WEEKS)}); commitEdit(); }
                                                    if (e.key === 'Tab' && e.shiftKey) { e.preventDefault(); e.stopPropagation(); updateTask(r.id,{planWeeks: clamp(parseInt((e.target as HTMLInputElement).value||"0"),0,TOTAL_WEEKS)}); navigateInEditMode('prev', r.id, 'planWeeks'); return; }
@@ -4058,7 +4145,7 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
 
                     {/* Таймлайн с горизонтальным скроллом */}
                     {range(TOTAL_WEEKS).map(w => (
-                        <td key={w} id={cellId(r.id, w)} data-week-idx={w} className={`px-0 py-0 align-middle ${getCellBorderClass(r.id)} week-cell`} style={{width: '3.5rem', zIndex: 2, background: ((r as TaskRow).weeks[w] || 0) > 0 ? cellBgForTask(r as TaskRow) : undefined, color: ((r as TaskRow).weeks[w] || 0) > 0 ? getText(teamFnColors[teamKeyFromTask(r as TaskRow)]) : undefined, ...getCellBorderStyle(isSelWeek(r.id,w)), ...getCellBorderStyleForDrag(r.id), ...getWeekColumnHighlightStyle(w)}} onMouseDown={(e)=>onWeekCellMouseDown(e,r,w)} onMouseEnter={(e)=>onWeekCellMouseEnter(e,r,w)} onDoubleClick={(e)=>onWeekCellDoubleClick(e,r,w)}>
+                        <td key={w} id={cellId(r.id, w)} data-row-id={r.id} data-week-idx={w} className={`px-0 py-0 align-middle ${getCellBorderClass(r.id)} week-cell`} style={{width: '3.5rem', zIndex: 2, background: ((r as TaskRow).weeks[w] || 0) > 0 ? cellBgForTask(r as TaskRow) : undefined, color: ((r as TaskRow).weeks[w] || 0) > 0 ? getText(teamFnColors[teamKeyFromTask(r as TaskRow)]) : undefined, ...getCellBorderStyle(isSelWeek(r.id,w)), ...getCellBorderStyleForDrag(r.id), ...getWeekColumnHighlightStyle(w)}} onMouseDown={(e)=>onWeekCellMouseDown(e,r,w)} onMouseEnter={(e)=>onWeekCellMouseEnter(e,r,w)} onDoubleClick={(e)=>onWeekCellDoubleClick(e,r,w)}>
                             {editing?.rowId===r.id && typeof editing.col==='object' && editing.col.week===w ? (
                                 <input
                                     autoFocus
@@ -4073,47 +4160,59 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
                                             const base = weeksBaseForTaskLocal(r as TaskRow);
                                             const originalWeeks = (r as TaskRow).weeks.slice();
                                             base[w] = val;
-                                            
+
                                             // Проверяем, изменилось ли значение
                                             const hasChanged = !weeksArraysEqual(base, originalWeeks);
-                                            
+
                                             setRows(prev=>prev.map(x =>
                                                 (x.kind==='task' && x.id===r.id)
-                                                    ? { 
-                                                        ...(x as TaskRow), 
+                                                    ? {
+                                                        ...(x as TaskRow),
                                                         weeks: base,
                                                         // Устанавливаем флаги только если значение изменилось
                                                         ...(hasChanged ? { manualEdited: true, autoPlanEnabled: false } : {})
                                                     }
                                                     : x
                                             ));
+
+                                            // Регистрируем изменение в changeTracker
+                                            if (hasChanged && changeTracker) {
+                                                changeTracker.addCellChange('task', r.id, 'weeks', originalWeeks, base);
+                                            }
+
                                             commitEdit();
                                         }
-                                        if (e.key === 'Tab' && e.shiftKey) { 
-                                            e.preventDefault(); 
-                                            e.stopPropagation(); 
+                                        if (e.key === 'Tab' && e.shiftKey) {
+                                            e.preventDefault();
+                                            e.stopPropagation();
                                             const raw = (e.target as HTMLInputElement).value;
                                             const val = Math.max(0, parseFloat(raw||"0"));
                                             const base = weeksBaseForTaskLocal(r as TaskRow);
                                             const originalWeeks = (r as TaskRow).weeks.slice();
                                             base[w] = val;
-                                            
+
                                             // Проверяем, изменилось ли значение
                                             const hasChanged = !weeksArraysEqual(base, originalWeeks);
-                                            
+
                                             setRows(prev=>prev.map(x =>
                                                 (x.kind==='task' && x.id===r.id)
-                                                    ? { 
-                                                        ...(x as TaskRow), 
+                                                    ? {
+                                                        ...(x as TaskRow),
                                                         weeks: base,
                                                         // Устанавливаем флаги только если значение изменилось
                                                         ...(hasChanged ? { manualEdited: true, autoPlanEnabled: false } : {})
                                                     }
                                                     : x
                                             ));
-                                            commitEdit(); 
-                                            if (sel) focusPrevLeft(sel.rowId, sel.col); 
-                                            return; 
+
+                                            // Регистрируем изменение в changeTracker
+                                            if (hasChanged && changeTracker) {
+                                                changeTracker.addCellChange('task', r.id, 'weeks', originalWeeks, base);
+                                            }
+
+                                            commitEdit();
+                                            if (sel) focusPrevLeft(sel.rowId, sel.col);
+                                            return;
                                         }
                                         if(e.key==='Tab'){
                                             e.preventDefault();
@@ -4122,20 +4221,26 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
                                             const base = weeksBaseForTaskLocal(r as TaskRow);
                                             const originalWeeks = (r as TaskRow).weeks.slice();
                                             base[w] = val;
-                                            
+
                                             // Проверяем, изменилось ли значение
                                             const hasChanged = !weeksArraysEqual(base, originalWeeks);
-                                            
+
                                             setRows(prev=>prev.map(x =>
                                                 (x.kind==='task' && x.id===r.id)
-                                                    ? { 
-                                                        ...(x as TaskRow), 
+                                                    ? {
+                                                        ...(x as TaskRow),
                                                         weeks: base,
                                                         // Устанавливаем флаги только если значение изменилось
                                                         ...(hasChanged ? { manualEdited: true, autoPlanEnabled: false } : {})
                                                     }
                                                     : x
                                             ));
+
+                                            // Регистрируем изменение в changeTracker
+                                            if (hasChanged && changeTracker) {
+                                                changeTracker.addCellChange('task', r.id, 'weeks', originalWeeks, base);
+                                            }
+
                                             focusNextRight(r.id, {week:w});
                                         }
                                         if(e.key==='Escape'){
@@ -4150,20 +4255,25 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
                                             const base = weeksBaseForTaskLocal(r as TaskRow);
                                             const originalWeeks = (r as TaskRow).weeks.slice();
                                             base[w] = val;
-                                            
+
                                             // Проверяем, изменилось ли значение
                                             const hasChanged = !weeksArraysEqual(base, originalWeeks);
-                                            
+
                                             setRows(prev=>prev.map(x =>
                                                 (x.kind==='task' && x.id===r.id)
-                                                    ? { 
-                                                        ...(x as TaskRow), 
+                                                    ? {
+                                                        ...(x as TaskRow),
                                                         weeks: base,
                                                         // Устанавливаем флаги только если значение изменилось
                                                         ...(hasChanged ? { manualEdited: true, autoPlanEnabled: false } : {})
                                                     }
                                                     : x
                                             ));
+
+                                            // Регистрируем изменение в changeTracker
+                                            if (hasChanged && changeTracker) {
+                                                changeTracker.addCellChange('task', r.id, 'weeks', originalWeeks, base);
+                                            }
                                         }
                                         stopEdit();
                                     }}
@@ -4525,10 +4635,10 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
 {ctx && (
         <>
             <div className="fixed inset-0 z-40" onMouseDown={()=>setCtx(null)} />
-            <div className="fixed z-50 bg-white shadow-lg rounded-md border border-gray-200 p-2" style={{left:ctx.x, top:ctx.y}} onMouseDown={(e)=>e.stopPropagation()}>
+            <div data-testid="context-menu" className="fixed z-50 bg-white shadow-lg rounded-md border border-gray-200 p-2" style={{left:ctx.x, top:ctx.y}} onMouseDown={(e)=>e.stopPropagation()}>
                 <div className="bg-white border rounded shadow text-sm">
                     <button className="block w-full text-left px-3 py-1 hover:bg-gray-100" onClick={()=>duplicateRow(ctx.rowId)} data-testid="duplicate-row-button">Дублировать</button>
-                    <button className="block w-full text-left px-3 py-1 hover:bg-gray-100" onClick={()=>deleteRow(ctx.rowId)} data-testid="delete-row-button">Удалить</button>
+                    <button className="block w-full text-left px-3 py-1 hover:bg-gray-100" onClick={()=>deleteRow(ctx.rowId)} data-testid="context-menu-delete">Удалить</button>
                     <button className="block w-full text-left px-3 py-1 hover:bg-gray-100" onClick={()=>addRowAbove(ctx.rowId)} data-testid="add-row-above-button">Добавить выше</button>
                     <button className="block w-full text-left px-3 py-1 hover:bg-gray-100" onClick={()=>addRowBelow(ctx.rowId)} data-testid="add-row-below-button">Добавить ниже</button>
                     {ctx.field && (
