@@ -4084,18 +4084,20 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
                                         <Select
                                             options={getEmployeesForFunction((r as TaskRow).fn || '', (r as TaskRow).team)}
                                             selectedValue={(r as TaskRow).empl || ''}
-                                            onSelect={(value) => { 
-                                                updateTask(r.id, {empl: value || undefined}); 
-                                                commitEdit(); 
+                                            onSelect={(value) => {
+                                                updateTask(r.id, {empl: value === '' ? '' : (value || undefined)});
+                                                commitEdit();
                                             }}
-                                            onSaveValue={(value) => { 
-                                                updateTask(r.id, {empl: value || undefined}); 
+                                            onSaveValue={(value) => {
+                                                updateTask(r.id, {empl: value === '' ? '' : (value || undefined)});
                                             }}
                                             onTabNext={() => { updateTask(r.id, {empl: (r as TaskRow).empl}); return navigateInEditMode('next', r.id, 'empl'); }}
                                             onTabPrev={() => { updateTask(r.id, {empl: (r as TaskRow).empl}); return navigateInEditMode('prev', r.id, 'empl'); }}
                                             onEscape={() => { cancelEditRef.current=true; stopEdit(); }}
                                             placeholder="Выберите сотрудника"
                                             searchPlaceholder="Поиск сотрудника..."
+                                            allowClear={true}
+                                            clearLabel="Не важно"
                                         />
                                     ) : (
                                         <div className="w-full overflow-hidden" title={(r as TaskRow).empl || ''}>

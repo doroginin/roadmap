@@ -11,26 +11,35 @@ interface SelectProps {
   onEscape?: () => void;
   placeholder?: string;
   searchPlaceholder?: string;
+  allowClear?: boolean; // Добавляет опцию "Не важно" для очистки значения
+  clearLabel?: string; // Текст для опции очистки
 }
 
-export function Select({ options, selectedValue, onSelect, onSaveValue, onTabNext, onTabPrev, onEscape, placeholder = "Выберите...", searchPlaceholder = "Поиск..." }: SelectProps) {
+export function Select({ options, selectedValue, onSelect, onSaveValue, onTabNext, onTabPrev, onEscape, placeholder = "Выберите...", searchPlaceholder = "Поиск...", allowClear = false, clearLabel = "Не важно" }: SelectProps) {
   const [isOpen, setIsOpen] = useState(true); // Автоматически открываем при входе в режим редактирования
   const [inputValue, setInputValue] = useState('');
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLDivElement>(null);
   const [dropdownPosition, setDropdownPosition] = useState<{ top: number; left: number; openUpward: boolean } | null>(null);
-  
+
+  // Добавляем опцию очистки в начало списка, если allowClear включен
+  const CLEAR_OPTION = '__CLEAR__';
+  const allOptions = allowClear ? [CLEAR_OPTION, ...options] : options;
+
   // При открытии списка выбираем текущий элемент
   useEffect(() => {
     if (isOpen && selectedValue) {
-      const filteredOptions = options.filter(option => option.toLowerCase().includes(inputValue.toLowerCase()));
+      const filteredOptions = allOptions.filter(option => {
+        if (option === CLEAR_OPTION) return true;
+        return option.toLowerCase().includes(inputValue.toLowerCase());
+      });
       const currentIndex = filteredOptions.findIndex(option => option === selectedValue);
       if (currentIndex >= 0) {
         setHighlightedIndex(currentIndex);
       }
     }
-  }, [isOpen, selectedValue, options, inputValue]);
+  }, [isOpen, selectedValue, allOptions, inputValue]);
   
   // Обновляем позицию dropdown при открытии
   useEffect(() => {
@@ -70,13 +79,20 @@ export function Select({ options, selectedValue, onSelect, onSaveValue, onTabNex
 
   // Обработчик выбора опции
   const handleOptionSelect = (option: string) => {
-    onSelect(option);
+    if (option === CLEAR_OPTION) {
+      onSelect(''); // Очищаем значение
+    } else {
+      onSelect(option);
+    }
     setIsOpen(false);
   };
 
   // Обработчик клавиатуры для основного элемента
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    const filteredOptions = options.filter(option => option.toLowerCase().includes(inputValue.toLowerCase()));
+    const filteredOptions = allOptions.filter(option => {
+      if (option === CLEAR_OPTION) return true;
+      return option.toLowerCase().includes(inputValue.toLowerCase());
+    });
     
     if (e.key === 'ArrowDown') {
       e.preventDefault();
@@ -167,7 +183,10 @@ export function Select({ options, selectedValue, onSelect, onSaveValue, onTabNex
 
   // Обработчик клавиатуры для поля поиска
   const handleSearchKeyDown = (e: React.KeyboardEvent) => {
-    const filteredOptions = options.filter(option => option.toLowerCase().includes(inputValue.toLowerCase()));
+    const filteredOptions = allOptions.filter(option => {
+      if (option === CLEAR_OPTION) return true;
+      return option.toLowerCase().includes(inputValue.toLowerCase());
+    });
     
     if (e.key === 'ArrowDown') {
       e.preventDefault();
@@ -261,7 +280,10 @@ export function Select({ options, selectedValue, onSelect, onSaveValue, onTabNex
     }
   };
 
-  const filteredOptions = options.filter(option => option.toLowerCase().includes(inputValue.toLowerCase()));
+  const filteredOptions = allOptions.filter(option => {
+    if (option === CLEAR_OPTION) return true;
+    return option.toLowerCase().includes(inputValue.toLowerCase());
+  });
 
   return (
     <>
@@ -401,7 +423,9 @@ export function Select({ options, selectedValue, onSelect, onSaveValue, onTabNex
                   style={{
                     padding: '8px 20px',
                     cursor: 'pointer',
-                    backgroundColor: index === highlightedIndex ? '#dbeafe' : 'transparent'
+                    backgroundColor: index === highlightedIndex ? '#dbeafe' : 'transparent',
+                    fontStyle: option === CLEAR_OPTION ? 'italic' : 'normal',
+                    color: option === CLEAR_OPTION ? '#6b7280' : 'inherit'
                   }}
                   onMouseDown={(e) => e.stopPropagation()}
                   onMouseMove={(e) => e.stopPropagation()}
@@ -418,7 +442,7 @@ export function Select({ options, selectedValue, onSelect, onSaveValue, onTabNex
                   }}
                   onClick={() => handleOptionSelect(option)}
                 >
-                  {option}
+                  {option === CLEAR_OPTION ? clearLabel : option}
                 </div>
               ))}
             </div>
