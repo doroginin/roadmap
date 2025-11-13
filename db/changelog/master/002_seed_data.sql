@@ -5,7 +5,8 @@
 INSERT INTO teams (name, jira_project, feature_team, issue_type) VALUES
 ('Demo', '', '', ''),
 ('Test', '', '', ''),
-('Test 2', '', '', '');
+('Test 2', '', '', ''),
+('E2E', '', '', '');
 
 -- Insert default sprints
 INSERT INTO sprints (code, start_date, end_date) VALUES

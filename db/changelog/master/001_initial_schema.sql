@@ -60,7 +60,6 @@ CREATE TABLE tasks (
     start_week INTEGER, -- auto-calculated
     end_week INTEGER, -- auto-calculated
     expected_start_week INTEGER, -- hidden field for expected start week
-    manual_edited BOOLEAN DEFAULT FALSE,
     auto_plan_enabled BOOLEAN DEFAULT TRUE,
     weeks DECIMAL[] DEFAULT '{}', -- actual placed amounts by week
     display_order INTEGER DEFAULT 0,

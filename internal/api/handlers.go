@@ -187,8 +187,8 @@ func (h *Handlers) hasValidChanges(req *models.UpdateRequest) bool {
 			task.TeamID != nil || task.Function != nil || task.Employee != nil ||
 			task.PlanEmpl != nil || task.PlanWeeks != nil || task.BlockerIDs != nil ||
 			task.WeekBlockers != nil || task.Fact != nil || task.StartWeek != nil ||
-			task.EndWeek != nil || task.ExpectedStartWeek != nil || task.ManualEdited != nil ||
-			task.AutoPlanEnabled != nil || task.Weeks != nil || task.DisplayOrder != nil {
+			task.EndWeek != nil || task.ExpectedStartWeek != nil || task.AutoPlanEnabled != nil ||
+			task.Weeks != nil || task.DisplayOrder != nil {
 			fmt.Printf("hasValidChanges: Found valid changes in task %d\n", i)
 			return true
 		}

@@ -221,7 +221,7 @@ func (r *Repository) GetTasks() ([]models.Task, error) {
 			t.id, t.status, t.sprints_auto, t.epic, t.task_name, 
 			t.team_id, t.function, t.employee, t.plan_empl, t.plan_weeks,
 			t.blocker_ids, t.week_blockers, t.fact, t.start_week, t.end_week,
-			t.expected_start_week, t.manual_edited, t.auto_plan_enabled, t.weeks,
+			t.expected_start_week, t.auto_plan_enabled, t.weeks,
 			t.display_order, t.created_at, t.updated_at,
 			tm.name as team_name
 		FROM tasks t
@@ -247,7 +247,7 @@ func (r *Repository) GetTasks() ([]models.Task, error) {
 		var blockerIDs pq.StringArray
 		var weekBlockers pq.Int64Array
 		var startWeek, endWeek, expectedStartWeek sql.NullInt32
-		var manualEdited, autoPlanEnabled sql.NullBool
+		var autoPlanEnabled sql.NullBool
 		var weeks pq.Float64Array
 		var displayOrder sql.NullInt32
 
@@ -255,7 +255,7 @@ func (r *Repository) GetTasks() ([]models.Task, error) {
 			&task.ID, &status, &sprintsAuto, &epic, &taskName,
 			&teamID, &function, &employee, &planEmpl, &planWeeks,
 			&blockerIDs, &weekBlockers, &fact, &startWeek, &endWeek,
-			&expectedStartWeek, &manualEdited, &autoPlanEnabled, &weeks,
+			&expectedStartWeek, &autoPlanEnabled, &weeks,
 			&displayOrder, &task.CreatedAt, &task.UpdatedAt,
 			&teamName,
 		)
@@ -316,9 +316,6 @@ func (r *Repository) GetTasks() ([]models.Task, error) {
 		if expectedStartWeek.Valid {
 			week := int(expectedStartWeek.Int32)
 			task.ExpectedStartWeek = &week
-		}
-		if manualEdited.Valid {
-			task.ManualEdited = &manualEdited.Bool
 		}
 		if autoPlanEnabled.Valid {
 			task.AutoPlanEnabled = &autoPlanEnabled.Bool
@@ -507,9 +504,9 @@ func (r *Repository) UpdateData(tx *sql.Tx, req *models.UpdateRequest) error {
 			INSERT INTO tasks (
 				id, status, sprints_auto, epic, task_name, team_id, function, employee,
 				plan_empl, plan_weeks, blocker_ids, week_blockers, fact, start_week, end_week,
-				expected_start_week, manual_edited, auto_plan_enabled, weeks, display_order
+				expected_start_week, auto_plan_enabled, weeks, display_order
 			)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
 			ON CONFLICT (id) DO UPDATE SET
 				status = COALESCE(EXCLUDED.status, tasks.status),
 				sprints_auto = COALESCE(EXCLUDED.sprints_auto, tasks.sprints_auto),
@@ -526,7 +523,6 @@ func (r *Repository) UpdateData(tx *sql.Tx, req *models.UpdateRequest) error {
 				start_week = COALESCE(EXCLUDED.start_week, tasks.start_week),
 				end_week = COALESCE(EXCLUDED.end_week, tasks.end_week),
 				expected_start_week = COALESCE(EXCLUDED.expected_start_week, tasks.expected_start_week),
-				manual_edited = COALESCE(EXCLUDED.manual_edited, tasks.manual_edited),
 				auto_plan_enabled = COALESCE(EXCLUDED.auto_plan_enabled, tasks.auto_plan_enabled),
 				weeks = COALESCE(EXCLUDED.weeks, tasks.weeks),
 				display_order = COALESCE(EXCLUDED.display_order, tasks.display_order),
@@ -553,8 +549,7 @@ func (r *Repository) UpdateData(tx *sql.Tx, req *models.UpdateRequest) error {
 				return nil
 			}(),
 			task.Fact,
-			task.StartWeek, task.EndWeek, task.ExpectedStartWeek, task.ManualEdited,
-			task.AutoPlanEnabled,
+			task.StartWeek, task.EndWeek, task.ExpectedStartWeek, task.AutoPlanEnabled,
 			func() interface{} {
 				if task.Weeks != nil {
 					return pq.Array(*task.Weeks)

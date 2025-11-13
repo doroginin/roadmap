@@ -34,7 +34,6 @@ export interface Task {
   startWeek?: number | null;
   endWeek?: number | null;
   expectedStartWeek?: number | null;
-  manualEdited?: boolean;
   autoPlanEnabled?: boolean;
   weeks?: number[];
   displayOrder?: number;

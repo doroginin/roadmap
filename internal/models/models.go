@@ -82,7 +82,6 @@ type Task struct {
 	StartWeek         *int             `json:"startWeek" db:"start_week"`
 	EndWeek           *int             `json:"endWeek" db:"end_week"`
 	ExpectedStartWeek *int             `json:"expectedStartWeek" db:"expected_start_week"`
-	ManualEdited      *bool            `json:"manualEdited,omitempty" db:"manual_edited"`
 	AutoPlanEnabled   *bool            `json:"autoPlanEnabled,omitempty" db:"auto_plan_enabled"`
 	Weeks             *pq.Float64Array `json:"weeks,omitempty" db:"weeks"`
 	DisplayOrder      *int             `json:"displayOrder,omitempty" db:"display_order"`
@@ -198,7 +197,6 @@ type TaskUpdate struct {
 	StartWeek         *int             `json:"startWeek,omitempty"`
 	EndWeek           *int             `json:"endWeek,omitempty"`
 	ExpectedStartWeek *int             `json:"expectedStartWeek,omitempty"`
-	ManualEdited      *bool            `json:"manualEdited,omitempty"`
 	AutoPlanEnabled   *bool            `json:"autoPlanEnabled,omitempty"`
 	Weeks             *pq.Float64Array `json:"weeks,omitempty"`
 	DisplayOrder      *int             `json:"displayOrder,omitempty"`

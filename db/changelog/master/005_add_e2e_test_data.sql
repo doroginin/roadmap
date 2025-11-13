@@ -27,7 +27,7 @@ BEGIN
     ) ON CONFLICT (id) DO NOTHING;
 
     -- Добавляем тестовые задачи (теперь function и employee - это строки)
-    INSERT INTO tasks (id, status, sprints_auto, epic, task_name, team_id, function, employee, plan_empl, plan_weeks, blocker_ids, week_blockers, fact, start_week, end_week, expected_start_week, manual_edited, auto_plan_enabled, weeks, display_order, created_at, updated_at)
+    INSERT INTO tasks (id, status, sprints_auto, epic, task_name, team_id, function, employee, plan_empl, plan_weeks, blocker_ids, week_blockers, fact, start_week, end_week, expected_start_week, auto_plan_enabled, weeks, display_order, created_at, updated_at)
     VALUES 
     (
         'aaaaaaaa-0000-0000-0000-000000000001',
@@ -46,7 +46,6 @@ BEGIN
         1,
         2,
         1,
-        false,
         true,
         ARRAY[1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
         1,
@@ -70,7 +69,6 @@ BEGIN
         2,
         2,
         2,
-        false,
         true,
         ARRAY[0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
         2,
@@ -94,7 +92,6 @@ BEGIN
         3,
         5,
         3,
-        false,
         true,
         ARRAY[0.0, 0.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
         3,

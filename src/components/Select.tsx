@@ -420,6 +420,7 @@ export function Select({ options, selectedValue, onSelect, onSaveValue, onTabNex
               {filteredOptions.map((option, index) => (
                 <div
                   key={option}
+                  data-testid={option === CLEAR_OPTION ? 'select-option-clear' : `select-option-${option}`}
                   style={{
                     padding: '8px 20px',
                     cursor: 'pointer',

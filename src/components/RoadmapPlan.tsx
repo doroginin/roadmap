@@ -8,6 +8,7 @@ import { DEFAULT_BG } from "./colorDefaults";
 import { fetchRoadmapData } from "../api/roadmapApi";
 import type { RoadmapData } from "../api/types";
 import { generateUUID } from "../utils/uuid";
+import { useUrlFilters } from "../hooks/useUrlFilters";
 
 // CSS стили для закрепления колонок
 
@@ -120,7 +121,6 @@ type TaskRow = {
     startWeek: number | null; // auto
     endWeek: number | null;   // auto
     expectedStartWeek?: number | null; // скрытое поле для ожидаемой недели начала
-    manualEdited: boolean; // ✏️ flag
     autoPlanEnabled: boolean; // чекбокс автоплана
     weeks: number[]; // actual placed amounts by week
     displayOrder?: number; // order for display
@@ -159,8 +159,6 @@ function fmtDM(dateISO: string) {
 function hasExpectedStartWeekMismatch(task: TaskRow): boolean {
     const result = task.expectedStartWeek !== null && 
            task.expectedStartWeek !== undefined && 
-           task.startWeek !== null && 
-           task.startWeek !== undefined && 
            task.expectedStartWeek !== task.startWeek;
     
     return result;
@@ -930,8 +928,18 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker, autoSave
         });
         
         // Prepare tasks with UUIDs
+        // For tasks with autoPlanEnabled, use computed weeks from computedRowsRef
         const preparedTasks = (tasks as TaskRow[]).map(t => {
             const teamUUID = teamData.find(team => team.name === t.team)?.id || t.teamId;
+            
+            // For tasks with autoPlanEnabled, get weeks from computedRowsRef
+            let weeksToSave = t.weeks;
+            if (t.autoPlanEnabled) {
+                const computedTask = computedRowsRef.current.find(r => r.kind === 'task' && r.id === t.id) as TaskRow | undefined;
+                if (computedTask && computedTask.weeks) {
+                    weeksToSave = computedTask.weeks;
+                }
+            }
             
             return {
                 id: t.id,
@@ -950,9 +958,8 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker, autoSave
                 startWeek: t.startWeek || undefined,
                 endWeek: t.endWeek || undefined,
                 expectedStartWeek: t.expectedStartWeek || undefined,
-                manualEdited: t.manualEdited || undefined,
                 autoPlanEnabled: t.autoPlanEnabled || undefined,
-                weeks: t.weeks || undefined,
+                weeks: weeksToSave !== undefined ? weeksToSave : undefined,
                 displayOrder: t.displayOrder || undefined
             };
         });
@@ -1010,10 +1017,30 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker, autoSave
                 // Mark this version as loaded
                 loadedVersionRef.current = data.version;
                 
+                // Ensure tasks have weeks array initialized
+                // Pad weeks array to TOTAL_WEEKS if it's shorter
+                const tasksWithWeeks = (data.tasks || []).map(task => {
+                    let weeks: number[];
+                    if (Array.isArray(task.weeks) && task.weeks.length > 0) {
+                        // Use provided weeks and pad to TOTAL_WEEKS if needed
+                        weeks = [...task.weeks];
+                        while (weeks.length < TOTAL_WEEKS) {
+                            weeks.push(0);
+                        }
+                    } else {
+                        // Initialize with zeros
+                        weeks = Array(TOTAL_WEEKS).fill(0);
+                    }
+                    return {
+                        ...task,
+                        weeks
+                    };
+                });
+                
                 // Объединяем ресурсы и задачи в один массив rows
                 const allRows: Row[] = [
                     ...(data.resources || []),
-                    ...(data.tasks || [])
+                    ...tasksWithWeeks
                 ] as Row[];
                 
                 // Сортируем по displayOrder
@@ -1113,13 +1140,13 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker, autoSave
                 return 0;
             }
 
-            // Если у блокирующей задачи отключено автопланирование и есть ручной план
-            if (!originalTask.autoPlanEnabled && originalTask.manualEdited) {
+            // Если у блокирующей задачи отключено автопланирование
+            if (!originalTask.autoPlanEnabled) {
                 // Вычисляем endWeek на основе weeks массива
                 const weeks = originalTask.weeks || [];
                 const nz = weeks.map((v, i) => v > 0 ? i + 1 : 0).filter(Boolean) as number[];
                 const endTime = nz.length ? Math.max(...nz) : 0;
-                // Всегда кэшируем результаты для задач с ручным планированием
+                // Всегда кэшируем результаты для задач без автопланирования
                 blockerCache.set(taskId, endTime);
                 return endTime;
             }
@@ -1268,8 +1295,8 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker, autoSave
             
             // ДИАГНОСТИКА: Логируем информацию о планировании
 
-            // режим: ручной план при отключённом Auto → просто учитываем загрузку
-            if (!t.autoPlanEnabled && t.manualEdited) {
+            // режим: автоплан отключён → используем существующие weeks и только учитываем загрузку ресурсов
+            if (!t.autoPlanEnabled) {
                 const weeks = t.weeks.slice();
                 const matched = resources.filter(rs => matchResourceForTask(rs.res, t));
                 for (let w = 0; w < TOTAL_WEEKS; w++) {
@@ -1283,49 +1310,61 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker, autoSave
                 return t;
             }
 
-            // Автоплан: поиск самого раннего стартового окна s > blocker
-            // Добавляем задачу в стек для отслеживания циклических зависимостей
-            computationStack.add(t.id);
+            // Автоплан: используем существующие weeks если они есть И содержат данные, иначе вычисляем
+            const providedWeeks = Array.isArray(t.weeks) && t.weeks.length === TOTAL_WEEKS ? t.weeks.slice() : null;
+            const hasProvidedData = providedWeeks !== null && providedWeeks.some(value => value > 0);
             
-            let start = 0;
+            const weeks = Array(TOTAL_WEEKS).fill(0) as number[];
             let matched: ResState[] = [];
-            try {
-                const result = freeTotalsForTask(t);
-                matched = result.matched;
-                const free = result.free;
-                if (need > 0 && dur > 0 && matched.length > 0) {
-                    const maxStart = TOTAL_WEEKS - dur + 1;
-                    // ИСПРАВЛЕНИЕ: Начинаем поиск строго после завершения всех блокеров
-                    const minStart = Math.max(1, blocker + 1);
-                    
-                    
-                    for (let s = minStart; s <= maxStart; s++) {
-                        let ok = true;
-                        for (let off = 0; off < dur; off++) {
-                            if (free[s - 1 + off] < need) { 
-                                ok = false; 
+            
+            if (hasProvidedData) {
+                // Weeks были предоставлены с бэка и содержат данные - используем их как есть
+                for (let w = 0; w < TOTAL_WEEKS; w++) {
+                    weeks[w] = providedWeeks![w] || 0;
+                    if (weeks[w] > 0) {
+                        matched = resources.filter(rs => matchResourceForTask(rs.res, t));
+                        allocateWeekLoadAcrossResources(weeks[w], matched, w);
+                    }
+                }
+            } else {
+                // Weeks не были предоставлены - вычисляем автоплан
+                // Добавляем задачу в стек для отслеживания циклических зависимостей
+                computationStack.add(t.id);
+                
+                let start = 0;
+                try {
+                    const result = freeTotalsForTask(t);
+                    matched = result.matched;
+                    const free = result.free;
+                    if (need > 0 && dur > 0 && matched.length > 0) {
+                        const maxStart = TOTAL_WEEKS - dur + 1;
+                        // ИСПРАВЛЕНИЕ: Начинаем поиск строго после завершения всех блокеров
+                        const minStart = Math.max(1, blocker + 1);
+                        
+                        for (let s = minStart; s <= maxStart; s++) {
+                            let ok = true;
+                            for (let off = 0; off < dur; off++) {
+                                if (free[s - 1 + off] < need) { 
+                                    ok = false; 
+                                    break; 
+                                }
+                            }
+                            if (ok) { 
+                                start = s;
                                 break; 
                             }
                         }
-                        if (ok) { 
-                            start = s;
-                            break; 
-                        }
                     }
-                    
-                    if (import.meta.env.DEV && start === 0) {
-                        // Debug: start is 0
-                    }
+                } finally {
+                    // Убираем задачу из стека после завершения вычислений
+                    computationStack.delete(t.id);
                 }
-            } finally {
-                // Убираем задачу из стека после завершения вычислений
-                computationStack.delete(t.id);
-            }
-            const weeks = Array(TOTAL_WEEKS).fill(0) as number[];
-            if (start > 0 && need > 0 && dur > 0) {
-                for (let off = 0; off < dur; off++) {
-                    weeks[start - 1 + off] = need;
-                    allocateWeekLoadAcrossResources(need, matched, start - 1 + off);
+                
+                if (start > 0 && need > 0 && dur > 0) {
+                    for (let off = 0; off < dur; off++) {
+                        weeks[start - 1 + off] = need;
+                        allocateWeekLoadAcrossResources(need, matched, start - 1 + off);
+                    }
                 }
             }
             t.weeks = weeks;
@@ -1427,6 +1466,10 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker, autoSave
 
     const computed = useMemo(() => computeAllRowsLocal(rows), [rows, sprints]);
     const computedRows = computed.rows;
+    
+    // Store computedRows in ref for use in prepareDataForSave
+    const computedRowsRef = useRef<Row[]>([]);
+    computedRowsRef.current = computedRows;
 
     // ====== Выделение/редактирование ======
     type ColKey = "type"|"status"|"sprintsAuto"|"epic"|"task"|"team"|"fn"|"empl"|"planEmpl"|"planWeeks"|"fact"|"start"|"end"|"autoplan"|{week:number};
@@ -1816,8 +1859,8 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker, autoSave
                                 ? {
                                     ...(x as TaskRow),
                                     weeks: base,
-                                    // Устанавливаем флаги только если значение изменилось
-                                    ...(hasChanged ? { manualEdited: true, autoPlanEnabled: false } : {})
+                                    // Отключаем автоплан только если значение изменилось
+                                    ...(hasChanged ? { autoPlanEnabled: false } : {})
                                 }
                                 : x
                         ));
@@ -1825,6 +1868,10 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker, autoSave
                         // Регистрируем изменение в changeTracker
                         if (hasChanged && changeTracker) {
                             changeTracker.addCellChange('task', row.id, 'weeks', originalWeeks, base);
+                            // Если задача была с автопланированием, также регистрируем его отключение
+                            if ((row as TaskRow).autoPlanEnabled) {
+                                changeTracker.addCellChange('task', row.id, 'autoPlanEnabled', true, false);
+                            }
                         }
                     } else if (row?.kind === "resource") {
                         const oldWeeks = (row as ResourceRow).weeks.slice();
@@ -2650,16 +2697,33 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker, autoSave
     // ====== Фильтры ======
     type ColumnId = "type"|"status"|"sprintsAuto"|"epic"|"task"|"team"|"fn"|"empl"|"planEmpl"|"planWeeks"|"fact"|"start"|"end"|"autoplan";
     type FilterState = { [K in ColumnId]?: { search: string; selected: Set<string> } };
-    const [filters, setFilters] = useState<FilterState>({});
+    const [filters, setFilters] = useUrlFilters<ColumnId>();
     const [filterUi, setFilterUi] = useState<{ col: ColumnId; x:number; y:number } | null>(null);
     function isFilterActive(col: ColumnId): boolean {
         const filter = filters[col];
         return !!(filter && filter.selected.size > 0);
     }
-    function openFilter(col: ColumnId, x:number, y:number) { setFilterUi({ col, x, y }); if (!filters[col]) setFilters(f => ({ ...f, [col]: { search: "", selected: new Set<string>() } })); }
-    function toggleFilterValue(col: ColumnId, val: string) { setFilters(f => { const s = new Set(f[col]?.selected || []); if (s.has(val)) s.delete(val); else s.add(val); return { ...f, [col]: { search: f[col]?.search || "", selected: s } }; }); }
-    function setFilterSearch(col: ColumnId, v:string) { setFilters(f => ({ ...f, [col]: { search: v, selected: f[col]?.selected || new Set<string>() } })); }
-    function clearFilter(col: ColumnId) { setFilters(f => { const nf: FilterState = { ...f }; delete nf[col]; return nf; }); setFilterUi(null); }
+    function openFilter(col: ColumnId, x:number, y:number) {
+        setFilterUi({ col, x, y });
+        if (!filters[col]) {
+            setFilters({ ...filters, [col]: { search: "", selected: new Set<string>() } });
+        }
+    }
+    function toggleFilterValue(col: ColumnId, val: string) {
+        const s = new Set(filters[col]?.selected || []);
+        if (s.has(val)) s.delete(val);
+        else s.add(val);
+        setFilters({ ...filters, [col]: { search: filters[col]?.search || "", selected: s } });
+    }
+    function setFilterSearch(col: ColumnId, v:string) {
+        setFilters({ ...filters, [col]: { search: v, selected: filters[col]?.selected || new Set<string>() } });
+    }
+    function clearFilter(col: ColumnId) {
+        const nf: FilterState = { ...filters };
+        delete nf[col];
+        setFilters(nf);
+        setFilterUi(null);
+    }
     function valueForCol(r: Row, col: ColumnId): string {
         const t = r as TaskRow;
         switch(col){
@@ -2887,123 +2951,83 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker, autoSave
         const t = computedRows.find(r => r.kind === "task" && r.id === taskId) as TaskRow | undefined;
         if (!t) return;
 
-        // Записываем изменение в лог
         if (changeTracker) {
             changeTracker.addCellChange('task', taskId, 'autoPlanEnabled', t.autoPlanEnabled, next);
         }
 
         if (next) {
-            // Включение автопланирования
-            if (t.manualEdited && t.weeks.some(v => v > 0)) {
-                // Проверяем, отличается ли текущий ручной план от автоплана
-                // Для этого временно вычисляем что получится при автопланировании
-                
-                // Создаем временную копию задачи с включенным автопланированием
-                const tempTask: TaskRow = { 
-                    ...t, 
-                    autoPlanEnabled: true, 
-                    manualEdited: false, 
+            const hasExistingAllocation = Array.isArray(t.weeks) && t.weeks.some(value => value > 0);
+            let requireConfirmation = false;
+
+            if (hasExistingAllocation) {
+                const tempTask: TaskRow = {
+                    ...t,
+                    autoPlanEnabled: true,
                     weeks: Array(TOTAL_WEEKS).fill(0),
                     startWeek: null,
                     endWeek: null,
                     fact: 0
                 };
-                
-                // Временно обновляем состояние для вычисления автоплана
+
                 const tempRows = rows.map(r =>
                     (r.kind === "task" && r.id === taskId) ? tempTask : r
                 );
-                
-                // Вычисляем что получится при автопланировании
+
                 const tempComputed = computeAllRowsLocal(tempRows);
                 const autoPlannedTask = tempComputed.rows.find(r => r.kind === "task" && r.id === taskId) as TaskRow | undefined;
-                
+
                 if (autoPlannedTask) {
-                    // Сравниваем текущие ручные значения с автопланом
-                    const manualWeeks = t.weeks;
-                    const autoWeeks = autoPlannedTask.weeks;
-                    
-                    // Проверяем, идентичны ли планы
-                    const plansIdentical = manualWeeks.length === autoWeeks.length && 
-                        manualWeeks.every((val, index) => Math.abs(val - (autoWeeks[index] || 0)) < 0.001);
-                    
-                    if (plansIdentical) {
-                        // Планы идентичны - включаем автоплан без подтверждения
-                        setRows(prev => prev.map(r =>
-                            (r.kind === "task" && r.id === taskId)
-                                ? { ...(r as TaskRow), autoPlanEnabled: true, manualEdited: false }
-                                : r
-                        ));
-
-                        // Регистрируем изменения в changeTracker
-                        if (changeTracker) {
-                            changeTracker.addCellChange('task', taskId, 'autoPlanEnabled', t.autoPlanEnabled, true);
-                            changeTracker.addCellChange('task', taskId, 'manualEdited', t.manualEdited, false);
-                        }
-                    } else {
-                        // Планы отличаются - запрашиваем подтверждение
-                        const ok = confirm("Включить автоплан? Текущий ручной план будет перезаписан.");
-                        if (!ok) return; // отмена
-
-                        const oldWeeks = t.weeks.slice();
-                        setRows(prev => prev.map(r =>
-                            (r.kind === "task" && r.id === taskId)
-                                ? { ...(r as TaskRow), autoPlanEnabled: true, manualEdited: false, weeks: Array(TOTAL_WEEKS).fill(0) }
-                                : r
-                        ));
-
-                        // Регистрируем изменения в changeTracker
-                        if (changeTracker) {
-                            changeTracker.addCellChange('task', taskId, 'autoPlanEnabled', t.autoPlanEnabled, true);
-                            changeTracker.addCellChange('task', taskId, 'manualEdited', t.manualEdited, false);
-                            changeTracker.addCellChange('task', taskId, 'weeks', oldWeeks, Array(TOTAL_WEEKS).fill(0));
-                        }
-                    }
+                    const autoWeeks = autoPlannedTask.weeks.slice();
+                    const plansIdentical = t.weeks.length === autoWeeks.length &&
+                        t.weeks.every((val, index) => Math.abs(val - (autoWeeks[index] || 0)) < 0.001);
+                    requireConfirmation = !plansIdentical;
                 } else {
-                    // Не удалось вычислить автоплан - запрашиваем подтверждение
-                    const ok = confirm("Включить автоплан? Текущий ручной план будет перезаписан.");
-                    if (!ok) return; // отмена
-
-                    const oldWeeks = t.weeks.slice();
-                    setRows(prev => prev.map(r =>
-                        (r.kind === "task" && r.id === taskId)
-                            ? { ...(r as TaskRow), autoPlanEnabled: true, manualEdited: false, weeks: Array(TOTAL_WEEKS).fill(0) }
-                            : r
-                    ));
-
-                    // Регистрируем изменения в changeTracker
-                    if (changeTracker) {
-                        changeTracker.addCellChange('task', taskId, 'autoPlanEnabled', t.autoPlanEnabled, true);
-                        changeTracker.addCellChange('task', taskId, 'manualEdited', t.manualEdited, false);
-                        changeTracker.addCellChange('task', taskId, 'weeks', oldWeeks, Array(TOTAL_WEEKS).fill(0));
-                    }
+                    requireConfirmation = true;
                 }
-            } else {
-                // Просто включаем автопланирование
+            }
+
+            if (requireConfirmation) {
+                const ok = confirm("Включить автоплан? Текущий план будет перезаписан.");
+                if (!ok) return;
+
+                const oldWeeks = t.weeks.slice();
+                const newWeeks = Array(TOTAL_WEEKS).fill(0);
+
                 setRows(prev => prev.map(r =>
                     (r.kind === "task" && r.id === taskId)
-                        ? { ...(r as TaskRow), autoPlanEnabled: true, manualEdited: false }
+                        ? { ...(r as TaskRow), autoPlanEnabled: true, weeks: Array(TOTAL_WEEKS).fill(0) }
                         : r
                 ));
 
-                // Регистрируем изменения в changeTracker
                 if (changeTracker) {
                     changeTracker.addCellChange('task', taskId, 'autoPlanEnabled', t.autoPlanEnabled, true);
-                    changeTracker.addCellChange('task', taskId, 'manualEdited', t.manualEdited, false);
+                    changeTracker.addCellChange('task', taskId, 'weeks', oldWeeks, newWeeks);
+                }
+            } else {
+                // Планы идентичны, но всё равно очищаем weeks для включения автоплана
+                const oldWeeks = t.weeks.slice();
+                const newWeeks = Array(TOTAL_WEEKS).fill(0);
+                
+                setRows(prev => prev.map(r =>
+                    (r.kind === "task" && r.id === taskId)
+                        ? { ...(r as TaskRow), autoPlanEnabled: true, weeks: newWeeks }
+                        : r
+                ));
+
+                if (changeTracker) {
+                    changeTracker.addCellChange('task', taskId, 'autoPlanEnabled', t.autoPlanEnabled, true);
+                    changeTracker.addCellChange('task', taskId, 'weeks', oldWeeks, newWeeks);
                 }
             }
         } else {
-            // Отключение автопланирования - сохраняем текущие значения как ручные
             setRows(prev => prev.map(r =>
                 (r.kind === "task" && r.id === taskId)
-                    ? { ...(r as TaskRow), autoPlanEnabled: false, manualEdited: true, weeks: t.weeks.slice() }
+                    ? { ...(r as TaskRow), autoPlanEnabled: false, weeks: t.weeks.slice() }
                     : r
             ));
 
-            // Регистрируем изменения в changeTracker
             if (changeTracker) {
                 changeTracker.addCellChange('task', taskId, 'autoPlanEnabled', t.autoPlanEnabled, false);
-                changeTracker.addCellChange('task', taskId, 'manualEdited', t.manualEdited, true);
             }
         }
     }
@@ -3105,13 +3129,17 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
                     // Регистрируем изменение в changeTracker
                     if (hasChanged && changeTracker) {
                         changeTracker.addCellChange('task', currentTask.id, 'weeks', originalWeeks, base);
+                        // Если задача была с автопланированием, также регистрируем его отключение
+                        if (currentTask.autoPlanEnabled) {
+                            changeTracker.addCellChange('task', currentTask.id, 'autoPlanEnabled', true, false);
+                        }
                     }
 
                     return {
                         ...currentTask,
                         weeks: base,
-                        // Устанавливаем флаги только если значение изменилось
-                        ...(hasChanged ? { manualEdited: true, autoPlanEnabled: false } : {})
+                        // Отключаем автоплан только если значение изменилось
+                        ...(hasChanged ? { autoPlanEnabled: false } : {})
                     };
                 }
                 return x;
@@ -3325,7 +3353,6 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
             startWeek: null,
             endWeek: null,
             expectedStartWeek: null,
-            manualEdited: false,
             autoPlanEnabled: true,
             weeks: Array(TOTAL_WEEKS).fill(0)
         };
@@ -3365,7 +3392,6 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
             startWeek: row.startWeek,
             endWeek: row.endWeek,
             expectedStartWeek: row.expectedStartWeek,
-            manualEdited: row.manualEdited,
             autoPlanEnabled: row.autoPlanEnabled,
             weeks: row.weeks,
             displayOrder: row.displayOrder
@@ -3825,7 +3851,7 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
 
                                 {/* Таймлайн недель ресурса */}
                                 {range(TOTAL_WEEKS).map(w => (
-                                    <td key={w} data-week-idx={w} className={`px-0 py-0 align-middle week-cell`} style={{width: '3.5rem', background: resourceCellBg(r as ResourceRow, w), ...getCellBorderStyle(isSelWeek(r.id,w)), ...getCellBorderStyleForDrag(r.id), ...getWeekColumnHighlightStyle(w)}}>
+                                    <td key={w} data-week-idx={w} data-testid={`week-${w + 1}`} className={`px-0 py-0 align-middle week-cell`} style={{width: '3.5rem', background: resourceCellBg(r as ResourceRow, w), ...getCellBorderStyle(isSelWeek(r.id,w)), ...getCellBorderStyleForDrag(r.id), ...getWeekColumnHighlightStyle(w)}}>
                                         <div
                                             onMouseDown={(e)=>onWeekCellMouseDown(e,r,w)}
                                             onMouseEnter={(e)=>onWeekCellMouseEnter(e,r,w)}
@@ -4147,7 +4173,7 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
 
                     {/* Таймлайн с горизонтальным скроллом */}
                     {range(TOTAL_WEEKS).map(w => (
-                        <td key={w} id={cellId(r.id, w)} data-row-id={r.id} data-week-idx={w} className={`px-0 py-0 align-middle ${getCellBorderClass(r.id)} week-cell`} style={{width: '3.5rem', zIndex: 2, background: ((r as TaskRow).weeks[w] || 0) > 0 ? cellBgForTask(r as TaskRow) : undefined, color: ((r as TaskRow).weeks[w] || 0) > 0 ? getText(teamFnColors[teamKeyFromTask(r as TaskRow)]) : undefined, ...getCellBorderStyle(isSelWeek(r.id,w)), ...getCellBorderStyleForDrag(r.id), ...getWeekColumnHighlightStyle(w)}} onMouseDown={(e)=>onWeekCellMouseDown(e,r,w)} onMouseEnter={(e)=>onWeekCellMouseEnter(e,r,w)} onDoubleClick={(e)=>onWeekCellDoubleClick(e,r,w)}>
+                        <td key={w} id={cellId(r.id, w)} data-row-id={r.id} data-week-idx={w} data-testid={`week-${w + 1}`} className={`px-0 py-0 align-middle ${getCellBorderClass(r.id)} week-cell`} style={{width: '3.5rem', zIndex: 2, background: ((r as TaskRow).weeks[w] || 0) > 0 ? cellBgForTask(r as TaskRow) : undefined, color: ((r as TaskRow).weeks[w] || 0) > 0 ? getText(teamFnColors[teamKeyFromTask(r as TaskRow)]) : undefined, ...getCellBorderStyle(isSelWeek(r.id,w)), ...getCellBorderStyleForDrag(r.id), ...getWeekColumnHighlightStyle(w)}} onMouseDown={(e)=>onWeekCellMouseDown(e,r,w)} onMouseEnter={(e)=>onWeekCellMouseEnter(e,r,w)} onDoubleClick={(e)=>onWeekCellDoubleClick(e,r,w)}>
                             {editing?.rowId===r.id && typeof editing.col==='object' && editing.col.week===w ? (
                                 <input
                                     autoFocus
@@ -4171,8 +4197,8 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
                                                     ? {
                                                         ...(x as TaskRow),
                                                         weeks: base,
-                                                        // Устанавливаем флаги только если значение изменилось
-                                                        ...(hasChanged ? { manualEdited: true, autoPlanEnabled: false } : {})
+                                                        // Отключаем автоплан только если значение изменилось
+                                                        ...(hasChanged ? { autoPlanEnabled: false } : {})
                                                     }
                                                     : x
                                             ));
@@ -4180,6 +4206,10 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
                                             // Регистрируем изменение в changeTracker
                                             if (hasChanged && changeTracker) {
                                                 changeTracker.addCellChange('task', r.id, 'weeks', originalWeeks, base);
+                                                // Если задача была с автопланированием, также регистрируем его отключение
+                                                if ((r as TaskRow).autoPlanEnabled) {
+                                                    changeTracker.addCellChange('task', r.id, 'autoPlanEnabled', true, false);
+                                                }
                                             }
 
                                             commitEdit();
@@ -4201,8 +4231,8 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
                                                     ? {
                                                         ...(x as TaskRow),
                                                         weeks: base,
-                                                        // Устанавливаем флаги только если значение изменилось
-                                                        ...(hasChanged ? { manualEdited: true, autoPlanEnabled: false } : {})
+                                                        // Отключаем автоплан только если значение изменилось
+                                                        ...(hasChanged ? { autoPlanEnabled: false } : {})
                                                     }
                                                     : x
                                             ));
@@ -4210,6 +4240,10 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
                                             // Регистрируем изменение в changeTracker
                                             if (hasChanged && changeTracker) {
                                                 changeTracker.addCellChange('task', r.id, 'weeks', originalWeeks, base);
+                                                // Если задача была с автопланированием, также регистрируем его отключение
+                                                if ((r as TaskRow).autoPlanEnabled) {
+                                                    changeTracker.addCellChange('task', r.id, 'autoPlanEnabled', true, false);
+                                                }
                                             }
 
                                             commitEdit();
@@ -4232,8 +4266,8 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
                                                     ? {
                                                         ...(x as TaskRow),
                                                         weeks: base,
-                                                        // Устанавливаем флаги только если значение изменилось
-                                                        ...(hasChanged ? { manualEdited: true, autoPlanEnabled: false } : {})
+                                                        // Отключаем автоплан только если значение изменилось
+                                                        ...(hasChanged ? { autoPlanEnabled: false } : {})
                                                     }
                                                     : x
                                             ));
@@ -4241,6 +4275,10 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
                                             // Регистрируем изменение в changeTracker
                                             if (hasChanged && changeTracker) {
                                                 changeTracker.addCellChange('task', r.id, 'weeks', originalWeeks, base);
+                                                // Если задача была с автопланированием, также регистрируем его отключение
+                                                if ((r as TaskRow).autoPlanEnabled) {
+                                                    changeTracker.addCellChange('task', r.id, 'autoPlanEnabled', true, false);
+                                                }
                                             }
 
                                             focusNextRight(r.id, {week:w});
@@ -4266,8 +4304,8 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
                                                     ? {
                                                         ...(x as TaskRow),
                                                         weeks: base,
-                                                        // Устанавливаем флаги только если значение изменилось
-                                                        ...(hasChanged ? { manualEdited: true, autoPlanEnabled: false } : {})
+                                                        // Отключаем автоплан только если значение изменилось
+                                                        ...(hasChanged ? { autoPlanEnabled: false } : {})
                                                     }
                                                     : x
                                             ));
