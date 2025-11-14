@@ -350,8 +350,9 @@ test.describe('Filter Defaults for New Items', () => {
   test('should use first selected value when multiple filters are active', async ({ page }) => {
     // Генерируем случайное число для уникальности
     const randInt = Math.floor(Math.random() * 10000);
-    const fnValue = `FN${randInt}`;
-    const setupResourceFn = `FNSetup${randInt}`;
+    const fn1Value = `Fn1_${randInt}`;
+    const fn2Value = `Fn2_${randInt}`;
+    const taskName = `Task${randInt}`;
 
     // Шаг 1: Открываем страницу
     await page.goto('/');
@@ -361,120 +362,117 @@ test.describe('Filter Defaults for New Items', () => {
     await expect(page.getByTestId('roadmap-table')).toBeVisible();
     await page.waitForTimeout(1000);
 
-    // Шаг 1.5: Создаем тестовый ресурс для команды E2E, чтобы фильтр E2E был доступен
-    const addButtonSetup = page.getByTestId('add-button');
-    await expect(addButtonSetup).toBeVisible({ timeout: 5000 });
-    await addButtonSetup.click();
+    // Шаг 2: Создаем первый ресурс с командой E2E и функцией Fn1
+    const addButton1 = page.getByTestId('add-button');
+    await expect(addButton1).toBeVisible({ timeout: 5000 });
+    await addButton1.click();
 
-    const resourceButtonSetup = page.getByTestId('add-resource-button');
-    await expect(resourceButtonSetup).toBeVisible({ timeout: 2000 });
-    await resourceButtonSetup.click();
-
-    await page.waitForTimeout(500);
-
-    // Находим последний добавленный ресурс
-    const tableSetup = page.getByTestId('roadmap-table');
-    const allRowsSetup = tableSetup.locator('tr[data-testid="resource"][data-row-id]');
-    const rowCountSetup = await allRowsSetup.count();
-    const setupResourceRow = allRowsSetup.nth(rowCountSetup - 1);
-    const setupResourceId = await setupResourceRow.getAttribute('data-row-id');
-
-    // Устанавливаем команду E2E для тестового ресурса
-    const teamCellSetup = page.getByTestId(`team-cell-${setupResourceId}`);
-    await teamCellSetup.dblclick();
-    const teamSelectSetup = page.getByTestId('team-multiselect');
-    await expect(teamSelectSetup).toBeVisible({ timeout: 300 });
-    const e2eLabelSetup = page.locator('label').filter({ hasText: /^E2E$/ }).first();
-    await expect(e2eLabelSetup).toBeVisible({ timeout: 2000 });
-    const e2eCheckboxSetup = e2eLabelSetup.locator('input[type="checkbox"]');
-    await e2eCheckboxSetup.click();
-    await page.keyboard.press('Tab');
-    await page.waitForTimeout(300);
-
-    // Заполняем Fn для сохранения
-    const fnCellSetup = page.getByTestId(`fn-cell-${setupResourceId}`);
-    await fnCellSetup.dblclick();
-    await page.waitForTimeout(300);
-    await page.keyboard.type(setupResourceFn);
-    await page.keyboard.press('Enter');
-    await page.waitForTimeout(2000);
-
-    // Шаг 1.6: Создаем тестовый ресурс для команды Demo, чтобы фильтр Demo был доступен
-    const addButtonDemo = page.getByTestId('add-button');
-    await addButtonDemo.click();
-
-    const resourceButtonDemo = page.getByTestId('add-resource-button');
-    await expect(resourceButtonDemo).toBeVisible({ timeout: 2000 });
-    await resourceButtonDemo.click();
+    const resourceButton1 = page.getByTestId('add-resource-button');
+    await expect(resourceButton1).toBeVisible({ timeout: 2000 });
+    await resourceButton1.click();
 
     await page.waitForTimeout(500);
 
-    // Находим последний добавленный ресурс
-    const allRowsDemo = tableSetup.locator('tr[data-testid="resource"][data-row-id]');
-    const rowCountDemo = await allRowsDemo.count();
-    const demoResourceRow = allRowsDemo.nth(rowCountDemo - 1);
-    const demoResourceId = await demoResourceRow.getAttribute('data-row-id');
+    // Находим первый добавленный ресурс
+    const table = page.getByTestId('roadmap-table');
+    const allRows1 = table.locator('tr[data-testid="resource"][data-row-id]');
+    const rowCount1 = await allRows1.count();
+    const resource1Row = allRows1.nth(rowCount1 - 1);
+    const resource1Id = await resource1Row.getAttribute('data-row-id');
 
-    // Устанавливаем команду Demo для тестового ресурса
-    const teamCellDemo = page.getByTestId(`team-cell-${demoResourceId}`);
-    await teamCellDemo.dblclick();
-    const teamSelectDemo = page.getByTestId('team-multiselect');
-    await expect(teamSelectDemo).toBeVisible({ timeout: 300 });
-    const demoLabelSetup = page.locator('label').filter({ hasText: /^Demo$/ }).first();
-    await expect(demoLabelSetup).toBeVisible({ timeout: 2000 });
-    const demoCheckboxSetup = demoLabelSetup.locator('input[type="checkbox"]');
-    await demoCheckboxSetup.click();
+    // Устанавливаем команду E2E для первого ресурса
+    const teamCell1 = page.getByTestId(`team-cell-${resource1Id}`);
+    await teamCell1.dblclick();
+    const teamSelect1 = page.getByTestId('team-multiselect');
+    await expect(teamSelect1).toBeVisible({ timeout: 300 });
+    const e2eLabel1 = page.locator('label').filter({ hasText: /^E2E$/ }).first();
+    await expect(e2eLabel1).toBeVisible({ timeout: 2000 });
+    const e2eCheckbox1 = e2eLabel1.locator('input[type="checkbox"]');
+    await e2eCheckbox1.click();
     await page.keyboard.press('Tab');
     await page.waitForTimeout(300);
 
-    // Заполняем Fn для сохранения
-    const setupDemoResourceFn = `FNSetupDemo${randInt}`;
-    const fnCellDemo = page.getByTestId(`fn-cell-${demoResourceId}`);
-    await fnCellDemo.dblclick();
+    // Заполняем Fn1 для первого ресурса
+    const fnCell1 = page.getByTestId(`fn-cell-${resource1Id}`);
+    await fnCell1.dblclick();
     await page.waitForTimeout(300);
-    await page.keyboard.type(setupDemoResourceFn);
+    await page.keyboard.type(fn1Value);
     await page.keyboard.press('Enter');
     await page.waitForTimeout(2000);
 
-    // Шаг 2: Открываем фильтр по колонке Team
-    const teamHeader = page.getByTestId('header-team');
-    await expect(teamHeader).toBeVisible({ timeout: 5000 });
+    // Шаг 3: Создаем второй ресурс с командой E2E и функцией Fn2
+    const addButton2 = page.getByTestId('add-button');
+    await addButton2.click();
+
+    const resourceButton2 = page.getByTestId('add-resource-button');
+    await expect(resourceButton2).toBeVisible({ timeout: 2000 });
+    await resourceButton2.click();
+
+    await page.waitForTimeout(500);
+
+    // Находим второй добавленный ресурс
+    const allRows2 = table.locator('tr[data-testid="resource"][data-row-id]');
+    const rowCount2 = await allRows2.count();
+    const resource2Row = allRows2.nth(rowCount2 - 1);
+    const resource2Id = await resource2Row.getAttribute('data-row-id');
+
+    // Устанавливаем команду E2E для второго ресурса
+    const teamCell2 = page.getByTestId(`team-cell-${resource2Id}`);
+    await teamCell2.dblclick();
+    const teamSelect2 = page.getByTestId('team-multiselect');
+    await expect(teamSelect2).toBeVisible({ timeout: 300 });
+    const e2eLabel2 = page.locator('label').filter({ hasText: /^E2E$/ }).first();
+    await expect(e2eLabel2).toBeVisible({ timeout: 2000 });
+    const e2eCheckbox2 = e2eLabel2.locator('input[type="checkbox"]');
+    await e2eCheckbox2.click();
+    await page.keyboard.press('Tab');
+    await page.waitForTimeout(300);
+
+    // Заполняем Fn2 для второго ресурса
+    const fnCell2 = page.getByTestId(`fn-cell-${resource2Id}`);
+    await fnCell2.dblclick();
+    await page.waitForTimeout(300);
+    await page.keyboard.type(fn2Value);
+    await page.keyboard.press('Enter');
+    await page.waitForTimeout(2000);
+
+    // Шаг 4: Открываем фильтр по колонке Fn
+    const fnHeader = page.getByTestId('header-fn');
+    await expect(fnHeader).toBeVisible({ timeout: 5000 });
     
-    const filterButton = page.getByTestId('filter-team-button');
-    await filterButton.click();
+    const filterFnButton = page.getByTestId('filter-fn-button');
+    await filterFnButton.click();
     await page.waitForTimeout(500);
 
-    // Шаг 3: Выбираем две команды в фильтре: E2E и Demo
-    // Сначала E2E
-    const e2eCheckbox = page.getByTestId('filter-checkbox-E2E');
-    await expect(e2eCheckbox).toBeVisible({ timeout: 2000 });
-    await e2eCheckbox.click();
+    // Шаг 5: Выбираем две функции в фильтре: сначала Fn1, затем Fn2
+    // Сначала Fn1
+    const fn1Checkbox = page.getByTestId(`filter-checkbox-${fn1Value}`);
+    await expect(fn1Checkbox).toBeVisible({ timeout: 2000 });
+    await fn1Checkbox.click();
     await page.waitForTimeout(200);
     
-    // Затем Demo (убеждаемся, что фильтр все еще открыт)
+    // Затем Fn2 (убеждаемся, что фильтр все еще открыт)
     await expect(page.getByTestId('filter-popup')).toBeVisible();
-    const demoCheckbox = page.getByTestId('filter-checkbox-Demo');
-    await expect(demoCheckbox).toBeVisible({ timeout: 2000 });
-    await demoCheckbox.click();
+    const fn2Checkbox = page.getByTestId(`filter-checkbox-${fn2Value}`);
+    await expect(fn2Checkbox).toBeVisible({ timeout: 2000 });
+    await fn2Checkbox.click();
     
     // Закрываем фильтр
     await page.locator('body').click({ position: { x: 0, y: 0 } });
     await page.waitForTimeout(500);
 
-    // Шаг 4: Добавляем новый ресурс
-    const addButton = page.getByTestId('add-button');
-    await expect(addButton).toBeVisible({ timeout: 5000 });
-    await addButton.click();
+    // Шаг 6: Добавляем новую задачу
+    const addButton3 = page.getByTestId('add-button');
+    await expect(addButton3).toBeVisible({ timeout: 5000 });
+    await addButton3.click();
 
-    const resourceButton = page.getByTestId('add-resource-button');
-    await expect(resourceButton).toBeVisible({ timeout: 2000 });
-    await resourceButton.click();
+    const taskButton = page.getByTestId('add-task-button');
+    await expect(taskButton).toBeVisible({ timeout: 2000 });
+    await taskButton.click();
 
     await page.waitForTimeout(500);
 
-    // Шаг 5: Находим новую строку ресурса
-    const table = page.getByTestId('roadmap-table');
-    
+    // Шаг 7: Находим новую строку задачи
     // Прокручиваем таблицу до конца
     await page.evaluate(() => {
       const tableContainer = document.querySelector('[data-testid="roadmap-table"]')?.closest('.roadmap-table-container');
@@ -485,74 +483,82 @@ test.describe('Filter Defaults for New Items', () => {
     
     await page.waitForTimeout(500);
     
-    // Находим все строки ресурсов
-    const allRows = table.locator('tr[data-testid="resource"][data-row-id]');
-    const rowCount = await allRows.count();
+    // Находим все строки задач
+    const allTaskRows = table.locator('tr[data-testid="task"][data-row-id]');
+    const taskRowCount = await allTaskRows.count();
     
-    // Ищем последнюю строку (новый ресурс)
-    const newResourceRow = allRows.nth(rowCount - 1);
-    await expect(newResourceRow).toBeVisible({ timeout: 3000 });
-    const newResourceId = await newResourceRow.getAttribute('data-row-id');
+    // Ищем последнюю строку (новая задача)
+    const newTaskRow = allTaskRows.nth(taskRowCount - 1);
+    await expect(newTaskRow).toBeVisible({ timeout: 3000 });
+    const newTaskId = await newTaskRow.getAttribute('data-row-id');
 
-    // Шаг 6: Проверяем, что команда установлена на первое значение из фильтра (E2E или Demo)
-    const teamCell = page.getByTestId(`team-cell-${newResourceId}`);
-    const teamText = await teamCell.textContent();
-    console.log(`Team cell text: "${teamText}"`);
+    // Шаг 8: Проверяем, что команда E2E установлена
+    const taskTeamCell = page.getByTestId(`team-cell-${newTaskId}`);
+    await expect(taskTeamCell).toContainText('E2E', { timeout: 2000 });
+    console.log('✅ New task has Team="E2E" from filter defaults');
+
+    // Шаг 9: Проверяем, что Fn установлена на первое значение из фильтра (Fn1)
+    const taskFnCell = page.getByTestId(`fn-cell-${newTaskId}`);
+    const fnText = await taskFnCell.textContent();
+    console.log(`Fn cell text: "${fnText}"`);
     
-    // Проверяем что это либо E2E, либо Demo (первое из Set, порядок может варьироваться)
-    const hasValidTeam = teamText?.includes('E2E') || teamText?.includes('Demo');
-    expect(hasValidTeam).toBeTruthy();
-    console.log(`✅ New resource has Team from filter defaults: "${teamText}"`);
+    // Проверяем что установлена первая выбранная функция (Fn1)
+    await expect(taskFnCell).toContainText(fn1Value, { timeout: 2000 });
+    console.log(`✅ New task has Fn="${fn1Value}" (first selected value from filter)`);
 
-    // Шаг 7: Добавляем Fn чтобы сохранить ресурс
-    const fnCell = page.getByTestId(`fn-cell-${newResourceId}`);
-    await fnCell.click({ clickCount: 2 });
+    // Шаг 10: Добавляем название задачи чтобы сохранить
+    const taskNameCell = page.getByTestId(`task-cell-${newTaskId}`);
+    await taskNameCell.click({ clickCount: 2 });
     await page.waitForTimeout(300);
-    await page.keyboard.type(fnValue);
+    await page.keyboard.type(taskName);
     await page.keyboard.press('Enter');
-
-    // Шаг 8: Удаляем созданный ресурс по ID (cleanup)
     await page.waitForTimeout(2000);
-    const resourceRowForDelete = page.locator(`tr[data-row-id="${newResourceId}"]`);
-    await resourceRowForDelete.click({ button: 'right' });
+    
+    console.log(`Task "${taskName}" with Team="E2E" and Fn="${fn1Value}" added`);
 
-    const contextMenu = page.getByTestId('context-menu');
-    await expect(contextMenu).toBeVisible();
+    // Шаг 11: Удаляем созданную задачу по ID
+    const taskRowForDelete = page.locator(`tr[data-row-id="${newTaskId}"]`);
+    await taskRowForDelete.scrollIntoViewIfNeeded();
+    await page.waitForTimeout(300);
+    await taskRowForDelete.click({ button: 'right', force: true });
 
-    const deleteButton = page.getByTestId('context-menu-delete');
-    await deleteButton.click();
+    const contextMenu1 = page.getByTestId('context-menu');
+    await expect(contextMenu1).toBeVisible();
+
+    const deleteButton1 = page.getByTestId('context-menu-delete');
+    await deleteButton1.click();
 
     await page.getByText('Сохранить').click();
     await page.waitForTimeout(2000);
-    console.log(`Resource with FN="${fnValue}" deleted`);
+    console.log(`Task "${taskName}" deleted`);
 
-    // Шаг 9: Удаляем тестовый ресурс E2E, созданный в начале, по ID
-    const setupResourceRowForDelete = page.locator(`tr[data-row-id="${setupResourceId}"]`);
-    await setupResourceRowForDelete.click({ button: 'right' });
+    // Шаг 12: Удаляем первый ресурс по ID
+    const resource1RowForDelete = page.locator(`tr[data-row-id="${resource1Id}"]`);
+    await resource1RowForDelete.click({ button: 'right' });
 
-    const contextMenuSetup3 = page.getByTestId('context-menu');
-    await expect(contextMenuSetup3).toBeVisible();
+    const contextMenu2 = page.getByTestId('context-menu');
+    await expect(contextMenu2).toBeVisible();
 
-    const deleteButtonSetup = page.getByTestId('context-menu-delete');
-    await deleteButtonSetup.click();
-
-    await page.getByText('Сохранить').click();
-    await page.waitForTimeout(2000);
-    console.log(`Setup resource with FN="${setupResourceFn}" deleted`);
-
-    // Шаг 10: Удаляем тестовый ресурс Demo, созданный в начале, по ID
-    const demoResourceRowForDelete = page.locator(`tr[data-row-id="${demoResourceId}"]`);
-    await demoResourceRowForDelete.click({ button: 'right' });
-
-    const contextMenuDemo = page.getByTestId('context-menu');
-    await expect(contextMenuDemo).toBeVisible();
-
-    const deleteButtonDemo = page.getByTestId('context-menu-delete');
-    await deleteButtonDemo.click();
+    const deleteButton2 = page.getByTestId('context-menu-delete');
+    await deleteButton2.click();
 
     await page.getByText('Сохранить').click();
     await page.waitForTimeout(2000);
-    console.log(`Setup resource Demo with FN="${setupDemoResourceFn}" deleted`);
+    console.log(`Resource with Fn="${fn1Value}" deleted`);
+
+    // Шаг 13: Удаляем второй ресурс по ID
+    const resource2RowForDelete = page.locator(`tr[data-row-id="${resource2Id}"]`);
+    await resource2RowForDelete.click({ button: 'right' });
+
+    const contextMenu3 = page.getByTestId('context-menu');
+    await expect(contextMenu3).toBeVisible();
+
+    const deleteButton3 = page.getByTestId('context-menu-delete');
+    await deleteButton3.click();
+
+    await page.getByText('Сохранить').click();
+    await page.waitForTimeout(2000);
+    console.log(`Resource with Fn="${fn2Value}" deleted`);
   });
 });
 

@@ -3328,10 +3328,26 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
         
         // Получаем UUID команды
         let teamId: string | undefined;
+        let teamName = defaults.team || "";
+        
         if (defaults.team) {
             const found = teamData.find(t => t.name === defaults.team);
             if (found?.id) {
                 teamId = found.id;
+            }
+        } else if (defaults.fn) {
+            // Если команда не указана в фильтре, но указана функция,
+            // берем команду из первого ресурса с этой функцией
+            const resourceWithFn = computedRows.find(
+                r => r.kind === "resource" && r.fn === defaults.fn && r.team && r.team.length > 0
+            ) as ResourceRow | undefined;
+            
+            if (resourceWithFn && resourceWithFn.team && resourceWithFn.team.length > 0) {
+                teamName = resourceWithFn.team[0];
+                const found = teamData.find(t => t.name === teamName);
+                if (found?.id) {
+                    teamId = found.id;
+                }
             }
         }
         
@@ -3342,7 +3358,7 @@ function weeksArraysEqual(weeks1: number[], weeks2: number[]): boolean {
             sprintsAuto: [],
             epic: defaults.epic || "",
             task: "",
-            team: defaults.team || "",
+            team: teamName,
             teamId: teamId,
             fn: (defaults.fn || "") as Fn,
             planEmpl: 0,
@@ -4823,26 +4839,15 @@ function renderHeadWithFilter(label: string, col: ColumnId, _filters: any, isFil
         >
             <div className="flex items-center justify-between">
                 <span>{label}</span>
-                {col === "team" ? (
-                    <button 
-                        className={buttonClass} 
-                        style={buttonStyle}
-                        title={filterActive ? "Фильтр применен" : "Открыть фильтр"}
-                        onClick={(e)=>openFilter(col, (e.currentTarget as HTMLElement).getBoundingClientRect().left, (e.currentTarget as HTMLElement).getBoundingClientRect().bottom+4)}
-                        data-testid="filter-team-button"
-                    >
-                        ▾
-                    </button>
-                ) : (
-                    <button 
-                        className={buttonClass} 
-                        style={buttonStyle}
-                        title={filterActive ? "Фильтр применен" : "Открыть фильтр"}
-                        onClick={(e)=>openFilter(col, (e.currentTarget as HTMLElement).getBoundingClientRect().left, (e.currentTarget as HTMLElement).getBoundingClientRect().bottom+4)}
-                    >
-                        ▾
-                    </button>
-                )}
+                <button 
+                    className={buttonClass} 
+                    style={buttonStyle}
+                    title={filterActive ? "Фильтр применен" : "Открыть фильтр"}
+                    onClick={(e)=>openFilter(col, (e.currentTarget as HTMLElement).getBoundingClientRect().left, (e.currentTarget as HTMLElement).getBoundingClientRect().bottom+4)}
+                    data-testid={`filter-${col}-button`}
+                >
+                    ▾
+                </button>
             </div>
             {/* Ресайзер для всех колонок кроме autoplan */}
             {col !== "autoplan" && (
