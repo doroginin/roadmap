@@ -6,6 +6,7 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
   workers: 1,
+  timeout: 30000, // Таймаут для каждого теста: 30 секунд
   reporter: [
     ['html', { open: 'never' }],
   ],

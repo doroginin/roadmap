@@ -27,22 +27,13 @@ test.describe('Task Weeks Save functionality', () => {
     });
 
     // Шаг 1: Открываем страницу
-    console.log('\n📖 Step 1: Opening page');
-    await page.goto('/');
+    console.log('\n📖 Step 1: Opening page with E2E filter');
+    await page.goto('/?filter_team=E2E');
 
     // Ждем загрузки данных
     await expect(page.getByTestId('app-container')).toBeVisible({ timeout: 10000 });
     await expect(page.getByTestId('roadmap-table')).toBeVisible();
     console.log('✅ Page loaded');
-
-    // Шаг 2: Включаем фильтр по команде "Demo"
-    console.log('\n🔍 Step 2: Applying Demo team filter');
-    await page.getByTestId('filter-team-button').click();
-    await expect(page.getByTestId('filter-popup')).toBeVisible();
-    await page.getByTestId('filter-checkbox-Demo').click();
-    await page.getByTestId('filter-ok-button').click();
-    await expect(page.getByTestId('filter-popup')).not.toBeVisible();
-    console.log('✅ Filter applied');
 
     // Шаг 3: Создаем новую задачу
     console.log('\n➕ Step 3: Creating new task');
@@ -105,26 +96,8 @@ test.describe('Task Weeks Save functionality', () => {
     await planWeeksInput.press('Enter');
     console.log('planWeeks set: 3');
 
-    // Шаг 5: Отключаем автопланирование чтобы можно было вручную установить weeks
-    console.log('\n🔧 Step 5: Disabling auto-plan');
-
-    // Находим чекбокс автопланирования для новой задачи
-    const taskRow = page.locator(`[data-row-id="${newTaskId}"]`);
-    const autoPlanCheckbox = taskRow.locator('input[type="checkbox"]');
-    await expect(autoPlanCheckbox).toBeVisible();
-
-    // Проверяем что чекбокс включен, и отключаем его
-    const isChecked = await autoPlanCheckbox.isChecked();
-    if (isChecked) {
-      await autoPlanCheckbox.click();
-      console.log('Auto-plan disabled');
-    }
-
-    // Ждем автосохранения после отключения автопланирования
-    await page.waitForTimeout(3000);
-
     // Шаг 6: Заполняем план по неделям (weeks)
-    console.log('\n📅 Step 6: Setting weeks plan manually');
+    console.log('\n📅 Step 5: Setting weeks plan manually');
 
     // Находим ячейки недель для новой задачи
     // Устанавливаем значения для недель 1, 2, 3
@@ -143,9 +116,11 @@ test.describe('Task Weeks Save functionality', () => {
       console.log(`Week ${weekIndex + 1} set to: ${weekValues[weekIndex]}`);
     }
 
-    // Шаг 7: Ждем автосохранения
-    console.log('\n💾 Step 7: Waiting for autosave');
-    await page.waitForTimeout(3000); // Ждем 3 секунды для автосохранения
+    // Шаг 7: Сохраняем
+    console.log('\n💾 Step 6: save');
+    // Click save button
+    const saveButton = page.getByText('Сохранить');
+    await saveButton.click();
 
     // Проверяем, что были отправлены PUT запросы
     const putRequests = apiRequests.filter(req => req.method === 'PUT');
@@ -153,22 +128,15 @@ test.describe('Task Weeks Save functionality', () => {
     expect(putRequests.length).toBeGreaterThan(0);
 
     // Шаг 8: Перезагружаем страницу
-    console.log('\n🔄 Step 8: Reloading page');
+    console.log('\n🔄 Step 7: Reloading page');
     await page.reload();
+    // Ждем загрузки данных
     await expect(page.getByTestId('app-container')).toBeVisible({ timeout: 10000 });
-    await page.waitForTimeout(2000);
+    await expect(page.getByTestId('roadmap-table')).toBeVisible();
     console.log('✅ Page reloaded');
 
-    // Применяем фильтр снова
-    console.log('\n🔍 Step 9: Re-applying filter');
-    await page.getByTestId('filter-team-button').click();
-    await expect(page.getByTestId('filter-popup')).toBeVisible();
-    await page.getByTestId('filter-checkbox-Demo').click();
-    await page.getByTestId('filter-ok-button').click();
-    await expect(page.getByTestId('filter-popup')).not.toBeVisible();
-
     // Шаг 10: Проверяем что данные сохранились
-    console.log('\n✅ Step 10: Verifying saved data');
+    console.log('\n✅ Step 9: Verifying saved data');
 
     // Проверяем название задачи
     const savedTaskCell = page.getByTestId(`task-cell-${newTaskId}`);
@@ -199,7 +167,7 @@ test.describe('Task Weeks Save functionality', () => {
     }
 
     // Шаг 11: Удаляем задачу
-    console.log('\n🗑️ Step 11: Deleting task');
+    console.log('\n🗑️ Step 10: Deleting task');
 
     // Находим строку задачи и кликаем правой кнопкой для контекстного меню
     const taskRowForDelete = page.locator(`tr[data-row-id="${newTaskId}"]`);
@@ -213,22 +181,13 @@ test.describe('Task Weeks Save functionality', () => {
     const deleteButton = page.getByTestId('context-menu-delete');
     await deleteButton.click();
 
-    // Ждем автосохранения после удаления
-    await page.waitForTimeout(3000);
-    console.log('✅ Task deleted');
+    // Click save button
+    await page.getByText('Сохранить').click();
 
     // Шаг 12: Перезагружаем страницу и проверяем что задача удалена
-    console.log('\n🔄 Step 12: Verifying deletion');
+    console.log('\n🔄 Step 11: Verifying deletion');
     await page.reload();
     await expect(page.getByTestId('app-container')).toBeVisible({ timeout: 10000 });
-    await page.waitForTimeout(2000);
-
-    // Применяем фильтр снова
-    await page.getByTestId('filter-team-button').click();
-    await expect(page.getByTestId('filter-popup')).toBeVisible();
-    await page.getByTestId('filter-checkbox-Demo').click();
-    await page.getByTestId('filter-ok-button').click();
-    await expect(page.getByTestId('filter-popup')).not.toBeVisible();
 
     // Проверяем что задача не существует
     const deletedTaskCell = page.getByTestId(`task-cell-${newTaskId}`);
