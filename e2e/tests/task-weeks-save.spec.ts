@@ -127,9 +127,9 @@ test.describe('Task Weeks Save functionality', () => {
     console.log(`API PUT requests sent: ${putRequests.length}`);
     expect(putRequests.length).toBeGreaterThan(0);
 
-    // Шаг 8: Перезагружаем страницу
+    // Шаг 8: Перезагружаем страницу с фильтром E2E
     console.log('\n🔄 Step 7: Reloading page');
-    await page.reload();
+    await page.goto('/?filter_team=E2E');
     // Ждем загрузки данных
     await expect(page.getByTestId('app-container')).toBeVisible({ timeout: 10000 });
     await expect(page.getByTestId('roadmap-table')).toBeVisible();
@@ -184,9 +184,9 @@ test.describe('Task Weeks Save functionality', () => {
     // Click save button
     await page.getByText('Сохранить').click();
 
-    // Шаг 12: Перезагружаем страницу и проверяем что задача удалена
+    // Шаг 12: Перезагружаем страницу с фильтром E2E и проверяем что задача удалена
     console.log('\n🔄 Step 11: Verifying deletion');
-    await page.reload();
+    await page.goto('/?filter_team=E2E');
     await expect(page.getByTestId('app-container')).toBeVisible({ timeout: 10000 });
 
     // Проверяем что задача не существует

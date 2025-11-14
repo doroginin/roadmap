@@ -26,8 +26,8 @@ test.describe('AutoSave Debounce Tests', () => {
       await route.continue();
     });
 
-    // Шаг 1: Открываем страницу
-    await page.goto('/');
+    // Шаг 1: Открываем страницу с фильтром по команде E2E
+    await page.goto('/?filter_team=E2E');
 
     // Ждем загрузки данных
     await expect(page.getByTestId('app-container')).toBeVisible({ timeout: 10000 });
@@ -35,32 +35,58 @@ test.describe('AutoSave Debounce Tests', () => {
     // Проверяем, что таблица загрузилась
     await expect(page.getByTestId('roadmap-table')).toBeVisible();
 
-    // Шаг 2: Включаем фильтр по команде "Demo"
-    await page.getByTestId('filter-team-button').click();
-    await expect(page.getByTestId('filter-popup')).toBeVisible();
-    await page.getByTestId('filter-checkbox-Demo').click();
-    await page.getByTestId('filter-ok-button').click();
-    await expect(page.getByTestId('filter-popup')).not.toBeVisible();
+    // Шаг 2: Создаем новую задачу
+    const addButton = page.getByTestId('add-button');
+    await expect(addButton).toBeVisible();
+    await addButton.click();
 
-    // Шаг 3: Находим тестовую задачу
-    const testTaskId = 'aaaaaaaa-0000-0000-0000-000000000001';
+    await expect(page.getByTestId('add-menu')).toBeVisible();
+
+    const addTaskButton = page.getByTestId('add-task-button');
+    await expect(addTaskButton).toBeVisible();
+    await addTaskButton.click();
+
+    await page.waitForTimeout(500);
+
+    // Находим последнюю добавленную задачу
+    const taskRows = page.locator('[data-row-kind="task"]');
+    const taskCount = await taskRows.count();
+    const newTaskRow = taskRows.nth(taskCount - 1);
+
+    const testTaskId = await newTaskRow.getAttribute('data-row-id');
+    if (!testTaskId) {
+      throw new Error('Task ID not found');
+    }
+    console.log(`Created task with ID: ${testTaskId}`);
+
+    // Шаг 3: Заполняем название задачи
     const taskCell = page.getByTestId(`task-cell-${testTaskId}`);
-    await expect(taskCell).toBeVisible({ timeout: 5000 });
-
-    // Получаем исходное название задачи
-    const originalTaskName = await taskCell.textContent();
-    console.log('Original task name:', originalTaskName);
-
-    // Шаг 4: Делаем первое изменение
     await taskCell.dblclick();
     const taskInput = page.getByTestId(`task-input-${testTaskId}`);
     await expect(taskInput).toBeVisible();
 
-    const timestamp = Date.now();
-    const firstChange = `Задача А - первое изменение ${timestamp}`;
-    await taskInput.fill(firstChange);
+    const initialTaskName = `E2E Test Task ${Date.now()}`;
+    await taskInput.fill(initialTaskName);
     await taskInput.press('Enter');
     await expect(taskInput).not.toBeVisible();
+    await expect(taskCell).toContainText(initialTaskName);
+
+    // Ждем автосохранения
+    await page.waitForTimeout(2000);
+
+    // Очищаем массив запросов после создания задачи
+    apiRequests.length = 0;
+
+    // Шаг 4: Делаем первое изменение
+    await taskCell.dblclick();
+    const taskInput1 = page.getByTestId(`task-input-${testTaskId}`);
+    await expect(taskInput1).toBeVisible();
+
+    const timestamp = Date.now();
+    const firstChange = `Задача А - первое изменение ${timestamp}`;
+    await taskInput1.fill(firstChange);
+    await taskInput1.press('Enter');
+    await expect(taskInput1).not.toBeVisible();
     await expect(taskCell).toContainText(firstChange);
 
     console.log('First change completed at:', new Date().toISOString());
@@ -99,6 +125,21 @@ test.describe('AutoSave Debounce Tests', () => {
     expect(requestBody.tasks[0].task).toBe(secondChange);
 
     console.log('✅ Test passed: Only one request was sent with the final change');
+
+    // Удаляем задачу
+    const taskRowForDelete = page.locator(`tr[data-row-id="${testTaskId}"]`);
+    await taskRowForDelete.click({ button: 'right' });
+
+    const contextMenu = page.getByTestId('context-menu');
+    await expect(contextMenu).toBeVisible();
+
+    const deleteButton = page.getByTestId('context-menu-delete');
+    await deleteButton.click();
+
+    await page.getByText('Сохранить').click();
+    await page.waitForTimeout(2000);
+
+    console.log('Task deleted');
   });
 
   test('should send two requests when making changes with 1+ second interval', async ({ page }) => {
@@ -126,35 +167,65 @@ test.describe('AutoSave Debounce Tests', () => {
       await route.continue();
     });
 
-    // Шаг 1: Открываем страницу
-    await page.goto('/');
+    // Шаг 1: Открываем страницу с фильтром по команде E2E
+    await page.goto('/?filter_team=E2E');
 
     // Ждем загрузки данных
     await expect(page.getByTestId('app-container')).toBeVisible({ timeout: 10000 });
     await expect(page.getByTestId('roadmap-table')).toBeVisible();
 
-    // Шаг 2: Включаем фильтр по команде "Demo"
-    await page.getByTestId('filter-team-button').click();
-    await expect(page.getByTestId('filter-popup')).toBeVisible();
-    await page.getByTestId('filter-checkbox-Demo').click();
-    await page.getByTestId('filter-ok-button').click();
-    await expect(page.getByTestId('filter-popup')).not.toBeVisible();
+    // Шаг 2: Создаем новую задачу
+    const addButton = page.getByTestId('add-button');
+    await expect(addButton).toBeVisible();
+    await addButton.click();
 
-    // Шаг 3: Находим тестовую задачу
-    const testTaskId = 'aaaaaaaa-0000-0000-0000-000000000001';
+    await expect(page.getByTestId('add-menu')).toBeVisible();
+
+    const addTaskButton = page.getByTestId('add-task-button');
+    await expect(addTaskButton).toBeVisible();
+    await addTaskButton.click();
+
+    await page.waitForTimeout(500);
+
+    // Находим последнюю добавленную задачу
+    const taskRows = page.locator('[data-row-kind="task"]');
+    const taskCount = await taskRows.count();
+    const newTaskRow = taskRows.nth(taskCount - 1);
+
+    const testTaskId = await newTaskRow.getAttribute('data-row-id');
+    if (!testTaskId) {
+      throw new Error('Task ID not found');
+    }
+    console.log(`Created task with ID: ${testTaskId}`);
+
+    // Шаг 3: Заполняем название задачи
     const taskCell = page.getByTestId(`task-cell-${testTaskId}`);
-    await expect(taskCell).toBeVisible({ timeout: 5000 });
-
-    // Шаг 4: Делаем первое изменение
     await taskCell.dblclick();
     const taskInput = page.getByTestId(`task-input-${testTaskId}`);
     await expect(taskInput).toBeVisible();
 
-    const timestamp = Date.now();
-    const firstChange = `Задача А - первое изменение ${timestamp}`;
-    await taskInput.fill(firstChange);
+    const initialTaskName = `E2E Test Task ${Date.now()}`;
+    await taskInput.fill(initialTaskName);
     await taskInput.press('Enter');
     await expect(taskInput).not.toBeVisible();
+    await expect(taskCell).toContainText(initialTaskName);
+
+    // Ждем автосохранения
+    await page.waitForTimeout(2000);
+
+    // Очищаем массив запросов после создания задачи
+    apiRequests.length = 0;
+
+    // Шаг 4: Делаем первое изменение
+    await taskCell.dblclick();
+    const taskInput1 = page.getByTestId(`task-input-${testTaskId}`);
+    await expect(taskInput1).toBeVisible();
+
+    const timestamp = Date.now();
+    const firstChange = `Задача А - первое изменение ${timestamp}`;
+    await taskInput1.fill(firstChange);
+    await taskInput1.press('Enter');
+    await expect(taskInput1).not.toBeVisible();
 
     console.log('First change completed at:', new Date().toISOString());
 
@@ -199,5 +270,20 @@ test.describe('AutoSave Debounce Tests', () => {
     expect(secondRequest.tasks[0].task).toBe(secondChange);
 
     console.log('✅ Test passed: Two separate requests were sent for each change');
+
+    // Удаляем задачу
+    const taskRowForDelete = page.locator(`tr[data-row-id="${testTaskId}"]`);
+    await taskRowForDelete.click({ button: 'right' });
+
+    const contextMenu = page.getByTestId('context-menu');
+    await expect(contextMenu).toBeVisible();
+
+    const deleteButton = page.getByTestId('context-menu-delete');
+    await deleteButton.click();
+
+    await page.getByText('Сохранить').click();
+    await page.waitForTimeout(2000);
+
+    console.log('Task deleted');
   });
 });

@@ -89,11 +89,11 @@ test.describe('Add Resource functionality', () => {
     const teamSelect = page.getByTestId('team-multiselect');
     await expect(teamSelect).toBeVisible({ timeout: 300 });
 
-    // Выбираем "Test" из списка
-    const testLabel = page.locator('label').filter({ hasText: /^Test$/ }).first();
-    await expect(testLabel).toBeVisible({ timeout: 2000 });
-    const testCheckbox = testLabel.locator('input[type="checkbox"]');
-    await testCheckbox.click();
+    // Выбираем "E2E" из списка
+    const e2eLabel = page.locator('label').filter({ hasText: /^E2E$/ }).first();
+    await expect(e2eLabel).toBeVisible({ timeout: 2000 });
+    const e2eCheckbox = e2eLabel.locator('input[type="checkbox"]');
+    await e2eCheckbox.click();
 
     // Шаг 5: Нажимаем Tab для перехода к ячейке Fn
     await page.keyboard.press('Tab');
@@ -130,8 +130,9 @@ test.describe('Add Resource functionality', () => {
     // Шаг 8: Ждем 2 секунды для автосохранения
     await page.waitForTimeout(2000);
 
-    // Шаг 9: Обновляем страницу
-    await page.reload();
+    // Шаг 9: Обновляем страницу с фильтром E2E
+    await page.goto('/?filter_team=E2E');
+    await page.waitForLoadState('networkidle');
 
     // Ждем загрузки данных после обновления
     await expect(page.getByTestId('app-container')).toBeVisible({ timeout: 10000 });
@@ -144,11 +145,11 @@ test.describe('Add Resource functionality', () => {
     await expect(fnCell).toBeVisible({ timeout: 5000 });
     console.log(`✅ Resource with FN="${fnValue}" persisted after page reload`);
 
-    // Также проверяем, что команда "Test" установлена
+    // Также проверяем, что команда "E2E" установлена
     const savedResourceRow = fnCell.locator('xpath=ancestor::tr');
     const savedTeamCell = savedResourceRow.locator('td').nth(2);
-    await expect(savedTeamCell).toContainText('Test');
-    console.log('✅ Team "Test" is correctly set');
+    await expect(savedTeamCell).toContainText('E2E');
+    console.log('✅ Team "E2E" is correctly set');
 
     // Шаг 11: Удаляем ресурс
     // Кликаем правой кнопкой мыши на строку для открытия контекстного меню

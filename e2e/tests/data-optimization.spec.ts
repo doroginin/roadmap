@@ -25,8 +25,8 @@ test.describe('Data Optimization Tests', () => {
       await route.continue();
     });
 
-    // Шаг 1: Открываем страницу
-    await page.goto('/');
+    // Шаг 1: Открываем страницу с фильтром по команде E2E
+    await page.goto('/?filter_team=E2E');
 
     // Ждем загрузки данных
     await expect(page.getByTestId('app-container')).toBeVisible({ timeout: 10000 });
@@ -37,31 +37,58 @@ test.describe('Data Optimization Tests', () => {
     // Очищаем массив запросов после загрузки
     apiRequests.length = 0;
 
-    // Шаг 2: Включаем фильтр по команде "Demo"
-    await page.getByTestId('filter-team-button').click();
-    await expect(page.getByTestId('filter-popup')).toBeVisible();
-    await page.getByTestId('filter-checkbox-Demo').click();
-    await page.getByTestId('filter-ok-button').click();
-    await expect(page.getByTestId('filter-popup')).not.toBeVisible();
+    // Шаг 2: Создаем новую задачу
+    const addButton = page.getByTestId('add-button');
+    await expect(addButton).toBeVisible();
+    await addButton.click();
 
-    // Шаг 3: Редактируем название первой задачи
-    const testTaskId = 'aaaaaaaa-0000-0000-0000-000000000001';
+    await expect(page.getByTestId('add-menu')).toBeVisible();
+
+    const addTaskButton = page.getByTestId('add-task-button');
+    await expect(addTaskButton).toBeVisible();
+    await addTaskButton.click();
+
+    await page.waitForTimeout(500);
+
+    // Находим последнюю добавленную задачу
+    const taskRows = page.locator('[data-row-kind="task"]');
+    const taskCount = await taskRows.count();
+    const newTaskRow = taskRows.nth(taskCount - 1);
+
+    const testTaskId = await newTaskRow.getAttribute('data-row-id');
+    if (!testTaskId) {
+      throw new Error('Task ID not found');
+    }
+    console.log(`Created task with ID: ${testTaskId}`);
+
+    // Шаг 3: Заполняем название задачи
     const taskCell = page.getByTestId(`task-cell-${testTaskId}`);
-    await expect(taskCell).toBeVisible({ timeout: 5000 });
-
-    const originalTaskName = await taskCell.textContent();
-    console.log('Original task name:', originalTaskName);
-
-    // Редактируем название задачи
     await taskCell.dblclick();
     const taskInput = page.getByTestId(`task-input-${testTaskId}`);
     await expect(taskInput).toBeVisible();
 
-    const newTaskName = `Задача А - оптимизация ${Date.now()}`;
-    await taskInput.fill(newTaskName);
+    const initialTaskName = `E2E Test Task ${Date.now()}`;
+    await taskInput.fill(initialTaskName);
     await taskInput.press('Enter');
-
     await expect(taskInput).not.toBeVisible();
+    await expect(taskCell).toContainText(initialTaskName);
+
+    // Ждем автосохранения
+    await page.waitForTimeout(2000);
+
+    // Очищаем массив запросов перед редактированием
+    apiRequests.length = 0;
+
+    // Редактируем название задачи
+    await taskCell.dblclick();
+    const taskInput2 = page.getByTestId(`task-input-${testTaskId}`);
+    await expect(taskInput2).toBeVisible();
+
+    const newTaskName = `Задача А - оптимизация ${Date.now()}`;
+    await taskInput2.fill(newTaskName);
+    await taskInput2.press('Enter');
+
+    await expect(taskInput2).not.toBeVisible();
     await expect(taskCell).toContainText(newTaskName);
 
     // Шаг 4: Сохраняем данные вручную
@@ -100,6 +127,21 @@ test.describe('Data Optimization Tests', () => {
     expect(updatedTask).toHaveProperty('task', newTaskName);
     
     console.log('✅ Test passed: Only changed task data was sent to API');
+
+    // Удаляем задачу
+    const taskRowForDelete = page.locator(`tr[data-row-id="${testTaskId}"]`);
+    await taskRowForDelete.click({ button: 'right' });
+
+    const contextMenu = page.getByTestId('context-menu');
+    await expect(contextMenu).toBeVisible();
+
+    const deleteButton = page.getByTestId('context-menu-delete');
+    await deleteButton.click();
+
+    await page.getByText('Сохранить').click();
+    await page.waitForTimeout(2000);
+
+    console.log('Task deleted');
   });
 
   test('should send only changed resource data to API', async ({ page }) => {
@@ -124,35 +166,66 @@ test.describe('Data Optimization Tests', () => {
       await route.continue();
     });
 
-    // Открываем страницу
-    await page.goto('/');
+    // Открываем страницу с фильтром по команде E2E
+    await page.goto('/?filter_team=E2E');
     await expect(page.getByTestId('app-container')).toBeVisible({ timeout: 10000 });
     await expect(page.getByTestId('roadmap-table')).toBeVisible();
 
     // Очищаем массив запросов
     apiRequests.length = 0;
 
-    // Включаем фильтр по команде "Demo"
-    await page.getByTestId('filter-team-button').click();
-    await expect(page.getByTestId('filter-popup')).toBeVisible();
-    await page.getByTestId('filter-checkbox-Demo').click();
-    await page.getByTestId('filter-ok-button').click();
+    // Создаем новый ресурс
+    const addButton = page.getByTestId('add-button');
+    await expect(addButton).toBeVisible();
+    await addButton.click();
 
-    // Находим первую строку ресурса (используем существующий ресурс)
-    const testResourceId = 'dddddddd-0000-0000-0000-000000000002';
+    await expect(page.getByTestId('add-menu')).toBeVisible();
+
+    const addResourceButton = page.getByTestId('add-resource-button');
+    await expect(addResourceButton).toBeVisible();
+    await addResourceButton.click();
+
+    await page.waitForTimeout(500);
+
+    // Находим последний добавленный ресурс
+    const resourceRows = page.locator('[data-row-kind="resource"]');
+    const resourceCount = await resourceRows.count();
+    const newResourceRow = resourceRows.nth(resourceCount - 1);
+
+    const testResourceId = await newResourceRow.getAttribute('data-row-id');
+    if (!testResourceId) {
+      throw new Error('Resource ID not found');
+    }
+    console.log(`Created resource with ID: ${testResourceId}`);
+
+    // Заполняем название ресурса
     const resourceCell = page.getByTestId(`fn-cell-${testResourceId}`);
-    await expect(resourceCell).toBeVisible({ timeout: 5000 });
-
-    // Редактируем название ресурса
     await resourceCell.dblclick();
     const resourceInput = page.getByTestId(`resource-input-${testResourceId}`);
     await expect(resourceInput).toBeVisible();
 
-    const newResourceName = `Ресурс - оптимизация ${Date.now()}`;
-    await resourceInput.fill(newResourceName);
+    const initialResourceName = `E2E Test Resource ${Date.now()}`;
+    await resourceInput.fill(initialResourceName);
     await resourceInput.press('Enter');
-
     await expect(resourceInput).not.toBeVisible();
+    await expect(resourceCell).toContainText(initialResourceName);
+
+    // Ждем автосохранения
+    await page.waitForTimeout(2000);
+
+    // Очищаем массив запросов перед редактированием
+    apiRequests.length = 0;
+
+    // Редактируем название ресурса
+    await resourceCell.dblclick();
+    const resourceInput2 = page.getByTestId(`resource-input-${testResourceId}`);
+    await expect(resourceInput2).toBeVisible();
+
+    const newResourceName = `Ресурс - оптимизация ${Date.now()}`;
+    await resourceInput2.fill(newResourceName);
+    await resourceInput2.press('Enter');
+
+    await expect(resourceInput2).not.toBeVisible();
     await expect(resourceCell).toContainText(newResourceName);
 
     // Сохраняем данные вручную
@@ -187,6 +260,21 @@ test.describe('Data Optimization Tests', () => {
     expect(updatedResource).toHaveProperty('id', testResourceId);
     
     console.log('✅ Test passed: Only changed resource data was sent to API');
+
+    // Удаляем ресурс
+    const resourceRowForDelete = page.locator(`tr[data-row-id="${testResourceId}"]`);
+    await resourceRowForDelete.click({ button: 'right' });
+
+    const contextMenu = page.getByTestId('context-menu');
+    await expect(contextMenu).toBeVisible();
+
+    const deleteButton = page.getByTestId('context-menu-delete');
+    await deleteButton.click();
+
+    await page.getByText('Сохранить').click();
+    await page.waitForTimeout(2000);
+
+    console.log('Resource deleted');
   });
 
   test('should send multiple changes in single request', async ({ page }) => {
@@ -211,51 +299,118 @@ test.describe('Data Optimization Tests', () => {
       await route.continue();
     });
 
-    // Открываем страницу
-    await page.goto('/');
+    // Открываем страницу с фильтром по команде E2E
+    await page.goto('/?filter_team=E2E');
     await expect(page.getByTestId('app-container')).toBeVisible({ timeout: 10000 });
     await expect(page.getByTestId('roadmap-table')).toBeVisible();
 
     // Очищаем массив запросов
     apiRequests.length = 0;
 
-    // Включаем фильтр по команде "Demo"
-    await page.getByTestId('filter-team-button').click();
-    await expect(page.getByTestId('filter-popup')).toBeVisible();
-    await page.getByTestId('filter-checkbox-Demo').click();
-    await page.getByTestId('filter-ok-button').click();
+    // Создаем новую задачу
+    const addButton = page.getByTestId('add-button');
+    await expect(addButton).toBeVisible();
+    await addButton.click();
 
-    // Редактируем задачу
-    const testTaskId = 'bbbbbbbb-0000-0000-0000-000000000002';
+    await expect(page.getByTestId('add-menu')).toBeVisible();
+
+    const addTaskButton = page.getByTestId('add-task-button');
+    await expect(addTaskButton).toBeVisible();
+    await addTaskButton.click();
+
+    await page.waitForTimeout(500);
+
+    // Находим последнюю добавленную задачу
+    const taskRows = page.locator('[data-row-kind="task"]');
+    const taskCount = await taskRows.count();
+    const newTaskRow = taskRows.nth(taskCount - 1);
+
+    const testTaskId = await newTaskRow.getAttribute('data-row-id');
+    if (!testTaskId) {
+      throw new Error('Task ID not found');
+    }
+    console.log(`Created task with ID: ${testTaskId}`);
+
+    // Заполняем название задачи
     const taskCell = page.getByTestId(`task-cell-${testTaskId}`);
-    await expect(taskCell).toBeVisible({ timeout: 5000 });
-
     await taskCell.dblclick();
     const taskInput = page.getByTestId(`task-input-${testTaskId}`);
     await expect(taskInput).toBeVisible();
 
-    const newTaskName = `Задача - множественные изменения ${Date.now()}`;
-    await taskInput.fill(newTaskName);
+    const initialTaskName = `E2E Test Task ${Date.now()}`;
+    await taskInput.fill(initialTaskName);
     await taskInput.press('Enter');
+    await expect(taskInput).not.toBeVisible();
+    await expect(taskCell).toContainText(initialTaskName);
 
-    // Сразу редактируем ресурс (в пределах 2 секунд)
-    const testResourceId = 'dddddddd-0000-0000-0000-000000000002';
+    // Ждем автосохранения
+    await page.waitForTimeout(2000);
+
+    // Создаем новый ресурс
+    await addButton.click();
+    await expect(page.getByTestId('add-menu')).toBeVisible();
+
+    const addResourceButton = page.getByTestId('add-resource-button');
+    await expect(addResourceButton).toBeVisible();
+    await addResourceButton.click();
+
+    await page.waitForTimeout(500);
+
+    // Находим последний добавленный ресурс
+    const resourceRows = page.locator('[data-row-kind="resource"]');
+    const resourceCount = await resourceRows.count();
+    const newResourceRow = resourceRows.nth(resourceCount - 1);
+
+    const testResourceId = await newResourceRow.getAttribute('data-row-id');
+    if (!testResourceId) {
+      throw new Error('Resource ID not found');
+    }
+    console.log(`Created resource with ID: ${testResourceId}`);
+
+    // Заполняем название ресурса
     const resourceCell = page.getByTestId(`fn-cell-${testResourceId}`);
-    await expect(resourceCell).toBeVisible({ timeout: 5000 });
-
     await resourceCell.dblclick();
     const resourceInput = page.getByTestId(`resource-input-${testResourceId}`);
     await expect(resourceInput).toBeVisible();
 
-    const newResourceName = `Ресурс - множественные изменения ${Date.now()}`;
-    await resourceInput.fill(newResourceName);
+    const initialResourceName = `E2E Test Resource ${Date.now()}`;
+    await resourceInput.fill(initialResourceName);
     await resourceInput.press('Enter');
+    await expect(resourceInput).not.toBeVisible();
+    await expect(resourceCell).toContainText(initialResourceName);
+
+    // Ждем автосохранения
+    await page.waitForTimeout(2000);
+
+    // Очищаем массив запросов перед редактированием
+    apiRequests.length = 0;
+
+    // Редактируем задачу
+    await taskCell.dblclick();
+    const taskInput2 = page.getByTestId(`task-input-${testTaskId}`);
+    await expect(taskInput2).toBeVisible();
+
+    const newTaskName = `Задача - множественные изменения ${Date.now()}`;
+    await taskInput2.fill(newTaskName);
+    await taskInput2.press('Enter');
+
+    // Сразу редактируем ресурс (в пределах 2 секунд)
+    await resourceCell.dblclick();
+    const resourceInput2 = page.getByTestId(`resource-input-${testResourceId}`);
+    await expect(resourceInput2).toBeVisible();
+
+    const newResourceName = `Ресурс - множественные изменения ${Date.now()}`;
+    await resourceInput2.fill(newResourceName);
+    await resourceInput2.press('Enter');
+
+    // Ждем немного для обработки изменений
+    await page.waitForTimeout(500);
 
     // Сохраняем данные вручную
     await page.getByTestId('manual-save-button').click();
     
     // Ждем немного для завершения сохранения
-    await page.waitForTimeout(1000);
+    await page.waitForTimeout(2000);
 
     // Проверяем, что был отправлен PUT запрос
     expect(apiRequests.length).toBeGreaterThanOrEqual(1);
@@ -279,5 +434,31 @@ test.describe('Data Optimization Tests', () => {
     expect(updatedTask.task).toBe(newTaskName);
     
     console.log('✅ Test passed: Multiple changes sent in single optimized request');
+
+    // Удаляем задачу
+    const taskRowForDelete = page.locator(`tr[data-row-id="${testTaskId}"]`);
+    await taskRowForDelete.click({ button: 'right' });
+
+    const contextMenu = page.getByTestId('context-menu');
+    await expect(contextMenu).toBeVisible();
+
+    const deleteButton = page.getByTestId('context-menu-delete');
+    await deleteButton.click();
+
+    await page.getByText('Сохранить').click();
+    await page.waitForTimeout(2000);
+
+    // Удаляем ресурс
+    const resourceRowForDelete = page.locator(`tr[data-row-id="${testResourceId}"]`);
+    await resourceRowForDelete.click({ button: 'right' });
+
+    await expect(contextMenu).toBeVisible();
+
+    await deleteButton.click();
+
+    await page.getByText('Сохранить').click();
+    await page.waitForTimeout(2000);
+
+    console.log('Task and resource deleted');
   });
 });
