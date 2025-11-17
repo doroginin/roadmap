@@ -20,8 +20,6 @@ test.describe('Team MultiSelect Filter Behavior', () => {
     await expect(addResourceButton).toBeVisible();
     await addResourceButton.click();
 
-    await page.waitForTimeout(500);
-
     // Находим последний добавленный ресурс
     const resourceRows = page.locator('[data-row-kind="resource"]');
     const resourceCount = await resourceRows.count();
@@ -73,7 +71,6 @@ test.describe('Team MultiSelect Filter Behavior', () => {
 
     // Закрываем мультиселект (нажимаем Escape или кликаем вне)
     await page.keyboard.press('Escape');
-    await page.waitForTimeout(500);
 
     // Удаляем ресурс
     const resourceRowForDelete = page.locator(`tr[data-row-id="${testResourceId}"]`);
@@ -86,7 +83,6 @@ test.describe('Team MultiSelect Filter Behavior', () => {
     await deleteButton.click();
 
     await page.getByText('Сохранить').click();
-    await page.waitForTimeout(2000);
 
     console.log('Resource deleted');
   });

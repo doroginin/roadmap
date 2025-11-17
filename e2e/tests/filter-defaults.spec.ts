@@ -13,7 +13,6 @@ test.describe('Filter Defaults for New Items', () => {
     // Ждем загрузки данных
     await expect(page.getByTestId('app-container')).toBeVisible({ timeout: 10000 });
     await expect(page.getByTestId('roadmap-table')).toBeVisible();
-    await page.waitForTimeout(1000);
 
     // Шаг 1.5: Создаем тестовый ресурс для команды E2E, чтобы фильтр E2E был доступен
     const addButtonSetup = page.getByTestId('add-button');
@@ -24,7 +23,6 @@ test.describe('Filter Defaults for New Items', () => {
     await expect(resourceButtonSetup).toBeVisible({ timeout: 2000 });
     await resourceButtonSetup.click();
 
-    await page.waitForTimeout(500);
 
     // Находим последний добавленный ресурс
     const tableSetup = page.getByTestId('roadmap-table');
@@ -43,15 +41,12 @@ test.describe('Filter Defaults for New Items', () => {
     const e2eCheckboxSetup = e2eLabelSetup.locator('input[type="checkbox"]');
     await e2eCheckboxSetup.click();
     await page.keyboard.press('Tab');
-    await page.waitForTimeout(300);
 
     // Заполняем Fn для сохранения
     const fnCellSetup = page.getByTestId(`fn-cell-${setupResourceId}`);
     await fnCellSetup.dblclick();
-    await page.waitForTimeout(300);
     await page.keyboard.type(setupResourceFn);
     await page.keyboard.press('Enter');
-    await page.waitForTimeout(2000);
 
     // Шаг 2: Открываем фильтр по колонке Team
     const teamHeader = page.getByTestId('header-team');
@@ -60,7 +55,6 @@ test.describe('Filter Defaults for New Items', () => {
     // Находим кнопку фильтра в заголовке
     const filterButton = page.getByTestId('filter-team-button');
     await filterButton.click();
-    await page.waitForTimeout(500);
 
     // Шаг 3: Выбираем команду "E2E" в фильтре
     const e2eCheckbox = page.getByTestId('filter-checkbox-E2E');
@@ -69,7 +63,6 @@ test.describe('Filter Defaults for New Items', () => {
     
     // Закрываем фильтр, кликнув вне его
     await page.locator('body').click({ position: { x: 0, y: 0 } });
-    await page.waitForTimeout(500);
 
     // Шаг 4: Добавляем новый ресурс
     const addButton = page.getByTestId('add-button');
@@ -80,7 +73,6 @@ test.describe('Filter Defaults for New Items', () => {
     await expect(resourceButton).toBeVisible({ timeout: 2000 });
     await resourceButton.click();
 
-    await page.waitForTimeout(500);
 
     // Шаг 5: Находим новую строку ресурса
     const table = page.getByTestId('roadmap-table');
@@ -93,7 +85,6 @@ test.describe('Filter Defaults for New Items', () => {
       }
     });
     
-    await page.waitForTimeout(500);
     
     // Находим все строки ресурсов
     const allRows = table.locator('tr[data-testid="resource"][data-row-id]');
@@ -112,7 +103,6 @@ test.describe('Filter Defaults for New Items', () => {
     // Шаг 7: Добавляем Fn чтобы сохранить ресурс
     const fnCell = page.getByTestId(`fn-cell-${newResourceId}`);
     await fnCell.click({ clickCount: 2 });
-    await page.waitForTimeout(300);
     await page.keyboard.type(fnValue);
     await page.keyboard.press('Enter');
     
@@ -125,7 +115,6 @@ test.describe('Filter Defaults for New Items', () => {
     // Шаг 9: Очищаем фильтр чтобы увидеть все элементы
     const filterButton2 = page.getByTestId('filter-team-button');
     await filterButton2.click();
-    await page.waitForTimeout(300);
     
     // Снимаем галку с E2E
     const e2eCheckbox2 = page.getByTestId('filter-checkbox-E2E');
@@ -133,7 +122,6 @@ test.describe('Filter Defaults for New Items', () => {
     
     // Закрываем фильтр
     await page.locator('body').click({ position: { x: 0, y: 0 } });
-    await page.waitForTimeout(500);
 
     // Шаг 10: Проверяем, что ресурс все еще виден после снятия фильтра
     await expect(fnCell).toContainText(fnValue, { timeout: 5000 });
@@ -151,7 +139,6 @@ test.describe('Filter Defaults for New Items', () => {
     await deleteButton.click();
 
     await page.getByText('Сохранить').click();
-    await page.waitForTimeout(2000);
     console.log(`Resource with FN="${fnValue}" deleted`);
 
     // Шаг 12: Удаляем тестовый ресурс, созданный в начале, по ID
@@ -165,7 +152,6 @@ test.describe('Filter Defaults for New Items', () => {
     await deleteButtonSetup.click();
 
     await page.getByText('Сохранить').click();
-    await page.waitForTimeout(2000);
     console.log(`Setup resource with FN="${setupResourceFn}" deleted`);
   });
 
@@ -181,7 +167,6 @@ test.describe('Filter Defaults for New Items', () => {
     // Ждем загрузки данных
     await expect(page.getByTestId('app-container')).toBeVisible({ timeout: 10000 });
     await expect(page.getByTestId('roadmap-table')).toBeVisible();
-    await page.waitForTimeout(1000);
 
     // Шаг 1.5: Создаем тестовый ресурс для команды E2E, чтобы фильтр E2E был доступен
     const addButtonSetup = page.getByTestId('add-button');
@@ -192,7 +177,6 @@ test.describe('Filter Defaults for New Items', () => {
     await expect(resourceButtonSetup).toBeVisible({ timeout: 2000 });
     await resourceButtonSetup.click();
 
-    await page.waitForTimeout(500);
 
     // Находим последний добавленный ресурс
     const tableSetup = page.getByTestId('roadmap-table');
@@ -211,15 +195,12 @@ test.describe('Filter Defaults for New Items', () => {
     const e2eCheckboxSetup = e2eLabelSetup.locator('input[type="checkbox"]');
     await e2eCheckboxSetup.click();
     await page.keyboard.press('Tab');
-    await page.waitForTimeout(300);
 
     // Заполняем Fn для сохранения
     const fnCellSetup = page.getByTestId(`fn-cell-${setupResourceId}`);
     await fnCellSetup.dblclick();
-    await page.waitForTimeout(300);
     await page.keyboard.type(setupResourceFn);
     await page.keyboard.press('Enter');
-    await page.waitForTimeout(2000);
 
     // Шаг 2: Открываем фильтр по колонке Team
     const teamHeader = page.getByTestId('header-team');
@@ -227,7 +208,6 @@ test.describe('Filter Defaults for New Items', () => {
     
     const filterButton = page.getByTestId('filter-team-button');
     await filterButton.click();
-    await page.waitForTimeout(500);
 
     // Шаг 3: Выбираем команду "E2E" в фильтре
     const e2eCheckbox = page.getByTestId('filter-checkbox-E2E');
@@ -236,7 +216,6 @@ test.describe('Filter Defaults for New Items', () => {
     
     // Закрываем фильтр
     await page.locator('body').click({ position: { x: 0, y: 0 } });
-    await page.waitForTimeout(500);
 
     // Шаг 4: Добавляем новую задачу
     const addButton = page.getByTestId('add-button');
@@ -247,7 +226,6 @@ test.describe('Filter Defaults for New Items', () => {
     await expect(taskButton).toBeVisible({ timeout: 2000 });
     await taskButton.click();
 
-    await page.waitForTimeout(500);
 
     // Шаг 5: Находим новую строку задачи
     const table = page.getByTestId('roadmap-table');
@@ -260,7 +238,6 @@ test.describe('Filter Defaults for New Items', () => {
       }
     });
     
-    await page.waitForTimeout(500);
     
     // Находим все строки задач
     const allRows = table.locator('tr[data-testid="task"][data-row-id]');
@@ -279,7 +256,6 @@ test.describe('Filter Defaults for New Items', () => {
     // Шаг 7: Добавляем название задачи чтобы сохранить
     const taskCell = page.getByTestId(`task-cell-${newTaskId}`);
     await taskCell.click({ clickCount: 2 });
-    await page.waitForTimeout(300);
     await page.keyboard.type(taskName);
     await page.keyboard.press('Enter');
     
@@ -292,7 +268,6 @@ test.describe('Filter Defaults for New Items', () => {
     // Шаг 9: Очищаем фильтр чтобы увидеть все элементы
     const filterButton2 = page.getByTestId('filter-team-button');
     await filterButton2.click();
-    await page.waitForTimeout(300);
     
     // Снимаем галку с E2E
     const e2eCheckbox2 = page.getByTestId('filter-checkbox-E2E');
@@ -300,7 +275,6 @@ test.describe('Filter Defaults for New Items', () => {
     
     // Закрываем фильтр
     await page.locator('body').click({ position: { x: 0, y: 0 } });
-    await page.waitForTimeout(500);
 
     // Шаг 10: Проверяем, что задача все еще видна после снятия фильтра
     await expect(taskCell).toContainText(taskName, { timeout: 5000 });
@@ -311,7 +285,6 @@ test.describe('Filter Defaults for New Items', () => {
     const taskRowForDelete = page.locator(`tr[data-row-id="${newTaskId}"]`);
     // Прокручиваем элемент в видимую область, чтобы он не был перекрыт sticky элементами
     await taskRowForDelete.scrollIntoViewIfNeeded();
-    await page.waitForTimeout(300);
     await taskRowForDelete.click({ button: 'right', force: true });
 
     const contextMenu = page.getByTestId('context-menu');
@@ -321,7 +294,6 @@ test.describe('Filter Defaults for New Items', () => {
     await deleteButton.click();
 
     await page.getByText('Сохранить').click();
-    await page.waitForTimeout(2000);
     console.log(`Task "${taskName}" deleted`);
 
     // Шаг 12: Проверяем, существует ли еще setupResource, и удаляем его если да
@@ -340,8 +312,7 @@ test.describe('Filter Defaults for New Items', () => {
       await deleteButtonSetup.click();
 
       await page.getByText('Сохранить').click();
-      await page.waitForTimeout(2000);
-      console.log(`Setup resource with FN="${setupResourceFn}" deleted`);
+        console.log(`Setup resource with FN="${setupResourceFn}" deleted`);
     } else {
       console.log('Setup resource was automatically cleaned up');
     }
@@ -360,7 +331,6 @@ test.describe('Filter Defaults for New Items', () => {
     // Ждем загрузки данных
     await expect(page.getByTestId('app-container')).toBeVisible({ timeout: 10000 });
     await expect(page.getByTestId('roadmap-table')).toBeVisible();
-    await page.waitForTimeout(1000);
 
     // Шаг 2: Создаем первый ресурс с командой E2E и функцией Fn1
     const addButton1 = page.getByTestId('add-button');
@@ -371,7 +341,6 @@ test.describe('Filter Defaults for New Items', () => {
     await expect(resourceButton1).toBeVisible({ timeout: 2000 });
     await resourceButton1.click();
 
-    await page.waitForTimeout(500);
 
     // Находим первый добавленный ресурс
     const table = page.getByTestId('roadmap-table');
@@ -390,15 +359,12 @@ test.describe('Filter Defaults for New Items', () => {
     const e2eCheckbox1 = e2eLabel1.locator('input[type="checkbox"]');
     await e2eCheckbox1.click();
     await page.keyboard.press('Tab');
-    await page.waitForTimeout(300);
 
     // Заполняем Fn1 для первого ресурса
     const fnCell1 = page.getByTestId(`fn-cell-${resource1Id}`);
     await fnCell1.dblclick();
-    await page.waitForTimeout(300);
     await page.keyboard.type(fn1Value);
     await page.keyboard.press('Enter');
-    await page.waitForTimeout(2000);
 
     // Шаг 3: Создаем второй ресурс с командой E2E и функцией Fn2
     const addButton2 = page.getByTestId('add-button');
@@ -408,7 +374,6 @@ test.describe('Filter Defaults for New Items', () => {
     await expect(resourceButton2).toBeVisible({ timeout: 2000 });
     await resourceButton2.click();
 
-    await page.waitForTimeout(500);
 
     // Находим второй добавленный ресурс
     const allRows2 = table.locator('tr[data-testid="resource"][data-row-id]');
@@ -426,15 +391,12 @@ test.describe('Filter Defaults for New Items', () => {
     const e2eCheckbox2 = e2eLabel2.locator('input[type="checkbox"]');
     await e2eCheckbox2.click();
     await page.keyboard.press('Tab');
-    await page.waitForTimeout(300);
 
     // Заполняем Fn2 для второго ресурса
     const fnCell2 = page.getByTestId(`fn-cell-${resource2Id}`);
     await fnCell2.dblclick();
-    await page.waitForTimeout(300);
     await page.keyboard.type(fn2Value);
     await page.keyboard.press('Enter');
-    await page.waitForTimeout(2000);
 
     // Шаг 4: Открываем фильтр по колонке Fn
     const fnHeader = page.getByTestId('header-fn');
@@ -442,14 +404,12 @@ test.describe('Filter Defaults for New Items', () => {
     
     const filterFnButton = page.getByTestId('filter-fn-button');
     await filterFnButton.click();
-    await page.waitForTimeout(500);
 
     // Шаг 5: Выбираем две функции в фильтре: сначала Fn1, затем Fn2
     // Сначала Fn1
     const fn1Checkbox = page.getByTestId(`filter-checkbox-${fn1Value}`);
     await expect(fn1Checkbox).toBeVisible({ timeout: 2000 });
     await fn1Checkbox.click();
-    await page.waitForTimeout(200);
     
     // Затем Fn2 (убеждаемся, что фильтр все еще открыт)
     await expect(page.getByTestId('filter-popup')).toBeVisible();
@@ -459,7 +419,6 @@ test.describe('Filter Defaults for New Items', () => {
     
     // Закрываем фильтр
     await page.locator('body').click({ position: { x: 0, y: 0 } });
-    await page.waitForTimeout(500);
 
     // Шаг 6: Добавляем новую задачу
     const addButton3 = page.getByTestId('add-button');
@@ -470,7 +429,6 @@ test.describe('Filter Defaults for New Items', () => {
     await expect(taskButton).toBeVisible({ timeout: 2000 });
     await taskButton.click();
 
-    await page.waitForTimeout(500);
 
     // Шаг 7: Находим новую строку задачи
     // Прокручиваем таблицу до конца
@@ -481,7 +439,6 @@ test.describe('Filter Defaults for New Items', () => {
       }
     });
     
-    await page.waitForTimeout(500);
     
     // Находим все строки задач
     const allTaskRows = table.locator('tr[data-testid="task"][data-row-id]');
@@ -509,17 +466,14 @@ test.describe('Filter Defaults for New Items', () => {
     // Шаг 10: Добавляем название задачи чтобы сохранить
     const taskNameCell = page.getByTestId(`task-cell-${newTaskId}`);
     await taskNameCell.click({ clickCount: 2 });
-    await page.waitForTimeout(300);
     await page.keyboard.type(taskName);
     await page.keyboard.press('Enter');
-    await page.waitForTimeout(2000);
     
     console.log(`Task "${taskName}" with Team="E2E" and Fn="${fn1Value}" added`);
 
     // Шаг 11: Удаляем созданную задачу по ID
     const taskRowForDelete = page.locator(`tr[data-row-id="${newTaskId}"]`);
     await taskRowForDelete.scrollIntoViewIfNeeded();
-    await page.waitForTimeout(300);
     await taskRowForDelete.click({ button: 'right', force: true });
 
     const contextMenu1 = page.getByTestId('context-menu');
@@ -529,7 +483,6 @@ test.describe('Filter Defaults for New Items', () => {
     await deleteButton1.click();
 
     await page.getByText('Сохранить').click();
-    await page.waitForTimeout(2000);
     console.log(`Task "${taskName}" deleted`);
 
     // Шаг 12: Удаляем первый ресурс по ID
@@ -543,7 +496,6 @@ test.describe('Filter Defaults for New Items', () => {
     await deleteButton2.click();
 
     await page.getByText('Сохранить').click();
-    await page.waitForTimeout(2000);
     console.log(`Resource with Fn="${fn1Value}" deleted`);
 
     // Шаг 13: Удаляем второй ресурс по ID
@@ -557,7 +509,6 @@ test.describe('Filter Defaults for New Items', () => {
     await deleteButton3.click();
 
     await page.getByText('Сохранить').click();
-    await page.waitForTimeout(2000);
     console.log(`Resource with Fn="${fn2Value}" deleted`);
   });
 });

@@ -28,10 +28,7 @@ test.describe('Auto Plan and Resource Overload', () => {
     // Click "Add Resource"
     await page.getByTestId('add-resource-button').click();
     await expect(page.getByTestId('add-menu')).not.toBeVisible();
-    
-    // Wait for new resource row to appear
-    await page.waitForTimeout(500);
-    
+
     // Find all resource rows and get the last one (newest)
     const resourceRows = page.locator('tr[data-testid="resource"]');
     const resourceCount = await resourceRows.count();
@@ -44,10 +41,8 @@ test.describe('Auto Plan and Resource Overload', () => {
     // Fill in function name using data-testid
     const fnCell = newResourceRow.locator(`[data-testid="fn-cell-${resourceId}"]`);
     await fnCell.dblclick(); // Double-click to start editing
-    await page.waitForTimeout(200);
     await page.keyboard.type(randomFn);
     await page.keyboard.press('Enter');
-    await page.waitForTimeout(200);
     
     console.log(`✅ Resource with Fn="${randomFn}" added`);
 
@@ -61,11 +56,9 @@ test.describe('Auto Plan and Resource Overload', () => {
     for (let weekNum = 2; weekNum <= 5; weekNum++) {
       const weekCell = ourResourceRow.locator(`[data-testid="week-${weekNum}"]`);
       await weekCell.dblclick();
-      await page.waitForTimeout(200);
       // Type 1 and press Enter to confirm
       await page.keyboard.type('1');
       await page.keyboard.press('Enter');
-      await page.waitForTimeout(200);
     }
     
     console.log('✅ Resource availability set for weeks 2-5 (value 1)');
@@ -76,9 +69,9 @@ test.describe('Auto Plan and Resource Overload', () => {
       const weekText = await weekCell.textContent();
       console.log(`Resource week ${weekNum} content: "${weekText}"`);
     }
-    
-    // Wait for autosave
-    await page.waitForTimeout(2500);
+
+    // Save changes manually
+    await page.getByText('Сохранить').click();
 
     // Step 4: Add new task
     console.log('\n➕ Step 4: Adding new task for this resource');
@@ -87,9 +80,7 @@ test.describe('Auto Plan and Resource Overload', () => {
     await expect(page.getByTestId('add-menu')).toBeVisible();
     await page.getByTestId('add-task-button').click();
     await expect(page.getByTestId('add-menu')).not.toBeVisible();
-    
-    await page.waitForTimeout(500);
-    
+
     // Find the new task row (last one in the list)
     const taskRows = page.locator('tr[data-testid="task"]');
     const taskCount = await taskRows.count();
@@ -102,38 +93,33 @@ test.describe('Auto Plan and Resource Overload', () => {
     // Set Fn to match the resource function using Select dropdown
     const taskFnCell = newTaskRow.locator(`[data-testid="fn-cell-${taskId}"]`);
     await taskFnCell.dblclick(); // Double-click to open Select
-    await page.waitForTimeout(500);
-    
+
     // Wait for Select dropdown to open and find the option with our random function
     const selectOption = page.getByTestId(`select-option-${randomFn}`);
     await expect(selectOption).toBeVisible({ timeout: 5000 });
     
     // Click on the option to select it
     await selectOption.click();
-    await page.waitForTimeout(300);
-    
+
     console.log(`Fn "${randomFn}" selected for task`);
-    
+
     // Set planEmpl = 1
     const taskPlanEmplCell = newTaskRow.locator(`[data-testid="planEmpl-cell-${taskId}"]`);
     await taskPlanEmplCell.dblclick();
-    await page.waitForTimeout(200);
     await page.keyboard.type('1');
     await page.keyboard.press('Enter');
-    await page.waitForTimeout(200);
-    
+
     // Set planWeeks = 2
     const taskPlanWeeksCell = newTaskRow.locator(`[data-testid="planWeeks-cell-${taskId}"]`);
     await taskPlanWeeksCell.dblclick();
-    await page.waitForTimeout(200);
     await page.keyboard.type('2');
     await page.keyboard.press('Enter');
-    
+
     console.log(`✅ Task configured: Fn=${randomFn}, planEmpl=1, planWeeks=2`);
-    
-    // Wait for autosave and auto-plan calculation
-    console.log('Waiting for autosave and auto-plan calculation...');
-    await page.waitForTimeout(5000);
+
+    // Save and wait for auto-plan calculation
+    console.log('Saving and waiting for auto-plan calculation...');
+    await page.getByText('Сохранить').click();
 
     // Step 5: Verify auto-plan scheduled task on weeks 2 and 3
     console.log('\n✅ Step 5: Verifying auto-plan scheduled task on weeks 2-3');
@@ -169,20 +155,18 @@ test.describe('Auto Plan and Resource Overload', () => {
 
     // Step 6: Manually edit week 3 from 1 to 2
     console.log('\n✏️ Step 6: Manually editing week 3 from 1 to 2');
-    
+
     await taskWeek3Cell.dblclick();
-    // Wait for input to appear
-    await page.waitForTimeout(200);
-    
+
     // Clear existing value and type new value
     await page.keyboard.press('Control+A'); // Select all
     await page.keyboard.type('2');
     await page.keyboard.press('Enter');
-    
+
     console.log('✅ Week 3 changed to 2');
-    
-    // Wait for autosave
-    await page.waitForTimeout(2500);
+
+    // Save changes
+    await page.getByText('Сохранить').click();
 
     // Step 7: Verify Auto checkbox is unchecked
     console.log('\n🔍 Step 7: Verifying Auto checkbox is unchecked');
@@ -220,14 +204,11 @@ test.describe('Auto Plan and Resource Overload', () => {
     });
     
     await autoCheckbox.click();
-    
-    // Wait for dialog to be accepted and closed
-    await page.waitForTimeout(500);
-    
+
     console.log('✅ Auto plan re-enabled and confirmed');
-    
-    // Wait for auto-plan recalculation and autosave
-    await page.waitForTimeout(3000);
+
+    // Save
+    await page.getByText('Сохранить').click();
 
     // Step 10: Verify manual edit was reverted
     console.log('\n✅ Step 10: Verifying manual edit was reverted');
@@ -238,10 +219,7 @@ test.describe('Auto Plan and Resource Overload', () => {
 
     // Step 11: Verify resource week 3 no longer shows overload
     console.log('\n✅ Step 11: Verifying resource overload indicator is gone');
-    
-    // Wait for UI to update after auto-plan recalculation
-    await page.waitForTimeout(1000);
-    
+
     const week3CellBgAfter = await resourceWeek3Cell.evaluate((el) => {
       return window.getComputedStyle(el).backgroundColor;
     });
@@ -293,9 +271,7 @@ test.describe('Auto Plan and Resource Overload', () => {
     // Click save button
     const saveButton = page.getByText('Сохранить');
     await saveButton.click();
-    
-    // Wait for save to complete
-    await page.waitForTimeout(1000);
+
     console.log('✅ Changes saved to server');
 
     console.log('\n✨ All steps completed successfully!');

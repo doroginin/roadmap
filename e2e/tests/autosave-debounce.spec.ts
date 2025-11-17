@@ -4,11 +4,11 @@ test.describe('AutoSave Debounce Tests', () => {
   test('should send only one request when making two rapid changes within 1 second', async ({ page }) => {
     // Перехватываем сетевые запросы для анализа
     const apiRequests: Array<{ method: string; body: unknown; timestamp: number }> = [];
-    
+
     await page.route('**/api/v1/data', async (route) => {
       const request = route.request();
       const method = request.method();
-      
+
       if (method === 'PUT') {
         const requestBody = request.postData();
         if (requestBody) {
@@ -21,7 +21,7 @@ test.describe('AutoSave Debounce Tests', () => {
           console.log('PUT request body:', body);
         }
       }
-      
+
       // Продолжаем выполнение запроса
       await route.continue();
     });
@@ -46,8 +46,6 @@ test.describe('AutoSave Debounce Tests', () => {
     await expect(addTaskButton).toBeVisible();
     await addTaskButton.click();
 
-    await page.waitForTimeout(500);
-
     // Находим последнюю добавленную задачу
     const taskRows = page.locator('[data-row-kind="task"]');
     const taskCount = await taskRows.count();
@@ -71,7 +69,7 @@ test.describe('AutoSave Debounce Tests', () => {
     await expect(taskInput).not.toBeVisible();
     await expect(taskCell).toContainText(initialTaskName);
 
-    // Ждем автосохранения
+    // Ждем автосохранения (1 секунда delay + запас на обработку)
     await page.waitForTimeout(2000);
 
     // Очищаем массив запросов после создания задачи
@@ -105,8 +103,8 @@ test.describe('AutoSave Debounce Tests', () => {
 
     console.log('Second change completed at:', new Date().toISOString());
 
-    // Шаг 6: Ждем завершения автосохранения (3 секунды)
-    await page.waitForTimeout(3000);
+    // Шаг 6: Ждем завершения автосохранения (1 секунда delay + запас на обработку)
+    await page.waitForTimeout(2000);
 
     console.log('Total API requests made:', apiRequests.length);
     console.log('API requests:', apiRequests.map(req => ({
@@ -137,7 +135,6 @@ test.describe('AutoSave Debounce Tests', () => {
     await deleteButton.click();
 
     await page.getByText('Сохранить').click();
-    await page.waitForTimeout(2000);
 
     console.log('Task deleted');
   });
@@ -185,8 +182,6 @@ test.describe('AutoSave Debounce Tests', () => {
     await expect(addTaskButton).toBeVisible();
     await addTaskButton.click();
 
-    await page.waitForTimeout(500);
-
     // Находим последнюю добавленную задачу
     const taskRows = page.locator('[data-row-kind="task"]');
     const taskCount = await taskRows.count();
@@ -210,7 +205,7 @@ test.describe('AutoSave Debounce Tests', () => {
     await expect(taskInput).not.toBeVisible();
     await expect(taskCell).toContainText(initialTaskName);
 
-    // Ждем автосохранения
+    // Ждем автосохранения (1 секунда delay + запас на обработку)
     await page.waitForTimeout(2000);
 
     // Очищаем массив запросов после создания задачи
@@ -229,8 +224,8 @@ test.describe('AutoSave Debounce Tests', () => {
 
     console.log('First change completed at:', new Date().toISOString());
 
-    // Шаг 5: Ждем завершения первого автосохранения (3 секунды)
-    await page.waitForTimeout(3000);
+    // Шаг 5: Ждем завершения первого автосохранения (1 секунда delay + запас на обработку)
+    await page.waitForTimeout(2000);
 
     // Шаг 6: Делаем второе изменение
     await taskCell.dblclick();
@@ -244,8 +239,8 @@ test.describe('AutoSave Debounce Tests', () => {
 
     console.log('Second change completed at:', new Date().toISOString());
 
-    // Шаг 7: Ждем завершения второго автосохранения (3 секунды)
-    await page.waitForTimeout(3000);
+    // Шаг 7: Ждем завершения второго автосохранения (1 секунда delay + запас на обработку)
+    await page.waitForTimeout(2000);
 
     console.log('Total API requests made:', apiRequests.length);
     console.log('API requests:', apiRequests.map(req => ({
@@ -282,7 +277,6 @@ test.describe('AutoSave Debounce Tests', () => {
     await deleteButton.click();
 
     await page.getByText('Сохранить').click();
-    await page.waitForTimeout(2000);
 
     console.log('Task deleted');
   });

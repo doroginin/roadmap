@@ -46,8 +46,6 @@ test.describe('Save functionality', () => {
     await expect(addTaskButton).toBeVisible();
     await addTaskButton.click();
 
-    await page.waitForTimeout(500);
-
     // Находим последнюю добавленную задачу
     const taskRows = page.locator('[data-row-kind="task"]');
     const taskCount = await taskRows.count();
@@ -71,7 +69,7 @@ test.describe('Save functionality', () => {
     await expect(taskInput).not.toBeVisible();
     await expect(taskCell).toContainText(initialTaskName);
 
-    // Ждем автосохранения
+    // Ждем автосохранения (1 секунда delay + запас на обработку)
     await page.waitForTimeout(2000);
 
     // Шаг 4: Редактируем название задачи
@@ -86,8 +84,8 @@ test.describe('Save functionality', () => {
     await expect(taskInput2).not.toBeVisible();
     await expect(taskCell).toContainText(newTaskName);
 
-    // Ждем больше времени для завершения сохранения
-    await page.waitForTimeout(5000);
+    // Ждем автосохранения (1 секунда delay + запас на обработку)
+    await page.waitForTimeout(2000);
 
     console.log('Data saved successfully');
 
@@ -96,9 +94,6 @@ test.describe('Save functionality', () => {
 
     // Ждем загрузки данных
     await expect(page.getByTestId('app-container')).toBeVisible({ timeout: 10000 });
-    
-    // Дополнительная задержка для полной загрузки данных
-    await page.waitForTimeout(2000);
 
     // Шаг 6: Убеждаемся что данные сохранились
     const updatedTaskCell = page.getByTestId(`task-cell-${testTaskId}`);
@@ -120,7 +115,6 @@ test.describe('Save functionality', () => {
     await deleteButton.click();
 
     await page.getByText('Сохранить').click();
-    await page.waitForTimeout(2000);
 
     console.log('Task deleted');
   });

@@ -48,7 +48,6 @@ test.describe('Data Optimization Tests', () => {
     await expect(addTaskButton).toBeVisible();
     await addTaskButton.click();
 
-    await page.waitForTimeout(500);
 
     // Находим последнюю добавленную задачу
     const taskRows = page.locator('[data-row-kind="task"]');
@@ -73,8 +72,8 @@ test.describe('Data Optimization Tests', () => {
     await expect(taskInput).not.toBeVisible();
     await expect(taskCell).toContainText(initialTaskName);
 
-    // Ждем автосохранения
-    await page.waitForTimeout(2000);
+    // Сохраняем изменения
+    await page.getByText('Сохранить').click();
 
     // Очищаем массив запросов перед редактированием
     apiRequests.length = 0;
@@ -185,7 +184,6 @@ test.describe('Data Optimization Tests', () => {
     await expect(addResourceButton).toBeVisible();
     await addResourceButton.click();
 
-    await page.waitForTimeout(500);
 
     // Находим последний добавленный ресурс
     const resourceRows = page.locator('[data-row-kind="resource"]');
@@ -210,8 +208,8 @@ test.describe('Data Optimization Tests', () => {
     await expect(resourceInput).not.toBeVisible();
     await expect(resourceCell).toContainText(initialResourceName);
 
-    // Ждем автосохранения
-    await page.waitForTimeout(2000);
+    // Сохраняем изменения
+    await page.getByText('Сохранить').click();
 
     // Очищаем массив запросов перед редактированием
     apiRequests.length = 0;
@@ -318,7 +316,6 @@ test.describe('Data Optimization Tests', () => {
     await expect(addTaskButton).toBeVisible();
     await addTaskButton.click();
 
-    await page.waitForTimeout(500);
 
     // Находим последнюю добавленную задачу
     const taskRows = page.locator('[data-row-kind="task"]');
@@ -354,7 +351,6 @@ test.describe('Data Optimization Tests', () => {
     await expect(addResourceButton).toBeVisible();
     await addResourceButton.click();
 
-    await page.waitForTimeout(500);
 
     // Находим последний добавленный ресурс
     const resourceRows = page.locator('[data-row-kind="resource"]');
@@ -379,8 +375,8 @@ test.describe('Data Optimization Tests', () => {
     await expect(resourceInput).not.toBeVisible();
     await expect(resourceCell).toContainText(initialResourceName);
 
-    // Ждем автосохранения
-    await page.waitForTimeout(2000);
+    // Сохраняем изменения
+    await page.getByText('Сохранить').click();
 
     // Очищаем массив запросов перед редактированием
     apiRequests.length = 0;
@@ -404,7 +400,6 @@ test.describe('Data Optimization Tests', () => {
     await resourceInput2.press('Enter');
 
     // Ждем немного для обработки изменений
-    await page.waitForTimeout(500);
 
     // Сохраняем данные вручную
     await page.getByTestId('manual-save-button').click();

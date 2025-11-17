@@ -24,7 +24,7 @@ test.describe('Tab Switching Tests', () => {
         // Переключаемся на вкладку Спринты
         const sprintsTab = page.locator('[data-testid="tab-sprints"]');
         await sprintsTab.click();
-        await page.waitForTimeout(500); // Даем время на переключение
+        await page.waitForTimeout(100); // Даем время на переключение
 
         console.log('✅ Switched to Sprints tab');
 
@@ -34,7 +34,7 @@ test.describe('Tab Switching Tests', () => {
         // Переключаемся обратно на вкладку План
         const planTab = page.locator('[data-testid="tab-plan"]');
         await planTab.click();
-        await page.waitForTimeout(500); // Даем время на переключение и пересчет размеров
+        await page.waitForTimeout(100); // Даем время на переключение и пересчет размеров
 
         console.log('✅ Switched back to Plan tab');
 
@@ -110,17 +110,15 @@ test.describe('Tab Switching Tests', () => {
 
             // План -> Спринты
             await sprintsTab.click();
-            await page.waitForTimeout(300);
             console.log('  Switched to Sprints');
 
             // Спринты -> Команды
             await teamsTab.click();
-            await page.waitForTimeout(300);
             console.log('  Switched to Teams');
 
             // Команды -> План
             await planTab.click();
-            await page.waitForTimeout(500); // Даем время на пересчет
+            await page.waitForTimeout(100); // Даем время на пересчет
 
             console.log('  Switched back to Plan');
 
@@ -164,7 +162,7 @@ test.describe('Tab Switching Tests', () => {
 
         // Изменяем размер окна
         await page.setViewportSize({ width: 1600, height: 1000 });
-        await page.waitForTimeout(500); // Даем время на обработку resize
+        await page.waitForTimeout(100); // Даем время на обработку resize
 
         // Получаем высоту после ресайза
         const heightAfter = await tableContainer.evaluate(el => 

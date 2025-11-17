@@ -25,9 +25,6 @@ test.describe('Add Resource functionality', () => {
     await expect(resourceButton).toBeVisible({ timeout: 2000 });
     await resourceButton.click();
 
-    // Ждем немного, чтобы ресурс добавился в таблицу
-    await page.waitForTimeout(500);
-
     // Шаг 3: Находим новую строку ресурса
     // Ищем последнюю строку с Тип = "Ресурс" и пустой командой
     const table = page.getByTestId('roadmap-table');
@@ -39,9 +36,7 @@ test.describe('Add Resource functionality', () => {
         tableContainer.scrollTop = tableContainer.scrollHeight;
       }
     });
-    
-    await page.waitForTimeout(500);
-    
+
     // Находим все строки ресурсов с data-row-id
     const allRows = table.locator('tr[data-testid="resource"][data-row-id]');
     const rowCount = await allRows.count();
@@ -97,7 +92,6 @@ test.describe('Add Resource functionality', () => {
 
     // Шаг 5: Нажимаем Tab для перехода к ячейке Fn
     await page.keyboard.press('Tab');
-    await page.waitForTimeout(300);
 
     // Вводим значение Fn
     await page.keyboard.type(fnValue);
@@ -105,7 +99,6 @@ test.describe('Add Resource functionality', () => {
     // Шаг 6: Нажимаем Tab два раза для перехода к первой неделе
     await page.keyboard.press('Tab');
     await page.keyboard.press('Tab');
-    await page.waitForTimeout(300);
 
     // Шаг 7: Заполняем недели
     for (let i = 0; i < weekValues.length; i++) {
@@ -119,7 +112,6 @@ test.describe('Add Resource functionality', () => {
       // Если последняя - нажимаем Enter
       if (i < weekValues.length - 1) {
         await page.keyboard.press('Tab');
-        await page.waitForTimeout(200);
       } else {
         await page.keyboard.press('Enter');
       }
@@ -127,8 +119,8 @@ test.describe('Add Resource functionality', () => {
 
     console.log(`Resource with FN="${fnValue}" added`);
 
-    // Шаг 8: Ждем 2 секунды для автосохранения
-    await page.waitForTimeout(2000);
+    // Шаг 8: Сохраняем изменения
+    await page.getByText('Сохранить').click();
 
     // Шаг 9: Обновляем страницу с фильтром E2E
     await page.goto('/?filter_team=E2E');
@@ -137,7 +129,6 @@ test.describe('Add Resource functionality', () => {
     // Ждем загрузки данных после обновления
     await expect(page.getByTestId('app-container')).toBeVisible({ timeout: 10000 });
     await expect(page.getByTestId('roadmap-table')).toBeVisible();
-    await page.waitForTimeout(2000);
 
     // Шаг 10: Проверяем, что наш ресурс остался на месте
     // Ищем ячейку с Fn значением
@@ -155,9 +146,6 @@ test.describe('Add Resource functionality', () => {
     // Кликаем правой кнопкой мыши на строку для открытия контекстного меню
     await savedResourceRow.click({ button: 'right' });
 
-    // Ждем появления контекстного меню
-    await page.waitForTimeout(500);
-
     // Ищем кнопку удаления в контекстном меню
     const deleteButton = page.locator('button').filter({ hasText: /Удалить|Delete/i }).first();
     await expect(deleteButton).toBeVisible({ timeout: 3000 });
@@ -165,8 +153,8 @@ test.describe('Add Resource functionality', () => {
 
     console.log(`Resource with FN="${fnValue}" deleted`);
 
-    // Шаг 12: Ждем 2 секунды для автосохранения удаления
-    await page.waitForTimeout(2000);
+    // Шаг 12: Сохраняем удаление
+    await page.getByText('Сохранить').click();
 
     // Шаг 13: Обновляем страницу
     await page.reload();
@@ -174,7 +162,6 @@ test.describe('Add Resource functionality', () => {
     // Ждем загрузки данных после обновления
     await expect(page.getByTestId('app-container')).toBeVisible({ timeout: 10000 });
     await expect(page.getByTestId('roadmap-table')).toBeVisible();
-    await page.waitForTimeout(2000);
 
     // Шаг 14: Проверяем, что нашего ресурса нет
     const deletedFnCell = page.locator('td').filter({ hasText: fnValue });

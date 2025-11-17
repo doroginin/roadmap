@@ -51,9 +51,6 @@ test.describe('Task Weeks Save functionality', () => {
     await expect(addTaskButton).toBeVisible();
     await addTaskButton.click();
 
-    // Ждем небольшую паузу для добавления строки
-    await page.waitForTimeout(500);
-
     // Находим последнюю добавленную задачу (она должна быть в конце таблицы)
     const taskRows = page.locator('[data-row-kind="task"]');
     const taskCount = await taskRows.count();
