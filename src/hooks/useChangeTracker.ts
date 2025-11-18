@@ -182,8 +182,8 @@ export function useChangeTracker() {
         }
       });
 
-      // Объединяем added и updated
-      const allItems = [...added.values(), ...updated.values()];
+      // Объединяем added и updated, но исключаем те, которые помечены как удаленные
+      const allItems = [...added.values(), ...updated.values()].filter(item => !deletedIds.has(item.id));
       if (allItems.length > 0) {
         (changeLog as any)[`${entityType}s`] = allItems;
       }
