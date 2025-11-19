@@ -69,11 +69,17 @@ test.describe('AutoSave Debounce Tests', () => {
     await expect(taskInput).not.toBeVisible();
     await expect(taskCell).toContainText(initialTaskName);
 
-    // Ждем автосохранения (1 секунда delay + запас на обработку)
-    await page.waitForTimeout(2000);
+    // Ждем конкретного PUT запроса от создания задачи
+    await page.waitForResponse(
+      response => response.url().includes('/api/v1/data') && response.request().method() === 'PUT',
+      { timeout: 5000 }
+    );
+
+    // Ждем, чтобы route handler успел обработать запрос и добавить его в массив
+    await page.waitForTimeout(100);
 
     // Очищаем массив запросов после создания задачи
-    apiRequests.length = 0;
+    apiRequests.splice(0, apiRequests.length);
 
     // Шаг 4: Делаем первое изменение
     await taskCell.dblclick();
@@ -103,8 +109,14 @@ test.describe('AutoSave Debounce Tests', () => {
 
     console.log('Second change completed at:', new Date().toISOString());
 
-    // Шаг 6: Ждем завершения автосохранения (1 секунда delay + запас на обработку)
-    await page.waitForTimeout(2000);
+    // Шаг 6: Ждем завершения автосохранения после второго изменения
+    await page.waitForResponse(
+      response => response.url().includes('/api/v1/data') && response.request().method() === 'PUT',
+      { timeout: 5000 }
+    );
+
+    // Даём route handler время обработать запрос
+    await page.waitForTimeout(100);
 
     console.log('Total API requests made:', apiRequests.length);
     console.log('API requests:', apiRequests.map(req => ({
@@ -205,11 +217,17 @@ test.describe('AutoSave Debounce Tests', () => {
     await expect(taskInput).not.toBeVisible();
     await expect(taskCell).toContainText(initialTaskName);
 
-    // Ждем автосохранения (1 секунда delay + запас на обработку)
-    await page.waitForTimeout(2000);
+    // Ждем конкретного PUT запроса от создания задачи
+    await page.waitForResponse(
+      response => response.url().includes('/api/v1/data') && response.request().method() === 'PUT',
+      { timeout: 5000 }
+    );
+
+    // Ждем, чтобы route handler успел обработать запрос и добавить его в массив
+    await page.waitForTimeout(100);
 
     // Очищаем массив запросов после создания задачи
-    apiRequests.length = 0;
+    apiRequests.splice(0, apiRequests.length);
 
     // Шаг 4: Делаем первое изменение
     await taskCell.dblclick();
@@ -224,8 +242,14 @@ test.describe('AutoSave Debounce Tests', () => {
 
     console.log('First change completed at:', new Date().toISOString());
 
-    // Шаг 5: Ждем завершения первого автосохранения (1 секунда delay + запас на обработку)
-    await page.waitForTimeout(2000);
+    // Шаг 5: Ждем завершения первого автосохранения
+    await page.waitForResponse(
+      response => response.url().includes('/api/v1/data') && response.request().method() === 'PUT',
+      { timeout: 5000 }
+    );
+
+    // Даём route handler время обработать запрос
+    await page.waitForTimeout(100);
 
     // Шаг 6: Делаем второе изменение
     await taskCell.dblclick();
@@ -239,8 +263,14 @@ test.describe('AutoSave Debounce Tests', () => {
 
     console.log('Second change completed at:', new Date().toISOString());
 
-    // Шаг 7: Ждем завершения второго автосохранения (1 секунда delay + запас на обработку)
-    await page.waitForTimeout(2000);
+    // Шаг 7: Ждем завершения второго автосохранения
+    await page.waitForResponse(
+      response => response.url().includes('/api/v1/data') && response.request().method() === 'PUT',
+      { timeout: 5000 }
+    );
+
+    // Даём route handler время обработать запрос
+    await page.waitForTimeout(100);
 
     console.log('Total API requests made:', apiRequests.length);
     console.log('API requests:', apiRequests.map(req => ({
