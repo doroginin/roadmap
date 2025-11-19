@@ -119,6 +119,9 @@ test.describe('Task Weeks Save functionality', () => {
     const saveButton = page.getByText('Сохранить');
     await saveButton.click();
 
+    // Ждем появления надписи "Сохранено"
+    await expect(page.getByTestId('save-status-saved')).toBeVisible({ timeout: 5000 });
+
     // Проверяем, что были отправлены PUT запросы
     const putRequests = apiRequests.filter(req => req.method === 'PUT');
     console.log(`API PUT requests sent: ${putRequests.length}`);
@@ -180,6 +183,9 @@ test.describe('Task Weeks Save functionality', () => {
 
     // Click save button
     await page.getByText('Сохранить').click();
+
+    // Ждем появления надписи "Сохранено"
+    await expect(page.getByTestId('save-status-saved')).toBeVisible({ timeout: 5000 });
 
     // Шаг 12: Перезагружаем страницу с фильтром E2E и проверяем что задача удалена
     console.log('\n🔄 Step 11: Verifying deletion');

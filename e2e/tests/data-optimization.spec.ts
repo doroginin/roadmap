@@ -35,7 +35,7 @@ test.describe('Data Optimization Tests', () => {
     await expect(page.getByTestId('roadmap-table')).toBeVisible();
 
     // Очищаем массив запросов после загрузки
-    apiRequests.length = 0;
+    apiRequests.splice(0, apiRequests.length);
 
     // Шаг 2: Создаем новую задачу
     const addButton = page.getByTestId('add-button');
@@ -75,8 +75,11 @@ test.describe('Data Optimization Tests', () => {
     // Сохраняем изменения
     await page.getByText('Сохранить').click();
 
+    // Ждем появления надписи "Сохранено"
+    await expect(page.getByTestId('save-status-saved')).toBeVisible({ timeout: 5000 });
+
     // Очищаем массив запросов перед редактированием
-    apiRequests.length = 0;
+    apiRequests.splice(0, apiRequests.length);
 
     // Редактируем название задачи
     await taskCell.dblclick();
@@ -138,7 +141,9 @@ test.describe('Data Optimization Tests', () => {
     await deleteButton.click();
 
     await page.getByText('Сохранить').click();
-    await page.waitForTimeout(2000);
+
+    // Ждем появления надписи "Сохранено"
+    await expect(page.getByTestId('save-status-saved')).toBeVisible({ timeout: 5000 });
 
     console.log('Task deleted');
   });
@@ -171,7 +176,7 @@ test.describe('Data Optimization Tests', () => {
     await expect(page.getByTestId('roadmap-table')).toBeVisible();
 
     // Очищаем массив запросов
-    apiRequests.length = 0;
+    apiRequests.splice(0, apiRequests.length);
 
     // Создаем новый ресурс
     const addButton = page.getByTestId('add-button');
@@ -211,8 +216,11 @@ test.describe('Data Optimization Tests', () => {
     // Сохраняем изменения
     await page.getByText('Сохранить').click();
 
+    // Ждем появления надписи "Сохранено"
+    await expect(page.getByTestId('save-status-saved')).toBeVisible({ timeout: 5000 });
+
     // Очищаем массив запросов перед редактированием
-    apiRequests.length = 0;
+    apiRequests.splice(0, apiRequests.length);
 
     // Редактируем название ресурса
     await resourceCell.dblclick();
@@ -270,7 +278,9 @@ test.describe('Data Optimization Tests', () => {
     await deleteButton.click();
 
     await page.getByText('Сохранить').click();
-    await page.waitForTimeout(2000);
+
+    // Ждем появления надписи "Сохранено"
+    await expect(page.getByTestId('save-status-saved')).toBeVisible({ timeout: 5000 });
 
     console.log('Resource deleted');
   });
@@ -303,7 +313,7 @@ test.describe('Data Optimization Tests', () => {
     await expect(page.getByTestId('roadmap-table')).toBeVisible();
 
     // Очищаем массив запросов
-    apiRequests.length = 0;
+    apiRequests.splice(0, apiRequests.length);
 
     // Создаем новую задачу
     const addButton = page.getByTestId('add-button');
@@ -378,8 +388,11 @@ test.describe('Data Optimization Tests', () => {
     // Сохраняем изменения
     await page.getByText('Сохранить').click();
 
+    // Ждем появления надписи "Сохранено"
+    await expect(page.getByTestId('save-status-saved')).toBeVisible({ timeout: 5000 });
+
     // Очищаем массив запросов перед редактированием
-    apiRequests.length = 0;
+    apiRequests.splice(0, apiRequests.length);
 
     // Редактируем задачу
     await taskCell.dblclick();
@@ -441,7 +454,9 @@ test.describe('Data Optimization Tests', () => {
     await deleteButton.click();
 
     await page.getByText('Сохранить').click();
-    await page.waitForTimeout(2000);
+
+    // Ждем появления надписи "Сохранено"
+    await expect(page.getByTestId('save-status-saved')).toBeVisible({ timeout: 5000 });
 
     // Удаляем ресурс
     const resourceRowForDelete = page.locator(`tr[data-row-id="${testResourceId}"]`);
@@ -452,7 +467,9 @@ test.describe('Data Optimization Tests', () => {
     await deleteButton.click();
 
     await page.getByText('Сохранить').click();
-    await page.waitForTimeout(2000);
+
+    // Ждем появления надписи "Сохранено"
+    await expect(page.getByTestId('save-status-saved')).toBeVisible({ timeout: 5000 });
 
     console.log('Task and resource deleted');
   });

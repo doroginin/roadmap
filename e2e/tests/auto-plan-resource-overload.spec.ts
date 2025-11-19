@@ -73,6 +73,9 @@ test.describe('Auto Plan and Resource Overload', () => {
     // Save changes manually
     await page.getByText('Сохранить').click();
 
+    // Ждем появления надписи "Сохранено"
+    await expect(page.getByTestId('save-status-saved')).toBeVisible({ timeout: 5000 });
+
     // Step 4: Add new task
     console.log('\n➕ Step 4: Adding new task for this resource');
     
@@ -121,6 +124,9 @@ test.describe('Auto Plan and Resource Overload', () => {
     console.log('Saving and waiting for auto-plan calculation...');
     await page.getByText('Сохранить').click();
 
+    // Ждем появления надписи "Сохранено"
+    await expect(page.getByTestId('save-status-saved')).toBeVisible({ timeout: 5000 });
+
     // Step 5: Verify auto-plan scheduled task on weeks 2 and 3
     console.log('\n✅ Step 5: Verifying auto-plan scheduled task on weeks 2-3');
     
@@ -168,6 +174,9 @@ test.describe('Auto Plan and Resource Overload', () => {
     // Save changes
     await page.getByText('Сохранить').click();
 
+    // Ждем появления надписи "Сохранено"
+    await expect(page.getByTestId('save-status-saved')).toBeVisible({ timeout: 5000 });
+
     // Step 7: Verify Auto checkbox is unchecked
     console.log('\n🔍 Step 7: Verifying Auto checkbox is unchecked');
     
@@ -209,6 +218,9 @@ test.describe('Auto Plan and Resource Overload', () => {
 
     // Save
     await page.getByText('Сохранить').click();
+
+    // Ждем появления надписи "Сохранено"
+    await expect(page.getByTestId('save-status-saved')).toBeVisible({ timeout: 5000 });
 
     // Step 10: Verify manual edit was reverted
     console.log('\n✅ Step 10: Verifying manual edit was reverted');
@@ -271,6 +283,9 @@ test.describe('Auto Plan and Resource Overload', () => {
     // Click save button
     const saveButton = page.getByText('Сохранить');
     await saveButton.click();
+
+    // Ждем появления надписи "Сохранено"
+    await expect(page.getByTestId('save-status-saved')).toBeVisible({ timeout: 5000 });
 
     console.log('✅ Changes saved to server');
 

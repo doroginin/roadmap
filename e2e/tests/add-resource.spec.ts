@@ -72,10 +72,11 @@ test.describe('Add Resource functionality', () => {
         }
     }, newResourceId);
     
-    await page.waitForTimeout(500);
-    
-    // Находим ячейку team снова после прокрутки
+    // Находим ячейку team после прокрутки
     const teamCell = newResourceRow.getByTestId(`team-cell-${newResourceId}`);
+    
+    // Дожидаемся видимости ячейки после прокрутки
+    await expect(teamCell).toBeVisible();
     
     // Кликаем два раза на ячейку team
     await teamCell.click({ clickCount: 2 });
@@ -122,6 +123,9 @@ test.describe('Add Resource functionality', () => {
     // Шаг 8: Сохраняем изменения
     await page.getByText('Сохранить').click();
 
+    // Ждем появления надписи "Сохранено"
+    await expect(page.getByTestId('save-status-saved')).toBeVisible({ timeout: 5000 });
+
     // Шаг 9: Обновляем страницу с фильтром E2E
     await page.goto('/?filter_team=E2E');
     await page.waitForLoadState('networkidle');
@@ -155,6 +159,9 @@ test.describe('Add Resource functionality', () => {
 
     // Шаг 12: Сохраняем удаление
     await page.getByText('Сохранить').click();
+
+    // Ждем появления надписи "Сохранено"
+    await expect(page.getByTestId('save-status-saved')).toBeVisible({ timeout: 5000 });
 
     // Шаг 13: Обновляем страницу
     await page.reload();

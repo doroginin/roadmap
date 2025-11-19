@@ -152,7 +152,9 @@ test.describe('Tab Switching Tests', () => {
         await sprintsTab.click();
         await page.waitForTimeout(300);
         await planTab.click();
-        await page.waitForTimeout(500);
+        
+        // Ждём завершения переключения таба (таблица должна быть видна)
+        await expect(tableContainer).toBeVisible();
 
         // Получаем начальную высоту
         const heightBefore = await tableContainer.evaluate(el => 
