@@ -8,7 +8,6 @@ import { DEFAULT_BG } from "./colorDefaults";
 import { fetchRoadmapData } from "../api/roadmapApi";
 import type { RoadmapData } from "../api/types";
 import { generateUUID } from "../utils/uuid";
-import { useUrlFilters } from "../hooks/useUrlFilters";
 
 // Roadmap types and utilities
 import type { ID, Status, Fn, Sprint, ResourceRow, TaskRow, Row } from "./roadmap/types";
@@ -18,6 +17,11 @@ import { getCellBgClass, getCellBgStyle } from "./roadmap/utils/cellUtils";
 import { buildLinks, TOTAL_WEEKS } from "./roadmap/utils/linkBuilder";
 import { getFrozenColumnStyle } from "./roadmap/utils/columnStyles";
 import { ArrowOverlay } from "./roadmap/components/ArrowOverlay";
+import { useColumnResize } from "./roadmap/hooks/useColumnResize";
+import { useRoadmapFilters, type ColumnId } from "./roadmap/hooks/useRoadmapFilters";
+import { useSelection, type ColKey } from "./roadmap/hooks/useSelection";
+import { useKeyboardNavigation } from "./roadmap/hooks/useKeyboardNavigation";
+import { useDragAndDrop } from "./roadmap/hooks/useDragAndDrop";
 
 // =============================
 // Roadmap "План" — интерактивный прототип (v3.2)
@@ -127,22 +131,7 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker, autoSave
     const [colorPanel, setColorPanel] = useState<{ anchor: { x: number; y: number }; teamFnKey: string; view: "resource" | "task"; initial: { bg: string; text: string } } | null>(null)
 
     // ===== Ширина колонок (для ресайзинга) =====
-    const [columnWidths, setColumnWidths] = useState<Record<string, number>>({
-        /* 45 - ширина стрелки для фильтрации и блокра для изменения ширины колонок */
-        type: 65 - 45,
-        status: 80 - 45,
-        sprintsAuto: 90 - 45,
-        epic: 195 - 45,
-        task: 195 - 45,
-        team: 80 - 45,
-        fn: 55 - 45,
-        empl: 70 - 45,
-        planEmpl: 70 - 45,
-        planWeeks: 80 - 45
-    });
-
-    // Состояние для ресайзинга
-    const [isResizing, setIsResizing] = useState<{ column: string; startX: number; startWidth: number } | null>(null);
+    const { columnWidths, handleResizeStart } = useColumnResize();
 
     // ===== Состояние загрузки данных =====
     const [loading, setLoading] = useState(true);
@@ -770,27 +759,51 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker, autoSave
 
     const computed = useMemo(() => computeAllRowsLocal(rows), [rows, sprints]);
     const computedRows = computed.rows;
-    
+
     // Store computedRows in ref for use in prepareDataForSave
     const computedRowsRef = useRef<Row[]>([]);
     computedRowsRef.current = computedRows;
 
+    // ====== Фильтрация ======
+    const {
+        filters,
+        filterUi,
+        filteredRows,
+        isFilterActive,
+        openFilter,
+        toggleFilterValue,
+        setFilterSearch,
+        clearFilter,
+        setFilterUi,
+        getFilterDefaults,
+        valueForCol
+    } = useRoadmapFilters(computedRows);
+
     // ====== Выделение/редактирование ======
-    type ColKey = "type"|"status"|"sprintsAuto"|"epic"|"task"|"team"|"fn"|"empl"|"planEmpl"|"planWeeks"|"fact"|"start"|"end"|"autoplan"|{week:number};
-    type SprintColKey = "code"|"start"|"end";
-    type TeamColKey = "name"|"jiraProject"|"featureTeam"|"issueType";
-    type Selection = { rowId: ID; col: ColKey } | null;
-    type SprintSelection = { rowId: number; col: SprintColKey } | null;
-    type TeamSelection = { rowId: number; col: TeamColKey } | null;
-    const [sel, setSel] = useState<Selection>(null);
-    const [editing, setEditing] = useState<Selection>(null);
-    const [sprintSel, setSprintSel] = useState<SprintSelection>(null);
-    const [sprintEditing, setSprintEditing] = useState<SprintSelection>(null);
-    const [teamSel, setTeamSel] = useState<TeamSelection>(null);
-    const [teamEditing, setTeamEditing] = useState<TeamSelection>(null);
-    const cancelEditRef = useRef<boolean>(false);
-    const cancelSprintEditRef = useRef<boolean>(false);
-    const cancelTeamEditRef = useRef<boolean>(false);
+    // ====== Selection hook ======
+    const {
+        sel, setSel,
+        editing,
+        cancelEditRef,
+        sprintSel, setSprintSel,
+        sprintEditing,
+        cancelSprintEditRef,
+        teamSel, setTeamSel,
+        teamEditing,
+        cancelTeamEditRef,
+        isSel,
+        isSelWeek,
+        isEditableColumn,
+        startEdit,
+        stopEdit,
+        commitEdit,
+        startSprintEdit,
+        stopSprintEdit,
+        commitSprintEdit,
+        startTeamEdit,
+        stopTeamEdit,
+        commitTeamEdit,
+    } = useSelection();
 
     // ====== Стрелки блокеров ======
     const [containerEl, setContainerEl] = useState<HTMLDivElement | null>(null);
@@ -851,395 +864,42 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker, autoSave
         const weeks: (ColKey)[] = range(TOTAL_WEEKS).map(i => ({ week: i }));
         return [...base, ...weeks];
     }, []);
-    function moveSelection(delta: number) {
-        if (!sel) return;
-        
-        // Определяем тип строки
-        const row = computedRows.find(r => r.id === sel.rowId);
-        const isResource = row?.kind === "resource";
-        
-        // Находим следующую редактируемую ячейку
-        const next = findNextEditableColumn(sel.col, delta, isResource);
-        
-        if (next) {
-            setSel({ rowId: sel.rowId, col: next });
-        }
-        // Если не найдено редактируемых ячеек в этом направлении, не двигаем курсор
-    }
-    // Переход по строкам при сохранении текущей колонки
-    function moveSelectionRow(delta: number) {
-        if (!sel) return;
-        const i = filteredRows.findIndex(r => r.id === sel.rowId);
-        if (i < 0) return;
-        const j = Math.max(0, Math.min(filteredRows.length - 1, i + delta));
-        const target = filteredRows[j];
-        if (!target) return;
-        
-        // Определяем тип текущей и целевой строки
-        const currentRow = computedRows.find(r => r.id === sel.rowId);
-        const targetRow = computedRows.find(r => r.id === target.id);
-        const currentIsResource = currentRow?.kind === "resource";
-        const targetIsResource = targetRow?.kind === "resource";
-        
-        let targetCol: ColKey = sel.col;
-        
-        // Если переходим от задачи к ресурсу
-        if (!currentIsResource && targetIsResource) {
-            // Маппинг колонок задач к объединенным ячейкам ресурсов
-            if (sel.col === "sprintsAuto" || sel.col === "epic" || sel.col === "task") {
-                targetCol = "status"; // Объединенная ячейка Status/Sprints/Epic/Task
-            } else if (sel.col === "planWeeks" || sel.col === "autoplan") {
-                targetCol = "planEmpl"; // Объединенная ячейка Plan empl/Plan weeks/Auto
-            }
-            // Для остальных колонок (type, status, team, fn, empl, planEmpl) оставляем как есть
-        }
-        // Если переходим от ресурса к задаче
-        else if (currentIsResource && !targetIsResource) {
-            // Маппинг объединенных ячеек ресурсов к первым колонкам задач
-            if (sel.col === "status") {
-                targetCol = "status"; // Первая колонка объединенной ячейки
-            } else if (sel.col === "planEmpl") {
-                targetCol = "planEmpl"; // Первая колонка объединенной ячейки плана
-            }
-            // Для остальных колонок оставляем как есть
-        }
-        
-        // Проверяем, можно ли перейти в целевую строку
-        if (!currentIsResource && targetIsResource) {
-            // Переход от задачи к ресурсу - проверяем, можно ли переходить из этой колонки
-            if (!canNavigateFromTaskToResource(sel.col)) {
-                return; // Не переходим, если нельзя переходить из этой колонки задачи в ресурс
-            }
-        } else if (!hasEditableColumnsInTargetRow(targetCol, targetIsResource)) {
-            // Для остальных случаев проверяем, есть ли редактируемые ячейки в целевой строке
-            return; // Не переходим, если нет редактируемых ячеек в целевой строке
-        }
-        
-        setSel({ rowId: target.id, col: targetCol });
-        
-        // Прокручиваем таблицу, чтобы выделенная ячейка была видна
-        setTimeout(() => {
-            const tableContainer = containerEl;
-            if (tableContainer) {
-                const selectedRow = tableContainer.querySelector(`tr[data-row-id="${target.id}"]`);
-                if (selectedRow) {
-                    selectedRow.scrollIntoView({ 
-                        behavior: 'smooth', 
-                        block: 'nearest' 
-                    });
-                }
-            }
-        }, 0);
-    }
-    // Проверяет, является ли колонка редактируемой
-    function isEditableColumn(col: ColKey, isResource: boolean): boolean {
-        if (isResource) {
-            // Для ресурсов редактируемые колонки: team, fn, empl, недели
-            return col === "team" || col === "fn" || col === "empl" || 
-                   (typeof col === "object" && col.week !== undefined);
-        } else {
-            // Для задач редактируемые колонки: status, epic, task, team, fn, empl, planEmpl, planWeeks, autoplan, недели
-            return col === "status" || col === "epic" || col === "task" || 
-                   col === "team" || col === "fn" || col === "empl" || col === "planEmpl" || 
-                   col === "planWeeks" || col === "autoplan" || 
-                   (typeof col === "object" && col.week !== undefined);
-        }
-    }
 
-    // Находит следующую редактируемую ячейку в заданном направлении
-    function findNextEditableColumn(currentCol: ColKey, direction: number, isResource: boolean): ColKey | null {
-        const keyEq = (a: ColKey, b: ColKey) => (typeof a === "string" && typeof b === "string" && a===b) || (typeof a === "object" && typeof b === "object" && a.week===b.week);
-        const idx = columnOrder.findIndex(k => keyEq(k, currentCol));
-        if (idx === -1) return null;
-        
-        // Ищем в заданном направлении
-        for (let i = idx + direction; i >= 0 && i < columnOrder.length; i += direction) {
-            const col = columnOrder[i];
-            if (isEditableColumn(col, isResource)) {
-                return col;
-            }
-        }
-        
-        return null; // Не найдено редактируемых ячеек в этом направлении
-    }
+    // ====== Keyboard navigation hook ======
+    const {
+        focusNextRight,
+        focusPrevLeft,
+        navigateInEditMode,
+        navigateSprintInEditMode,
+        navigateTeamInEditMode,
+    } = useKeyboardNavigation({
+        sel, setSel, editing, cancelEditRef,
+        sprintSel, setSprintSel, sprintEditing, cancelSprintEditRef, sprints,
+        teamSel, setTeamSel, teamEditing, cancelTeamEditRef, teamData,
+        computedRows, filteredRows, containerEl, columnOrder, tab,
+        isEditableColumn, startEdit, stopEdit, commitEdit,
+        startSprintEdit, stopSprintEdit, commitSprintEdit,
+        startTeamEdit, stopTeamEdit, commitTeamEdit,
+        toggleAutoPlan, weeksBaseForTaskLocal, weeksArraysEqual, setRows, changeTracker
+    });
 
-    // Проверяет, есть ли редактируемые ячейки в целевой строке, которые соответствуют текущей позиции
-    function hasEditableColumnsInTargetRow(targetCol: ColKey, targetIsResource: boolean): boolean {
-        // Проверяем, является ли сама целевая колонка редактируемой
-        if (isEditableColumn(targetCol, targetIsResource)) {
-            return true;
-        }
-        
-        // Если целевая колонка не редактируемая, проверяем, есть ли редактируемые колонки в том же "блоке"
-        // Например, если мы в колонке "status" задачи и переходим к ресурсу, 
-        // то проверяем, есть ли редактируемые колонки в том же диапазоне
-        
-        const keyEq = (a: ColKey, b: ColKey) => (typeof a === "string" && typeof b === "string" && a===b) || (typeof a === "object" && typeof b === "object" && a.week===b.week);
-        const idx = columnOrder.findIndex(k => keyEq(k, targetCol));
-        if (idx === -1) return false;
-        
-        // Для ресурсов проверяем колонки team, fn, empl, недели
-        if (targetIsResource) {
-            return isEditableColumn("team", true) || isEditableColumn("fn", true) || 
-                   isEditableColumn("empl", true) || isEditableColumn({ week: 0 }, true);
-        } else {
-            // Для задач проверяем все редактируемые колонки
-            return isEditableColumn("status", false) || isEditableColumn("epic", false) || 
-                   isEditableColumn("task", false) || isEditableColumn("team", false) || 
-                   isEditableColumn("fn", false) || isEditableColumn("empl", false) || 
-                   isEditableColumn("planEmpl", false) || isEditableColumn("planWeeks", false) || 
-                   isEditableColumn("autoplan", false) || isEditableColumn({ week: 0 }, false);
-        }
-    }
-
-    // Проверяет, можно ли перейти из колонки задачи в ресурс в режиме просмотра
-    function canNavigateFromTaskToResource(taskCol: ColKey): boolean {
-        // Для колонок задач, которые не имеют соответствующих редактируемых ячеек в ресурсах выше
-        if (taskCol === "status" || taskCol === "sprintsAuto" || taskCol === "epic" || taskCol === "task" || 
-            taskCol === "planEmpl" || taskCol === "planWeeks" || taskCol === "autoplan") {
-            return false; // Нельзя переходить в ресурсы из этих колонок
-        }
-        
-        // Для остальных колонок (type, team, fn, empl, недели) можно переходить
-        return true;
-    }
-
-    // Перейти к следующей справа ячейке и сразу включить редактирование
-    function focusNextRight(rowId: ID, col: ColKey): boolean {
-        // Определяем тип строки
-        const row = computedRows.find(r => r.id === rowId);
-        const isResource = row?.kind === "resource";
-        
-        // Находим следующую редактируемую ячейку
-        const next = findNextEditableColumn(col, 1, isResource);
-        
-        if (next) {
-            const nextSel: Selection = { rowId, col: next };
-            setSel(nextSel);
-            // Всегда переходим в режим редактирования для редактируемых ячеек
-            startEdit(nextSel);
-            return true;
-        }
-        // Если не найдено редактируемых ячеек в этом направлении, не двигаем курсор
-        return false;
-    }
-    function focusPrevLeft(rowId: ID, col: ColKey): boolean {
-        // Определяем тип строки
-        const row = computedRows.find(r => r.id === rowId);
-        const isResource = row?.kind === "resource";
-        
-        // Находим предыдущую редактируемую ячейку
-        const prev = findNextEditableColumn(col, -1, isResource);
-        
-        if (prev) {
-            const prevSel: Selection = { rowId, col: prev };
-            setSel(prevSel);
-            // Всегда переходим в режим редактирования для редактируемых ячеек
-            startEdit(prevSel);
-            return true;
-        }
-        // Если не найдено редактируемых ячеек в этом направлении, не двигаем курсор
-        return false;
-    }
-
-    // Навигация в режиме редактирования - сохраняет режим редактирования
-    function navigateInEditMode(direction: 'next' | 'prev', currentRowId: ID, currentCol: ColKey): boolean {
-        const row = computedRows.find(r => r.id === currentRowId);
-        const isResource = row?.kind === "resource";
-        
-        const next = findNextEditableColumn(currentCol, direction === 'next' ? 1 : -1, isResource);
-        
-        if (next) {
-            const nextSel: Selection = { rowId: currentRowId, col: next };
-            setSel(nextSel);
-            // Сохраняем режим редактирования
-            startEdit(nextSel);
-            return true;
-        }
-        return false;
-    }
-
-    useEffect(() => {
-        function onKey(e: KeyboardEvent) {
-            const el = e.target as HTMLElement | null;
-            const tag = el?.tagName;
-            const isEditable = !!el && (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || el.isContentEditable);
-            if (isEditable) return;
-            // Обработка для таблицы спринтов
-            if (tab === 'sprints') {
-                if (!sprintSel) return;
-                // Space: редактирование
-                if (e.key === " ") {
-                    e.preventDefault();
-                    if (sprintEditing) {
-                        commitSprintEdit();
-                    } else {
-                        startSprintEdit(sprintSel);
-                    }
-                    return;
-                }
-                if (!sprintEditing && e.key === "Tab") { e.preventDefault(); if (e.shiftKey) { moveSprintSelection(-1); } else { moveSprintSelection(1); } return; }
-                if (!sprintEditing && e.key === "ArrowUp") { e.preventDefault(); moveSprintSelectionRow(-1); return; }
-                if (!sprintEditing && e.key === "ArrowDown") { e.preventDefault(); moveSprintSelectionRow(1); return; }
-                if (e.key === "Enter") {
-                    e.preventDefault();
-                    if (sprintEditing) {
-                        commitSprintEdit();
-                    } else {
-                        startSprintEdit(sprintSel);
-                    }
-                    return;
-                }
-                if (e.key === "Escape") {
-                    if (sprintEditing) { cancelSprintEditRef.current = true; stopSprintEdit(); }
-                    return;
-                }
-                if (e.key === "ArrowRight") { e.preventDefault(); moveSprintSelection(1); return; }
-                if (e.key === "ArrowLeft")  { e.preventDefault(); moveSprintSelection(-1); return; }
-                return;
-            }
-            
-            // Обработка для таблицы команд
-            if (tab === 'teams') {
-                if (!teamSel) return;
-                // Space: редактирование
-                if (e.key === " ") {
-                    e.preventDefault();
-                    if (teamEditing) {
-                        commitTeamEdit();
-                    } else {
-                        startTeamEdit(teamSel);
-                    }
-                    return;
-                }
-                if (!teamEditing && e.key === "Tab") { e.preventDefault(); if (e.shiftKey) { moveTeamSelection(-1); } else { moveTeamSelection(1); } return; }
-                if (!teamEditing && e.key === "ArrowUp") { e.preventDefault(); moveTeamSelectionRow(-1); return; }
-                if (!teamEditing && e.key === "ArrowDown") { e.preventDefault(); moveTeamSelectionRow(1); return; }
-                if (e.key === "Enter") {
-                    e.preventDefault();
-                    if (teamEditing) {
-                        commitTeamEdit();
-                    } else {
-                        startTeamEdit(teamSel);
-                    }
-                    return;
-                }
-                if (e.key === "Escape") {
-                    if (teamEditing) { cancelTeamEditRef.current = true; stopTeamEdit(); }
-                    return;
-                }
-                if (e.key === "ArrowRight") { e.preventDefault(); moveTeamSelection(1); return; }
-                if (e.key === "ArrowLeft")  { e.preventDefault(); moveTeamSelection(-1); return; }
-                return;
-            }
-            
-            // Обработка для таблицы плана
-            if (!sel) return;
-            // Space: автоплан
-            if (e.key === " ") {
-                e.preventDefault();
-                if (typeof sel.col === "string" && sel.col === "autoplan") {
-                    const t = computedRows.find(r=>r.id===sel.rowId) as TaskRow | undefined;
-                    if (t) toggleAutoPlan(t.id, !t.autoPlanEnabled);
-                }
-                return;
-            }
-            // Backspace/Delete: очистка ячейки недели (только если не редактируем inline-инпут)
-            if (!editing && (e.key === "Backspace" || e.key === "Delete")) {
-                if (typeof sel.col === "object") {
-                    e.preventDefault();
-                    const row = computedRows.find(r=>r.id===sel.rowId);
-                    const w = sel.col.week;
-                    if (row?.kind === "task") {
-                        const base = weeksBaseForTaskLocal(row as TaskRow);
-                        const originalWeeks = (row as TaskRow).weeks.slice();
-                        base[w] = 0;
-                        
-                        // Проверяем, изменилось ли значение
-                        const hasChanged = !weeksArraysEqual(base, originalWeeks);
-
-                        setRows(prev=>prev.map(x =>
-                            (x.kind==='task' && x.id===row.id)
-                                ? {
-                                    ...(x as TaskRow),
-                                    weeks: base,
-                                    // Отключаем автоплан только если значение изменилось
-                                    ...(hasChanged ? { autoPlanEnabled: false } : {})
-                                }
-                                : x
-                        ));
-
-                        // Регистрируем изменение в changeTracker
-                        if (hasChanged && changeTracker) {
-                            changeTracker.addCellChange('task', row.id, 'weeks', originalWeeks, base);
-                            // Если задача была с автопланированием, также регистрируем его отключение
-                            if ((row as TaskRow).autoPlanEnabled) {
-                                changeTracker.addCellChange('task', row.id, 'autoPlanEnabled', true, false);
-                            }
-                        }
-                    } else if (row?.kind === "resource") {
-                        const oldWeeks = (row as ResourceRow).weeks.slice();
-                        const newWeeks = (row as ResourceRow).weeks.map((vv,i)=> i===w? 0: vv);
-
-                        setRows(prev=>prev.map(x =>
-                            (x.kind==='resource' && x.id===row.id)
-                                ? { ...(x as ResourceRow), weeks: newWeeks }
-                                : x
-                        ));
-
-                        // Регистрируем изменение в changeTracker
-                        if (changeTracker && !weeksArraysEqual(oldWeeks, newWeeks)) {
-                            changeTracker.addCellChange('resource', row.id, 'weeks', oldWeeks, newWeeks);
-                        }
-                    }
-                }
-                return;
-            }
-            if (!editing && e.key === "Tab") { e.preventDefault(); if (e.shiftKey) { moveSelection(-1); } else { moveSelection(1); } return; }
-            if (!editing && e.key === "ArrowUp") { e.preventDefault(); moveSelectionRow(-1); return; }
-            if (!editing && e.key === "ArrowDown") { e.preventDefault(); moveSelectionRow(1); return; }
-            if (e.key === "Enter") {
-                e.preventDefault();
-                if (editing) {
-                    // сохранить
-                    commitEdit();
-                } else if (typeof sel.col === "object") {
-                    // Inline-редактирование недельной ячейки
-                    startEdit(sel);
-                } else {
-                    startEdit(sel);
-                }
-                return;
-            }
-            if (e.key === "Escape") {
-                if (editing) { cancelEditRef.current = true; stopEdit(); }
-                return;
-            }
-            if (e.key === "ArrowRight") { e.preventDefault(); moveSelection(1); return; }
-            if (e.key === "ArrowLeft")  { e.preventDefault(); moveSelection(-1); return; }
-        }
-        window.addEventListener("keydown", onKey);
-        return () => window.removeEventListener("keydown", onKey);
-    }, [sel, editing, computedRows, sprintSel, sprintEditing, sprints, teamSel, teamEditing, teamData]);
-
-    function startEdit(s: Selection) {
-        setEditing(s);
-        cancelEditRef.current = false;
-    }
-    function stopEdit() { 
-        setEditing(null); 
-    }
-    function commitEdit() { 
-        setEditing(null); 
-    }
-
-    // ====== Функции для редактирования спринтов ======
-    function startSprintEdit(s: SprintSelection) {
-        setSprintEditing(s);
-        cancelSprintEditRef.current = false;
-    }
-    function stopSprintEdit() { setSprintEditing(null); }
-    function commitSprintEdit() { setSprintEditing(null); }
+    // ====== Drag and drop hook ======
+    const {
+        dragTooltip,
+        isShiftPressedRef,
+        markDragAllowed,
+        clearDragAllowed,
+        getCellBorderClass,
+        getCellBorderStyleForDrag,
+        getWeekColumnHighlightStyle,
+        handleRemoveBlocker,
+        onMouseDownRow,
+        onTaskMouseDown,
+        onTaskMouseUp,
+    } = useDragAndDrop({
+        rows,
+        setRows,
+    });
 
     // Функция для форматирования даты в формат DD.MM.YYYY
     function formatDate(dateString: string): string {
@@ -1389,126 +1049,6 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker, autoSave
         };
     }
 
-    // Навигация по спринтам
-    function moveSprintSelection(delta: number) {
-        if (!sprintSel) return;
-        
-        const sprintCols: SprintColKey[] = ["code", "start", "end"];
-        const currentIdx = sprintCols.indexOf(sprintSel.col);
-        const nextIdx = currentIdx + delta;
-        
-        if (nextIdx >= 0 && nextIdx < sprintCols.length) {
-            setSprintSel({ rowId: sprintSel.rowId, col: sprintCols[nextIdx] });
-        }
-    }
-
-    function moveSprintSelectionRow(delta: number) {
-        if (!sprintSel) return;
-        const nextRowId = sprintSel.rowId + delta;
-        if (nextRowId >= 0 && nextRowId < sprints.length) {
-            setSprintSel({ rowId: nextRowId, col: sprintSel.col });
-            
-            // Прокручиваем таблицу, чтобы выделенная ячейка была видна
-            setTimeout(() => {
-                const tableContainer = document.querySelector('.sprint-table-container');
-                if (tableContainer) {
-                    const selectedRow = tableContainer.querySelector(`tr:nth-child(${nextRowId + 2})`); // +2 потому что есть заголовок
-                    if (selectedRow) {
-                        selectedRow.scrollIntoView({ 
-                            behavior: 'smooth', 
-                            block: 'nearest' 
-                        });
-                    }
-                }
-            }, 0);
-        }
-    }
-
-    // Навигация в режиме редактирования спринтов
-    function navigateSprintInEditMode(direction: 'next' | 'prev', currentRowId: number, currentCol: SprintColKey) {
-        const sprintCols: SprintColKey[] = ["code", "start", "end"];
-        const currentIdx = sprintCols.indexOf(currentCol);
-        const nextIdx = direction === 'next' ? currentIdx + 1 : currentIdx - 1;
-        
-        if (nextIdx >= 0 && nextIdx < sprintCols.length) {
-            // Есть следующая ячейка в той же строке
-            const nextSel: SprintSelection = { rowId: currentRowId, col: sprintCols[nextIdx] };
-            setSprintSel(nextSel);
-            startSprintEdit(nextSel);
-        } else {
-            // Нет следующей ячейки в строке - не переходим никуда
-            // Остаемся в текущей ячейке
-            return;
-        }
-    }
-
-    // ====== Функции редактирования команд ======
-    function startTeamEdit(s: TeamSelection) {
-        if (!s) return;
-        setTeamEditing(s);
-        cancelTeamEditRef.current = false;
-    }
-
-    function stopTeamEdit() {
-        setTeamEditing(null);
-    }
-
-    function commitTeamEdit() {
-        stopTeamEdit();
-    }
-
-    // Навигация по командам
-    function moveTeamSelection(delta: number) {
-        if (!teamSel) return;
-        const teamCols: TeamColKey[] = ["name", "jiraProject", "featureTeam", "issueType"];
-        const currentIdx = teamCols.indexOf(teamSel.col);
-        const nextIdx = currentIdx + delta;
-        
-        if (nextIdx >= 0 && nextIdx < teamCols.length) {
-            setTeamSel({ rowId: teamSel.rowId, col: teamCols[nextIdx] });
-        }
-    }
-
-    function moveTeamSelectionRow(delta: number) {
-        if (!teamSel) return;
-        const nextRowId = teamSel.rowId + delta;
-        if (nextRowId >= 0 && nextRowId < teamData.length) {
-            setTeamSel({ rowId: nextRowId, col: teamSel.col });
-            
-            // Прокручиваем таблицу, чтобы выделенная ячейка была видна
-            setTimeout(() => {
-                const tableContainer = document.querySelector('.team-table-container');
-                if (tableContainer) {
-                    const selectedRow = tableContainer.querySelector(`tr:nth-child(${nextRowId + 2})`); // +2 потому что есть заголовок
-                    if (selectedRow) {
-                        selectedRow.scrollIntoView({ 
-                            behavior: 'smooth', 
-                            block: 'nearest' 
-                        });
-                    }
-                }
-            }, 0);
-        }
-    }
-
-    // Навигация в режиме редактирования команд
-    function navigateTeamInEditMode(direction: 'next' | 'prev', currentRowId: number, currentCol: TeamColKey) {
-        const teamCols: TeamColKey[] = ["name", "jiraProject", "featureTeam", "issueType"];
-        const currentIdx = teamCols.indexOf(currentCol);
-        const nextIdx = direction === 'next' ? currentIdx + 1 : currentIdx - 1;
-        
-        if (nextIdx >= 0 && nextIdx < teamCols.length) {
-            // Есть следующая ячейка в той же строке
-            const nextSel: TeamSelection = { rowId: currentRowId, col: teamCols[nextIdx] };
-            setTeamSel(nextSel);
-            startTeamEdit(nextSel);
-        } else {
-            // Нет следующей ячейки в строке - не переходим никуда
-            // Остаемся в текущей ячейке
-            return;
-        }
-    }
-
     // ====== Контекстные меню ======
     type CtxMenu = { x:number; y:number; rowId:ID; kind:"task"|"resource"; field?:"fn"; draftColor?: string } | null;
     type SprintCtxMenu = { x:number; y:number; index:number } | null;
@@ -1535,68 +1075,11 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker, autoSave
         setCtx({ x: e.clientX, y: e.clientY, rowId: r.id, kind, field, draftColor: currentColor });
     }
 
-    // ====== Drag reorder только по колонкам до Auto ======
-    const dragRowRef = useRef<{ id: ID; kind: "resource"|"task" } | null>(null);
-    const dragAllowedRef = useRef<boolean>(false);
-    const isDraggingRef = useRef<boolean>(false);
-    const [dragTooltip, setDragTooltip] = useState<{
-        visible: boolean;
-        x: number;
-        y: number;
-        task: TaskRow | null;
-        resource: ResourceRow | null;
-    }>({ visible: false, x: 0, y: 0, task: null, resource: null });
-    
-    const [highlightedRowId, setHighlightedRowId] = useState<ID | null>(null);
-    const [dropPositionRowId, setDropPositionRowId] = useState<ID | null>(null);
-    const [dropPosition, setDropPosition] = useState<'top' | 'bottom'>('top');
-    const [highlightedWeekIdx, setHighlightedWeekIdx] = useState<number | null>(null);
 
-    function markDragAllowed() { 
-        dragAllowedRef.current = true; 
-    }
-    function clearDragAllowed() { dragAllowedRef.current = false; }
-    
-    // Вспомогательная функция для получения класса границ ячейки
-    function getCellBorderClass(_rowId: ID): string {
-        // Временно отключаем CSS классы, используем только inline стили
-        return '';
-    }
-    
-    // Вспомогательная функция для получения стиля границ ячейки для drag
-        function getCellBorderStyleForDrag(rowId: ID): React.CSSProperties {
-            // Если есть highlightedRowId (Shift+drag), показываем только красные рамки
-            if (highlightedRowId) {
-                if (highlightedRowId === rowId) {
-                    return { borderTop: '2px solid #f87171', borderBottom: '2px solid #f87171' }; // светло-красная рамка
-                }
-                return {}; // Не показываем никаких рамок для других строк при Shift+drag
-            }
-            
-            // Если нет highlightedRowId, показываем обычные серые рамки для dropPositionRowId
-            if (dropPositionRowId === rowId) {
-                if (dropPosition === 'top') {
-                    return { borderTop: '2px solid #6b7280' }; // серая рамка сверху
-                } else {
-                    return { borderBottom: '2px solid #6b7280' }; // серая рамка снизу
-                }
-            }
-            
-            return {};
-        }
-    
-    // Вспомогательная функция для получения стиля подсветки колонки недели
-    function getWeekColumnHighlightStyle(weekIdx: number): React.CSSProperties {
-        if (highlightedWeekIdx === weekIdx) {
-            return { borderLeft: '2px solid #f87171', borderRight: '2px solid #f87171' }; // красная рамка для колонки
-        }
-            return {};
-        }
-    
     // Вспомогательная функция для получения стиля границ ячейки
     function getCellBorderStyle(isSelected: boolean | null = false): React.CSSProperties {
         if (isSelected) {
-            return { 
+            return {
                 borderTop: '1px solid rgb(226, 232, 240)',
                 borderRight: '1px solid rgb(226, 232, 240)',
                 borderBottom: '1px solid rgb(226, 232, 240)',
@@ -1605,469 +1088,17 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker, autoSave
                 outlineOffset: '-1px'
             };
         }
-        return { 
+        return {
             borderTop: '1px solid rgb(226, 232, 240)',
             borderRight: '1px solid rgb(226, 232, 240)',
             borderBottom: '1px solid rgb(226, 232, 240)',
             borderLeft: '1px solid rgb(226, 232, 240)'
         };
     }
-    
-    
-    function onMouseDownRow(e: React.MouseEvent, r: Row) {
-        if (!dragAllowedRef.current) return;
-        if (e.button !== 0) return; // только левая кнопка мыши
-        
-        
-        dragRowRef.current = { id: r.id, kind: r.kind };
-        isDraggingRef.current = true;
-        
-        // Очищаем предыдущие состояния подсветки
-        setHighlightedRowId(null);
-        setDropPositionRowId(null);
-        setDropPosition('top');
-        
-        // Показываем тултип для задач и ресурсов
-        if (r.kind === "task") {
-            setDragTooltip({
-                visible: true,
-                x: e.clientX + 10,
-                y: e.clientY - 10,
-                task: r as TaskRow,
-                resource: null
-            });
-        } else if (r.kind === "resource") {
-            setDragTooltip({
-                visible: true,
-                x: e.clientX + 10,
-                y: e.clientY - 10,
-                task: null,
-                resource: r as ResourceRow
-            });
-        }
-        
-        // Добавляем обработчики для отслеживания движения мыши
-        const handleMouseMove = (e: MouseEvent) => {
-            if (!isDraggingRef.current) return;
-            
-            
-            // Обновляем состояние клавиши Shift
-            isShiftPressedRef.current = e.shiftKey;
-            
-            // Обновляем позицию тултипа
-            setDragTooltip(prev => ({
-                ...prev,
-                x: e.clientX + 10,
-                y: e.clientY - 10
-            }));
-            
-            // Подсвечиваем строку под курсором при нажатом Shift (для блокеров)
-            if (e.shiftKey) {
-                const draggedRow = dragRowRef.current;
-                
-                // Если это задача - показываем красные рамки для блокеров
-                if (draggedRow && draggedRow.kind === 'task') {
-                    // Сначала очищаем dropPositionRowId, чтобы избежать двойных рамок
-                    setDropPositionRowId(null);
-                    setDropPosition('top');
-                    
-                    const element = document.elementFromPoint(e.clientX, e.clientY);
-                    
-                    // Проверяем, находится ли курсор над колонкой недели
-                    const weekCell = element?.closest('td[data-week-idx]');
-                    if (weekCell) {
-                        const weekIdx = parseInt(weekCell.getAttribute('data-week-idx') || '-1');
-                        if (weekIdx >= 0) {
-                            setHighlightedWeekIdx(weekIdx);
-                            setHighlightedRowId(null);
-                            return;
-                        }
-                    }
-                    
-                    // Если не над колонкой недели, проверяем строки задач
-                    setHighlightedWeekIdx(null);
-                    const targetRow = element?.closest('tr[data-row-id]');
-                    if (targetRow) {
-                        const targetRowId = targetRow.getAttribute('data-row-id');
-                        if (targetRowId) {
-                            // Проверяем, что перетаскиваемая строка и целевая строка одного типа
-                            const targetRowData = rows.find(r => r.id === targetRowId);
-                            
-                            // Не показываем красные рамки, если это та же задача которую перетаскиваем
-                            if (targetRowData && draggedRow.kind === targetRowData.kind && draggedRow.id !== targetRowId) {
-                                setHighlightedRowId(targetRowId);
-                            } else {
-                                setHighlightedRowId(null);
-                            }
-                        } else {
-                            setHighlightedRowId(null);
-                        }
-                    } else {
-                        setHighlightedRowId(null);
-                    }
-                } else {
-                    // Если это ресурс - показываем обычные серые рамки (как без Shift)
-                    setHighlightedRowId(null); // Очищаем подсветку блокеров
-                    setDropPosition('top');
-                    
-                    const element = document.elementFromPoint(e.clientX, e.clientY);
-                    const targetRow = element?.closest('tr[data-row-id]') || (e.target as HTMLElement)?.closest('tr[data-row-id]');
-                    
-                    if (targetRow) {
-                        const targetRowId = targetRow.getAttribute('data-row-id');
-                        if (targetRowId && targetRowId !== dragRowRef.current?.id) {
-                            // Проверяем, что перетаскиваемая строка и целевая строка одного типа
-                            const targetRowData = rows.find(r => r.id === targetRowId);
-                            
-                            if (draggedRow && targetRowData && draggedRow.kind === targetRowData.kind) {
-                                // Определяем позицию рамки в зависимости от направления перетаскивания
-                                const draggedRowData = rows.find(r => r.id === draggedRow.id);
-                                if (draggedRowData && targetRowData) {
-                                    const draggedIndex = rows.findIndex(r => r.id === draggedRow.id);
-                                    const targetIndex = rows.findIndex(r => r.id === targetRowId);
-                                    
-                                    // Если перетаскиваем вверх, показываем верхнюю рамку целевой строки
-                                    // Если перетаскиваем вниз, показываем нижнюю рамку целевой строки
-                                    if (draggedIndex < targetIndex) {
-                                        // Перетаскиваем вниз - нижняя рамка целевой строки
-                                        setDropPosition('bottom');
-                                        setDropPositionRowId(targetRowId);
-                                    } else {
-                                        // Перетаскиваем вверх - верхняя рамка целевой строки
-                                        setDropPosition('top');
-                                        setDropPositionRowId(targetRowId);
-                                    }
-                                } else {
-                                    setDropPositionRowId(targetRowId);
-                                }
-                            } else {
-                                setDropPositionRowId(null);
-                            }
-                        } else {
-                            setDropPositionRowId(null);
-                        }
-                    } else {
-                        setDropPositionRowId(null);
-                    }
-                }
-            } else {
-                // Обычное перетаскивание - показываем позицию вставки
-                setHighlightedRowId(null); // Очищаем подсветку блокеров
-                setDropPosition('top');
-                
-                // Попробуем использовать e.target и document.elementFromPoint
-                const element = document.elementFromPoint(e.clientX, e.clientY);
-                const targetRow = element?.closest('tr[data-row-id]') || (e.target as HTMLElement)?.closest('tr[data-row-id]');
-                
-                if (targetRow) {
-                    const targetRowId = targetRow.getAttribute('data-row-id');
-                    if (targetRowId && targetRowId !== dragRowRef.current?.id) {
-                        // Проверяем, что перетаскиваемая строка и целевая строка одного типа
-                        const draggedRow = dragRowRef.current;
-                        const targetRowData = rows.find(r => r.id === targetRowId);
-                        
-                        if (draggedRow && targetRowData && draggedRow.kind === targetRowData.kind) {
-                            // Определяем позицию рамки в зависимости от направления перетаскивания
-                            const draggedRowData = rows.find(r => r.id === draggedRow.id);
-                            if (draggedRowData && targetRowData) {
-                                const draggedIndex = rows.findIndex(r => r.id === draggedRow.id);
-                                const targetIndex = rows.findIndex(r => r.id === targetRowId);
-                                
-                                // Если перетаскиваем вверх, показываем верхнюю рамку целевой строки
-                                // Если перетаскиваем вниз, показываем нижнюю рамку целевой строки
-                                if (draggedIndex < targetIndex) {
-                                    // Перетаскиваем вниз - нижняя рамка целевой строки
-                                    setDropPosition('bottom');
-                                    setDropPositionRowId(targetRowId);
-                                } else {
-                                    // Перетаскиваем вверх - верхняя рамка целевой строки
-                                    setDropPosition('top');
-                                    setDropPositionRowId(targetRowId);
-                                }
-                            } else {
-                                setDropPositionRowId(targetRowId);
-                            }
-                        } else {
-                            setDropPositionRowId(null);
-                        }
-                    } else {
-                        setDropPositionRowId(null);
-                    }
-                } else {
-                    setDropPositionRowId(null);
-                }
-            }
-        };
-        
-        const handleMouseUp = (e: MouseEvent) => {
-            if (!isDraggingRef.current) return;
-            
-            // Сохраняем данные о перетаскиваемой строке до очистки состояния
-            const draggedRow = dragRowRef.current;
-            const isShiftPressed = isShiftPressedRef.current;
-            
-            // Находим элемент под курсором
-            const element = document.elementFromPoint(e.clientX, e.clientY);
-            
-            // Проверяем, был ли drop на колонку недели при Shift+drag задачи
-            if (isShiftPressed && draggedRow && draggedRow.kind === "task") {
-                const weekCell = element?.closest('td[data-week-idx]');
-                if (weekCell) {
-                    const weekIdx = parseInt(weekCell.getAttribute('data-week-idx') || '-1');
-                    if (weekIdx >= 0) {
-                        const weekNumber = weekIdx + 1; // Преобразуем в 1-based
-                        
-                        setRows(prev => prev.map(row => 
-                            (row.kind === "task" && row.id === draggedRow.id) 
-                                ? { ...row, weekBlockers: Array.from(new Set([...(row as TaskRow).weekBlockers, weekNumber])) } 
-                                : row
-                        ));
-                        
-                        // Очищаем состояние и выходим
-                        setDragTooltip({ visible: false, x: 0, y: 0, task: null, resource: null });
-                        setHighlightedRowId(null);
-                        setHighlightedWeekIdx(null);
-                        setDropPositionRowId(null);
-                        setDropPosition('top');
-                        dragRowRef.current = null;
-                        isDraggingRef.current = false;
-                        clearDragAllowed();
-                        
-                        document.removeEventListener('mousemove', handleMouseMove);
-                        document.removeEventListener('mouseup', handleMouseUp);
-                        return;
-                    }
-                }
-            }
-            
-            const targetRow = element?.closest('tr');
-            
-            if (targetRow && draggedRow) {
-                const targetRowId = targetRow.getAttribute('data-row-id');
-                if (targetRowId) {
-                    const targetRowData = rows.find(row => row.id === targetRowId);
-                    if (targetRowData && targetRowData.kind === draggedRow.kind) {
-                        // Выполняем операцию перестановки или назначения блокера
-                        if (isShiftPressed && draggedRow.kind === "task" && targetRowData.kind === "task") {
-                            // Назначение блокера - проверяем, что это не та же задача
-                            if (draggedRow.id === targetRowData.id) {
-                                // Не делаем ничего, просто игнорируем
-                            } else {
-                            if (canSetBlocker(draggedRow.id, targetRowData.id)) {
-                                setRows(prev => prev.map(row => 
-                                    (row.kind === "task" && row.id === draggedRow.id) 
-                                        ? { ...row, blockerIds: Array.from(new Set([...(row as TaskRow).blockerIds, targetRowData.id])) } 
-                                        : row
-                                ));
-                            } else {
-                                alert("Нельзя создать блокер: обнаружен цикл или неверный порядок.");
-                                }
-                            }
-                        } else {
-                            // Перестановка строк
-                            setRows(prev => {
-                                const list = prev.slice();
-                                const from = list.findIndex(x => x.id === draggedRow.id);
-                                const to = list.findIndex(x => x.id === targetRowData.id);
-                                if (from<0 || to<0 || from===to) {
-                                    return prev;
-                                }
-                                const [m] = list.splice(from, 1);
-                                list.splice(to, 0, m);
-                                return list;
-                            });
-                        }
-                    }
-                }
-            }
-            
-            // Очищаем состояние
-            setDragTooltip({ visible: false, x: 0, y: 0, task: null, resource: null });
-            setHighlightedRowId(null);
-            setHighlightedWeekIdx(null);
-            setDropPositionRowId(null);
-            setDropPosition('top');
-            dragRowRef.current = null;
-            isDraggingRef.current = false;
-            clearDragAllowed();
-            
-            // Удаляем обработчики
-            document.removeEventListener('mousemove', handleMouseMove);
-            document.removeEventListener('mouseup', handleMouseUp);
-        };
-        
-        // Добавляем обработчики
-        document.addEventListener('mousemove', handleMouseMove);
-        document.addEventListener('mouseup', handleMouseUp);
-    }
-    
-
-    // ====== Блокеры Shift-drag + валидация ======
-    const shiftDragTaskRef = useRef<ID | null>(null);
-    const isShiftPressedRef = useRef<boolean>(false);
-    
-    function onTaskMouseDown(e: React.MouseEvent, t: TaskRow) {
-        shiftDragTaskRef.current = t.id;
-        isShiftPressedRef.current = e.shiftKey;
-    }
-    
-    function onTaskMouseUp(_e: React.MouseEvent, t: TaskRow) {
-        const src = shiftDragTaskRef.current;
-        shiftDragTaskRef.current = null;
-        if (!src || src === t.id) return;
-        // Эта логика теперь обрабатывается в onDropRow
-        return;
-    }
-    function canSetBlocker(srcTaskId: ID, blockerTaskId: ID): boolean {
-        // Нельзя блокировать задачу саму собой
-        if (srcTaskId === blockerTaskId) return false;
-
-        // Создаем граф зависимостей с предполагаемой новой связью
-        const graph = new Map<ID, ID[]>();
-        rows.forEach(r => { 
-            if (r.kind === "task") {
-                graph.set(r.id, (r as TaskRow).blockerIds.slice()); 
-            }
-        });
-        
-        // Добавляем предполагаемую новую связь
-        const currentBlockers = graph.get(srcTaskId) || [];
-        graph.set(srcTaskId, [...currentBlockers, blockerTaskId]);
-
-        // Проверяем на циклические зависимости с помощью DFS
-        function hasCycle(): boolean {
-            const visited = new Set<ID>();
-            const recursionStack = new Set<ID>();
-
-            function dfs(taskId: ID): boolean {
-                if (recursionStack.has(taskId)) {
-                    // Найден цикл
-                    return true;
-                }
-                if (visited.has(taskId)) {
-                    // Уже посещенная вершина, но не в текущем пути рекурсии
-                    return false;
-                }
-
-                visited.add(taskId);
-                recursionStack.add(taskId);
-
-                // Проверяем всех блокеров текущей задачи
-                const blockers = graph.get(taskId) || [];
-                for (const blockerId of blockers) {
-                    if (dfs(blockerId)) {
-                        return true;
-                    }
-                }
-
-                recursionStack.delete(taskId);
-                return false;
-            }
-
-            // Проверяем все задачи в графе
-            for (const taskId of graph.keys()) {
-                if (!visited.has(taskId)) {
-                    if (dfs(taskId)) {
-                        return true;
-                    }
-                }
-            }
-            return false;
-        }
-
-        // Возвращаем true, если циклов нет
-        return !hasCycle();
-    }
-    function removeBlocker(taskId: ID, blockerId: ID) { setRows(prev => prev.map(r => (r.kind === "task" && r.id === taskId) ? { ...r, blockerIds: (r as TaskRow).blockerIds.filter(x => x !== blockerId) } : r)); }
-    
-    // Функция для удаления блокера через стрелку
-    function handleRemoveBlocker(blockerId: string, blockedTaskId: string) {
-        if (blockerId.startsWith('week-')) {
-            // Удаляем блокер недели
-            const weekNumber = parseInt(blockerId.replace('week-', ''));
-            setRows(prev => prev.map(row => 
-                (row.kind === "task" && row.id === blockedTaskId) 
-                    ? { ...row, weekBlockers: (row as TaskRow).weekBlockers.filter(w => w !== weekNumber) } 
-                    : row
-            ));
-        } else {
-            // Удаляем блокер задачи
-        removeBlocker(blockedTaskId, blockerId);
-        }
-    }
 
 
 
     // ====== Фильтры ======
-    type ColumnId = "type"|"status"|"sprintsAuto"|"epic"|"task"|"team"|"fn"|"empl"|"planEmpl"|"planWeeks"|"fact"|"start"|"end"|"autoplan";
-    type FilterState = { [K in ColumnId]?: { search: string; selected: Set<string> } };
-    const [filters, setFilters] = useUrlFilters<ColumnId>();
-    const [filterUi, setFilterUi] = useState<{ col: ColumnId; x:number; y:number } | null>(null);
-    function isFilterActive(col: ColumnId): boolean {
-        const filter = filters[col];
-        return !!(filter && filter.selected.size > 0);
-    }
-    function openFilter(col: ColumnId, x:number, y:number) {
-        setFilterUi({ col, x, y });
-        if (!filters[col]) {
-            setFilters({ ...filters, [col]: { search: "", selected: new Set<string>() } });
-        }
-    }
-    function toggleFilterValue(col: ColumnId, val: string) {
-        const s = new Set(filters[col]?.selected || []);
-        if (s.has(val)) s.delete(val);
-        else s.add(val);
-        setFilters({ ...filters, [col]: { search: filters[col]?.search || "", selected: s } });
-    }
-    function setFilterSearch(col: ColumnId, v:string) {
-        setFilters({ ...filters, [col]: { search: v, selected: filters[col]?.selected || new Set<string>() } });
-    }
-    function clearFilter(col: ColumnId) {
-        const nf: FilterState = { ...filters };
-        delete nf[col];
-        setFilters(nf);
-        setFilterUi(null);
-    }
-    function valueForCol(r: Row, col: ColumnId): string {
-        const t = r as TaskRow;
-        switch(col){
-            case "type": return r.kind === "task" ? "Задача" : "Ресурс";
-            case "status": return r.kind === "task" ? t.status : "";
-            case "sprintsAuto": return r.kind === "task" ? (t.sprintsAuto.join(", ") || "") : "";
-            case "epic": return r.kind === "task" ? (t.epic || "") : "";
-            case "task": return r.kind === "task" ? t.task : "";
-            case "team": return r.kind === "task" ? r.team : (r as ResourceRow).team.join(", ");
-            case "fn": return r.fn;
-            case "empl": return r.empl || "";
-            case "planEmpl": return r.kind === "task" ? String(t.planEmpl) : "";
-            case "planWeeks": return r.kind === "task" ? String(t.planWeeks) : "";
-            case "fact": return r.kind === "task" ? String(t.fact) : "";
-            case "start": return r.kind === "task" ? String(t.startWeek || "") : "";
-            case "end": return r.kind === "task" ? String(t.endWeek || "") : "";
-            case "autoplan": return r.kind === "task" ? (t.autoPlanEnabled ? "on" : "off") : "";
-        }
-    }
-    const filteredRows = useMemo(() => {
-        const result = computedRows.filter(r => {
-            for (const col of Object.keys(filters) as ColumnId[]) {
-                const f = filters[col]!; const val = valueForCol(r, col); if (!f) continue;
-                const tokens = Array.from(f.selected || []); if (tokens.length === 0) continue;
-                // Fix filtering logic: proper OR logic for empty and non-empty values
-                const hit = tokens.some(s => {
-                    // Handle empty values: both "" and "(пусто)" should match empty fields
-                    if (s === "" || s === "(пусто)") {
-                        return !val || val.trim() === "";
-                    }
-                    // Handle non-empty values: exact match to avoid substring issues
-                    return val === s;
-                });
-                if (!hit) return false;
-            } return true;
-        });
-        
-        
-        return result;
-    }, [computedRows, filters]);
 
     // Управление overflow контейнера таблицы в зависимости от количества строк
     useEffect(() => {
@@ -2195,60 +1226,6 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker, autoSave
     }
 
     // ====== Ресайзинг колонок ======
-    const handleResizeStart = (column: string, e: React.MouseEvent) => {
-        e.preventDefault();
-        e.stopPropagation();
-        setIsResizing({
-            column,
-            startX: e.clientX,
-            startWidth: columnWidths[column] || 200
-        });
-    };
-
-    const handleResizeMove = (e: MouseEvent) => {
-        if (!isResizing) return;
-        
-        const deltaX = e.clientX - isResizing.startX;
-        
-        // Используем минимальную ширину из columnWidths
-        const minWidth = columnWidths[isResizing.column] || 20;
-        
-        if (isResizing.column === 'autoplan') {
-            return; // Колонка Auto не ресайзится - фиксированная 50px
-        }
-        
-        const newWidth = Math.max(minWidth, isResizing.startWidth + deltaX);
-        
-        
-        setColumnWidths(prev => {
-            const newState = {
-                ...prev,
-                [isResizing.column]: newWidth
-            };
-            return newState;
-        });
-    };
-
-    const handleResizeEnd = () => {
-        setIsResizing(null);
-    };
-
-    // Добавляем глобальные обработчики для ресайзинга
-    useEffect(() => {
-        if (isResizing) {
-            document.addEventListener('mousemove', handleResizeMove);
-            document.addEventListener('mouseup', handleResizeEnd);
-            document.body.style.cursor = 'col-resize';
-            document.body.style.userSelect = 'none';
-            
-            return () => {
-                document.removeEventListener('mousemove', handleResizeMove);
-                document.removeEventListener('mouseup', handleResizeEnd);
-                document.body.style.cursor = '';
-                document.body.style.userSelect = '';
-            };
-        }
-    }, [isResizing]);
 
     // ====== Автоплан: чекбокс + подтверждение ======
     function toggleAutoPlan(taskId: ID, next: boolean) {
@@ -2587,23 +1564,6 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker, autoSave
     
     // Функция для извлечения значений по умолчанию из активных фильтров
     // Возвращает первое выбранное значение для каждого отфильтрованного поля
-    function getFilterDefaults() {
-        const defaults: Record<string, string> = {};
-        
-        for (const col of Object.keys(filters) as ColumnId[]) {
-            const filter = filters[col];
-            if (filter && filter.selected.size > 0) {
-                // Берем первое значение из Set
-                const firstValue = Array.from(filter.selected)[0];
-                // Игнорируем пустые значения и "(пусто)"
-                if (firstValue && firstValue !== "(пусто)" && firstValue.trim() !== "") {
-                    defaults[col] = firstValue;
-                }
-            }
-        }
-        
-        return defaults;
-    }
     
     function newResource(): ResourceRow {
         const defaults = getFilterDefaults();
@@ -4112,8 +3072,6 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker, autoSave
 
     // ===== helpers (render) =====
     function filteredValuesForColumn(list: Row[], col: ColumnId): string[] { return list.map(r => valueForCol(r, col)).filter(v => v !== undefined); }
-    function isSel(rowId:ID, col:Exclude<ColKey, {week:number}>|"type") { return sel && sel.rowId===rowId && sel.col===col; }
-    function isSelWeek(rowId:ID, w:number) { return sel && sel.rowId===rowId && typeof sel.col==='object' && sel.col.week===w; }
 
 
     function renderHeadWithFilter(label: string, col: ColumnId, _filters: any, isFilterActive: (col: ColumnId) => boolean, openFilter: (col: ColumnId, x: number, y: number) => void, handleResizeStart: (col: string, e: React.MouseEvent) => void, columnWidths: Record<string, number>) {
