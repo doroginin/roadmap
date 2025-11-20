@@ -603,61 +603,47 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker, autoSave
                 return t;
             }
 
-            // Автоплан: используем существующие weeks если они есть И содержат данные, иначе вычисляем
-            const providedWeeks = Array.isArray(t.weeks) && t.weeks.length === TOTAL_WEEKS ? t.weeks.slice() : null;
-            const hasProvidedData = providedWeeks !== null && providedWeeks.some(value => value > 0);
-            
+            // Автоплан включен: всегда вычисляем план заново
+            // (для правильного пересчета при изменении зависимостей)
             const weeks = Array(TOTAL_WEEKS).fill(0) as number[];
             let matched: ResState[] = [];
             
-            if (hasProvidedData) {
-                // Weeks были предоставлены с бэка и содержат данные - используем их как есть
-                for (let w = 0; w < TOTAL_WEEKS; w++) {
-                    weeks[w] = providedWeeks![w] || 0;
-                    if (weeks[w] > 0) {
-                        matched = resources.filter(rs => matchResourceForTask(rs.res, t));
-                        allocateWeekLoadAcrossResources(weeks[w], matched, w);
-                    }
-                }
-            } else {
-                // Weeks не были предоставлены - вычисляем автоплан
-                // Добавляем задачу в стек для отслеживания циклических зависимостей
-                computationStack.add(t.id);
-                
-                let start = 0;
-                try {
-                    const result = freeTotalsForTask(t);
-                    matched = result.matched;
-                    const free = result.free;
-                    if (need > 0 && dur > 0 && matched.length > 0) {
-                        const maxStart = TOTAL_WEEKS - dur + 1;
-                        // ИСПРАВЛЕНИЕ: Начинаем поиск строго после завершения всех блокеров
-                        const minStart = Math.max(1, blocker + 1);
-                        
-                        for (let s = minStart; s <= maxStart; s++) {
-                            let ok = true;
-                            for (let off = 0; off < dur; off++) {
-                                if (free[s - 1 + off] < need) { 
-                                    ok = false; 
-                                    break; 
-                                }
-                            }
-                            if (ok) { 
-                                start = s;
+            // Добавляем задачу в стек для отслеживания циклических зависимостей
+            computationStack.add(t.id);
+            
+            let start = 0;
+            try {
+                const result = freeTotalsForTask(t);
+                matched = result.matched;
+                const free = result.free;
+                if (need > 0 && dur > 0 && matched.length > 0) {
+                    const maxStart = TOTAL_WEEKS - dur + 1;
+                    // ИСПРАВЛЕНИЕ: Начинаем поиск строго после завершения всех блокеров
+                    const minStart = Math.max(1, blocker + 1);
+                    
+                    for (let s = minStart; s <= maxStart; s++) {
+                        let ok = true;
+                        for (let off = 0; off < dur; off++) {
+                            if (free[s - 1 + off] < need) { 
+                                ok = false; 
                                 break; 
                             }
                         }
+                        if (ok) { 
+                            start = s;
+                            break; 
+                        }
                     }
-                } finally {
-                    // Убираем задачу из стека после завершения вычислений
-                    computationStack.delete(t.id);
                 }
-                
-                if (start > 0 && need > 0 && dur > 0) {
-                    for (let off = 0; off < dur; off++) {
-                        weeks[start - 1 + off] = need;
-                        allocateWeekLoadAcrossResources(need, matched, start - 1 + off);
-                    }
+            } finally {
+                // Убираем задачу из стека после завершения вычислений
+                computationStack.delete(t.id);
+            }
+            
+            if (start > 0 && need > 0 && dur > 0) {
+                for (let off = 0; off < dur; off++) {
+                    weeks[start - 1 + off] = need;
+                    allocateWeekLoadAcrossResources(need, matched, start - 1 + off);
                 }
             }
             t.weeks = weeks;
@@ -762,6 +748,44 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker, autoSave
 
     // Store computedRows in ref for use in prepareDataForSave
     const computedRowsRef = useRef<Row[]>([]);
+    const prevComputedRowsRef = useRef<Row[]>([]);
+    
+    // Отслеживаем изменения weeks[] для задач с autoPlanEnabled после пересчета
+    useEffect(() => {
+        if (!changeTracker) return;
+        
+        const prevComputed = prevComputedRowsRef.current;
+        const currentComputed = computedRows;
+        
+        // Проверяем изменения weeks[] только для задач с autoPlanEnabled
+        currentComputed.forEach(currentRow => {
+            if (currentRow.kind !== 'task') return;
+            
+            const currentTask = currentRow as TaskRow;
+            if (!currentTask.autoPlanEnabled) return;
+            
+            // Находим предыдущую версию задачи
+            const prevTask = prevComputed.find(r => r.kind === 'task' && r.id === currentTask.id) as TaskRow | undefined;
+            if (!prevTask) return; // Новая задача, пропускаем
+            
+            // Сравниваем weeks[] массивы
+            const prevWeeks = prevTask.weeks || [];
+            const currentWeeks = currentTask.weeks || [];
+            
+            // Проверяем, изменились ли weeks
+            const weeksChanged = prevWeeks.length !== currentWeeks.length ||
+                prevWeeks.some((val, idx) => val !== currentWeeks[idx]);
+            
+            if (weeksChanged) {
+                // Добавляем изменение в changeTracker
+                changeTracker.addCellChange('task', currentTask.id, 'weeks', prevWeeks, currentWeeks);
+            }
+        });
+        
+        // Сохраняем текущее состояние для следующего сравнения
+        prevComputedRowsRef.current = currentComputed;
+    }, [computedRows, changeTracker]);
+    
     computedRowsRef.current = computedRows;
 
     // ====== Фильтрация ======
@@ -1509,7 +1533,6 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker, autoSave
                 extendedPatch.teamId = found.id;
             }
         }
-        
         
         // Записываем изменения в лог
         if (changeTracker && currentTask) {
