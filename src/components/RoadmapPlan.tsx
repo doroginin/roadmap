@@ -11,10 +11,10 @@ import { generateUUID } from "../utils/uuid";
 
 // Roadmap types and utilities
 import type { ID, Status, Fn, Sprint, ResourceRow, TaskRow, Row } from "./roadmap/types";
-import { range, clamp, fmtDM, cellId } from "./roadmap/utils/calculations";
+import { range, clamp, fmtDM, cellId, calculateTotalWeeks } from "./roadmap/utils/calculations";
 import { hasExpectedStartWeekMismatch } from "./roadmap/utils/taskUtils";
 import { getCellBgClass, getCellBgStyle } from "./roadmap/utils/cellUtils";
-import { buildLinks, TOTAL_WEEKS } from "./roadmap/utils/linkBuilder";
+import { buildLinks } from "./roadmap/utils/linkBuilder";
 import { getFrozenColumnStyle } from "./roadmap/utils/columnStyles";
 import { ArrowOverlay } from "./roadmap/components/ArrowOverlay";
 import { useColumnResize } from "./roadmap/hooks/useColumnResize";
@@ -73,6 +73,11 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker, autoSave
         }
         return "2025-06-02";
     }, [sprints]);
+
+    // Вычисляем общее количество недель на основе спринтов
+    const totalWeeks = useMemo(() => {
+        return calculateTotalWeeks(sprints, WEEK0);
+    }, [sprints, WEEK0]);
 
     function mapWeekToSprintLocal(weekIndex0: number): string | null {
         const startDate = new Date(WEEK0 + "T00:00:00Z");
@@ -306,18 +311,18 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker, autoSave
                 loadedVersionRef.current = data.version;
                 
                 // Ensure tasks have weeks array initialized
-                // Pad weeks array to TOTAL_WEEKS if it's shorter
+                // Pad weeks array to totalWeeks if it's shorter
                 const tasksWithWeeks = (data.tasks || []).map(task => {
                     let weeks: number[];
                     if (Array.isArray(task.weeks) && task.weeks.length > 0) {
-                        // Use provided weeks and pad to TOTAL_WEEKS if needed
+                        // Use provided weeks and pad to totalWeeks if needed
                         weeks = [...task.weeks];
-                        while (weeks.length < TOTAL_WEEKS) {
+                        while (weeks.length < totalWeeks) {
                             weeks.push(0);
                         }
                     } else {
                         // Initialize with zeros
-                        weeks = Array(TOTAL_WEEKS).fill(0);
+                        weeks = Array(totalWeeks).fill(0);
                     }
                     return {
                         ...task,
@@ -373,7 +378,7 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker, autoSave
     function computeAllRowsLocal(list: Row[]): { rows: Row[]; resLoad: Record<ID, number[]> } {
         const resources: ResState[] = list.filter(r => r.kind === 'resource').map(r => ({ 
             res: r as ResourceRow, 
-            load: Array(TOTAL_WEEKS).fill(0) 
+            load: Array(totalWeeks).fill(0) 
         }));
         const out: Row[] = [];
         const ceil = (x: number) => Math.ceil(Math.max(0, x || 0));
@@ -464,13 +469,13 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker, autoSave
                         const matched = resources.filter(rs => matchResourceForTask(rs.res, originalTask));
                         if (matched.length > 0) {
                             // Вычисляем свободные ресурсы с учетом уже запланированных задач
-                            const free = Array(TOTAL_WEEKS).fill(0);
-                            for (let w = 0; w < TOTAL_WEEKS; w++) {
+                            const free = Array(totalWeeks).fill(0);
+                            for (let w = 0; w < totalWeeks; w++) {
                                 free[w] = matched.reduce((sum, rs) => sum + Math.max(0, rs.res.weeks[w] - rs.load[w]), 0);
                             }
 
                             // Ищем первое доступное окно после блокеров И после обработанных задач выше
-                            const maxStart = TOTAL_WEEKS - dur + 1;
+                            const maxStart = totalWeeks - dur + 1;
                             for (let s = Math.max(1, earliestStartAfterProcessedTasks + 1); s <= maxStart; s++) {
                                 let ok = true;
                                 for (let off = 0; off < dur; off++) {
@@ -519,7 +524,7 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker, autoSave
 
         function freeTotalsForTask(t: TaskRow): { matched: ResState[]; free: number[] } {
             const matched = resources.filter(rs => matchResourceForTask(rs.res, t));
-            const free = range(TOTAL_WEEKS).map(w => 
+            const free = range(totalWeeks).map(w => 
                 matched.reduce((s, rs) => s + Math.max(0, (rs.res.weeks[w] || 0) - (rs.load[w] || 0)), 0)
             );
             return { matched, free };
@@ -563,7 +568,7 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker, autoSave
                 t.startWeek = null;
                 t.endWeek = null;
                 t.fact = 0;
-                t.weeks = Array(TOTAL_WEEKS).fill(0);
+                t.weeks = Array(totalWeeks).fill(0);
                 t.sprintsAuto = [];
                 return t;
             }
@@ -587,7 +592,7 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker, autoSave
             if (!t.autoPlanEnabled) {
                 const weeks = t.weeks.slice();
                 const matched = resources.filter(rs => matchResourceForTask(rs.res, t));
-                for (let w = 0; w < TOTAL_WEEKS; w++) {
+                for (let w = 0; w < totalWeeks; w++) {
                     if (weeks[w] > 0) allocateWeekLoadAcrossResources(weeks[w], matched, w);
                 }
                 const nz = weeks.map((v, i) => v > 0 ? i + 1 : 0).filter(Boolean) as number[];
@@ -600,7 +605,7 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker, autoSave
 
             // Автоплан включен: всегда вычисляем план заново
             // (для правильного пересчета при изменении зависимостей)
-            const weeks = Array(TOTAL_WEEKS).fill(0) as number[];
+            const weeks = Array(totalWeeks).fill(0) as number[];
             let matched: ResState[] = [];
             
             // Добавляем задачу в стек для отслеживания циклических зависимостей
@@ -612,7 +617,7 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker, autoSave
                 matched = result.matched;
                 const free = result.free;
                 if (need > 0 && dur > 0 && matched.length > 0) {
-                    const maxStart = TOTAL_WEEKS - dur + 1;
+                    const maxStart = totalWeeks - dur + 1;
                     // ИСПРАВЛЕНИЕ: Начинаем поиск строго после завершения всех блокеров
                     const minStart = Math.max(1, blocker + 1);
                     
@@ -880,7 +885,7 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker, autoSave
     // Порядок колонок для стрелок
     const columnOrder = useMemo<(ColKey)[]>(() => {
         const base: (ColKey)[] = ["type","status","sprintsAuto","epic","task","team","fn","empl","planEmpl","planWeeks","autoplan"];
-        const weeks: (ColKey)[] = range(TOTAL_WEEKS).map(i => ({ week: i }));
+        const weeks: (ColKey)[] = range(totalWeeks).map(i => ({ week: i }));
         return [...base, ...weeks];
     }, []);
 
@@ -1172,8 +1177,8 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker, autoSave
 
     const links = useMemo(() => {
         const tasks = filteredRows.filter(r => r.kind === "task") as TaskRow[];
-        return buildLinks(tasks);
-    }, [filteredRows]);
+        return buildLinks(tasks, totalWeeks);
+    }, [filteredRows, totalWeeks]);
 
     // ====== Колоночные ширины и синхронизация горизонтального скролла ======
     const COL_WIDTH: Partial<Record<ColumnId, string>> = useMemo(() => {
@@ -1263,7 +1268,7 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker, autoSave
                 const tempTask: TaskRow = {
                     ...t,
                     autoPlanEnabled: true,
-                    weeks: Array(TOTAL_WEEKS).fill(0),
+                    weeks: Array(totalWeeks).fill(0),
                     startWeek: null,
                     endWeek: null,
                     fact: 0
@@ -1291,11 +1296,11 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker, autoSave
                 if (!ok) return;
 
                 const oldWeeks = t.weeks.slice();
-                const newWeeks = Array(TOTAL_WEEKS).fill(0);
+                const newWeeks = Array(totalWeeks).fill(0);
 
                 setRows(prev => prev.map(r =>
                     (r.kind === "task" && r.id === taskId)
-                        ? { ...(r as TaskRow), autoPlanEnabled: true, weeks: Array(TOTAL_WEEKS).fill(0) }
+                        ? { ...(r as TaskRow), autoPlanEnabled: true, weeks: Array(totalWeeks).fill(0) }
                         : r
                 ));
 
@@ -1306,7 +1311,7 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker, autoSave
             } else {
                 // Планы идентичны, но всё равно очищаем weeks для включения автоплана
                 const oldWeeks = t.weeks.slice();
-                const newWeeks = Array(TOTAL_WEEKS).fill(0);
+                const newWeeks = Array(totalWeeks).fill(0);
                 
                 setRows(prev => prev.map(r =>
                     (r.kind === "task" && r.id === taskId)
@@ -1354,16 +1359,16 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker, autoSave
     
     // Функция для заполнения всех ячеек между двумя позициями
     function fillWeeksBetween(weeks: number[], fromW: number, toW: number, value: number): number[] {
-        // Расширяем массив до TOTAL_WEEKS если он короче
+        // Расширяем массив до totalWeeks если он короче
         const result = weeks.slice();
-        while (result.length < TOTAL_WEEKS) {
+        while (result.length < totalWeeks) {
             result.push(0);
         }
         
         const start = Math.min(fromW, toW);
         const end = Math.max(fromW, toW);
         
-        for (let i = start; i <= end && i < TOTAL_WEEKS; i++) {
+        for (let i = start; i <= end && i < totalWeeks; i++) {
             result[i] = value;
         }
         
@@ -1601,7 +1606,7 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker, autoSave
             team: teamValue,
             teamIds: teamUUIDs,
             fn: (defaults.fn || "") as Fn,
-            weeks: Array(TOTAL_WEEKS).fill(0) 
+            weeks: Array(totalWeeks).fill(0) 
         };
     }
     
@@ -1652,7 +1657,7 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker, autoSave
             endWeek: null,
             expectedStartWeek: null,
             autoPlanEnabled: true,
-            weeks: Array(TOTAL_WEEKS).fill(0)
+            weeks: Array(totalWeeks).fill(0)
         };
     }
 
@@ -2035,7 +2040,7 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker, autoSave
                                 <span>Auto</span>
                             </th>
                             {/* Заголовки для недель */}
-                            {range(TOTAL_WEEKS).map(w => { 
+                            {range(totalWeeks).map(w => { 
                                 const h = weekHeaderLabelLocal(w); 
                                 return (
                                 <th key={w} className="px-2 py-2 text-center whitespace-nowrap align-middle" style={{width: '3.5rem', border: '1px solid rgb(226, 232, 240)' }}>
@@ -2148,7 +2153,7 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker, autoSave
                                 >—</td>
 
                                 {/* Таймлайн недель ресурса */}
-                                {range(TOTAL_WEEKS).map(w => (
+                                {range(totalWeeks).map(w => (
                                     <td key={w} data-week-idx={w} data-testid={`week-${w + 1}`} className={`px-0 py-0 align-middle week-cell`} style={{width: '3.5rem', background: resourceCellBg(r as ResourceRow, w), ...getCellBorderStyle(isSelWeek(r.id,w)), ...getCellBorderStyleForDrag(r.id), ...getWeekColumnHighlightStyle(w)}}>
                                         <div
                                             onMouseDown={(e)=>onWeekCellMouseDown(e,r,w)}
@@ -2449,12 +2454,12 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker, autoSave
                                     {editing?.rowId===r.id && editing?.col==="planWeeks" ? (
                                         <input data-testid={`planWeeks-input-${r.id}`} autoFocus type="number" className="w-full h-full box-border min-w-0 outline-none bg-transparent" style={{ border: 'none', padding: 0, margin: 0 }} defaultValue={(r as TaskRow).planWeeks}
                                                onKeyDown={(e)=>{
-                                                   if(e.key==='Enter'){ updateTask(r.id,{planWeeks: clamp(parseInt((e.target as HTMLInputElement).value||"0"),0,TOTAL_WEEKS)}); commitEdit(); }
-                                                   if (e.key === 'Tab' && e.shiftKey) { e.preventDefault(); e.stopPropagation(); updateTask(r.id,{planWeeks: clamp(parseInt((e.target as HTMLInputElement).value||"0"),0,TOTAL_WEEKS)}); navigateInEditMode('prev', r.id, 'planWeeks'); return; }
-                                                   if(e.key==='Tab'){ e.preventDefault(); updateTask(r.id,{planWeeks: clamp(parseInt((e.target as HTMLInputElement).value||"0"),0,TOTAL_WEEKS)}); navigateInEditMode('next', r.id, 'planWeeks'); }
+                                                   if(e.key==='Enter'){ updateTask(r.id,{planWeeks: clamp(parseInt((e.target as HTMLInputElement).value||"0"),0,totalWeeks)}); commitEdit(); }
+                                                   if (e.key === 'Tab' && e.shiftKey) { e.preventDefault(); e.stopPropagation(); updateTask(r.id,{planWeeks: clamp(parseInt((e.target as HTMLInputElement).value||"0"),0,totalWeeks)}); navigateInEditMode('prev', r.id, 'planWeeks'); return; }
+                                                   if(e.key==='Tab'){ e.preventDefault(); updateTask(r.id,{planWeeks: clamp(parseInt((e.target as HTMLInputElement).value||"0"),0,totalWeeks)}); navigateInEditMode('next', r.id, 'planWeeks'); }
                                                    if(e.key==='Escape'){ cancelEditRef.current=true; stopEdit(); }
                                               }}
-                                               onBlur={(e)=>{ if(!cancelEditRef.current){ updateTask(r.id,{planWeeks: clamp(parseInt((e.target as HTMLInputElement).value||"0"),0,TOTAL_WEEKS)}); } stopEdit(); }} />
+                                               onBlur={(e)=>{ if(!cancelEditRef.current){ updateTask(r.id,{planWeeks: clamp(parseInt((e.target as HTMLInputElement).value||"0"),0,totalWeeks)}); } stopEdit(); }} />
                                     ) : (<span>{(r as TaskRow).planWeeks}</span>)}
                                 </td>
 
@@ -2470,7 +2475,7 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker, autoSave
                     </td>
 
                     {/* Таймлайн с горизонтальным скроллом */}
-                    {range(TOTAL_WEEKS).map(w => (
+                    {range(totalWeeks).map(w => (
                         <td key={w} id={cellId(r.id, w)} data-row-id={r.id} data-week-idx={w} data-testid={`week-${w + 1}`} className={`px-0 py-0 align-middle ${getCellBorderClass(r.id)} week-cell`} style={{width: '3.5rem', zIndex: 2, background: ((r as TaskRow).weeks[w] || 0) > 0 ? cellBgForTask(r as TaskRow) : undefined, color: ((r as TaskRow).weeks[w] || 0) > 0 ? getText(teamFnColors[teamKeyFromTask(r as TaskRow)]) : undefined, ...getCellBorderStyle(isSelWeek(r.id,w)), ...getCellBorderStyleForDrag(r.id), ...getWeekColumnHighlightStyle(w)}} onMouseDown={(e)=>onWeekCellMouseDown(e,r,w)} onMouseEnter={(e)=>onWeekCellMouseEnter(e,r,w)} onDoubleClick={(e)=>onWeekCellDoubleClick(e,r,w)}>
                             {editing?.rowId===r.id && typeof editing.col==='object' && editing.col.week===w ? (
                                 <input

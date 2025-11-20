@@ -5,9 +5,7 @@
 import type { TaskRow, Link } from "../types";
 import { lastAllocatedWeek, firstAllocatedWeek } from "./taskUtils";
 
-export const TOTAL_WEEKS = 16;
-
-export function buildLinks(tasks: TaskRow[]): Link[] {
+export function buildLinks(tasks: TaskRow[], totalWeeks: number = 16): Link[] {
     const links: Link[] = [];
     const taskMap = new Map(tasks.map(t => [t.id, t]));
 
@@ -28,7 +26,7 @@ export function buildLinks(tasks: TaskRow[]): Link[] {
                 // Если нет конфликта, стрелка ведет на первую неделю задачи
                 const targetWeek = isConflict ? fromW + 1 : taskFirstW;
 
-                if (targetWeek != null && targetWeek < 16) { // проверяем что неделя в пределах таблицы
+                if (targetWeek != null && targetWeek < totalWeeks) { // проверяем что неделя в пределах таблицы
                     links.push({
                         from: { taskId: blockerId, weekIdx: fromW },
                         to: { taskId: task.id, weekIdx: targetWeek },
@@ -46,7 +44,7 @@ export function buildLinks(tasks: TaskRow[]): Link[] {
             const weekIdx = weekNumber - 1; // Преобразуем в 0-based
             const taskFirstW = firstAllocatedWeek(task);
 
-            if (weekIdx >= 0 && weekIdx < 16) { // проверяем что неделя в пределах таблицы
+            if (weekIdx >= 0 && weekIdx < totalWeeks) { // проверяем что неделя в пределах таблицы
                 // Определяем есть ли конфликт планирования (если первая неделя <= блокирующей недели)
                 const isConflict = taskFirstW != null && taskFirstW <= weekIdx;
 
@@ -54,7 +52,7 @@ export function buildLinks(tasks: TaskRow[]): Link[] {
                 // Если нет конфликта, стрелка ведет на первую неделю задачи
                 const targetWeek = isConflict ? weekIdx + 1 : taskFirstW;
 
-                if (targetWeek != null && targetWeek < 16) {
+                if (targetWeek != null && targetWeek < totalWeeks) {
                     // Стрелка выходит из самой блокирующей недели
                     links.push({
                         from: { taskId: task.id, weekIdx: weekIdx },
