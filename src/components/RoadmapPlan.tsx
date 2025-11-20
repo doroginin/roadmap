@@ -50,12 +50,7 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker, autoSave
     const [tab, setTab] = useState<Tab>("plan");
 
     // ===== Спринты (редактируемые) =====
-    const [sprints, setSprints] = useState<Sprint[]>([
-        { code: "Q3S1", start: "2025-06-02", end: "2025-06-29" },
-        { code: "Q3S2", start: "2025-06-30", end: "2025-07-27" },
-        { code: "Q3S3", start: "2025-07-28", end: "2025-08-24" },
-        { code: "Q3S4", start: "2025-08-25", end: "2025-09-21" },
-    ]);
+    const [sprints, setSprints] = useState<Sprint[]>([]);
 
     // ===== Команды (редактируемые) =====
     type LocalTeamData = {
