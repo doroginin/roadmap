@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { waitForAutoSave } from '../helpers/autosave';
 
 test.describe('AutoSave Debounce Tests', () => {
   test('should send only one request when making two rapid changes within 1 second', async ({ page }) => {

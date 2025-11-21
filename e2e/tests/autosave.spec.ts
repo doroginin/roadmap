@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { waitForAutoSave } from '../helpers/autosave';
 
 test.describe('Save functionality', () => {
   test('should save task name changes automatically', async ({ page }) => {
@@ -69,8 +70,8 @@ test.describe('Save functionality', () => {
     await expect(taskInput).not.toBeVisible();
     await expect(taskCell).toContainText(initialTaskName);
 
-    // Ждем автосохранения (1 секунда delay + запас на обработку)
-    await page.waitForTimeout(2000);
+    // Ждем автосохранения
+    await waitForAutoSave(page);
 
     // Шаг 4: Редактируем название задачи
     await taskCell.dblclick();
@@ -84,8 +85,8 @@ test.describe('Save functionality', () => {
     await expect(taskInput2).not.toBeVisible();
     await expect(taskCell).toContainText(newTaskName);
 
-    // Ждем автосохранения (1 секунда delay + запас на обработку)
-    await page.waitForTimeout(2000);
+    // Ждем автосохранения
+    await waitForAutoSave(page);
 
     console.log('Data saved successfully');
 

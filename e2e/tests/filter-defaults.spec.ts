@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { waitForAutoSave } from '../helpers/autosave';
 
 test.describe('Filter Defaults for New Items', () => {
   test('should create new resource with filter defaults', async ({ page }) => {

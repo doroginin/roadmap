@@ -12,9 +12,10 @@ interface DragTooltip {
 interface DragAndDropProps {
     rows: Row[];
     setRows: React.Dispatch<React.SetStateAction<Row[]>>;
+    changeTracker?: any;
 }
 
-export function useDragAndDrop({ rows, setRows }: DragAndDropProps) {
+export function useDragAndDrop({ rows, setRows, changeTracker }: DragAndDropProps) {
     // ====== Drag state ======
     const dragRowRef = useRef<{ id: ID; kind: "resource" | "task" } | null>(null);
     const dragAllowedRef = useRef<boolean>(false);
@@ -151,14 +152,39 @@ export function useDragAndDrop({ rows, setRows }: DragAndDropProps) {
         if (blockerId.startsWith('week-')) {
             // Удаляем блокер недели
             const weekNumber = parseInt(blockerId.replace('week-', ''));
+
+            // Получаем текущие блокеры недель до изменения
+            const taskRow = rows.find(r => r.kind === "task" && r.id === blockedTaskId) as TaskRow | undefined;
+            const oldWeekBlockers = taskRow?.weekBlockers || [];
+            const newWeekBlockers = oldWeekBlockers.filter(w => w !== weekNumber);
+
             setRows(prev => prev.map(row =>
                 (row.kind === "task" && row.id === blockedTaskId)
-                    ? { ...row, weekBlockers: (row as TaskRow).weekBlockers.filter(w => w !== weekNumber) }
+                    ? { ...row, weekBlockers: newWeekBlockers }
                     : row
             ));
+
+            // Отслеживаем изменение
+            if (changeTracker) {
+                changeTracker.addCellChange('task', blockedTaskId, 'weekBlockers', oldWeekBlockers, newWeekBlockers);
+            }
         } else {
             // Удаляем блокер задачи
-            removeBlocker(blockedTaskId, blockerId);
+            // Получаем текущие блокеры до изменения
+            const taskRow = rows.find(r => r.kind === "task" && r.id === blockedTaskId) as TaskRow | undefined;
+            const oldBlockerIds = taskRow?.blockerIds || [];
+            const newBlockerIds = oldBlockerIds.filter(x => x !== blockerId);
+
+            setRows(prev => prev.map(r =>
+                (r.kind === "task" && r.id === blockedTaskId)
+                    ? { ...r, blockerIds: newBlockerIds }
+                    : r
+            ));
+
+            // Отслеживаем изменение
+            if (changeTracker) {
+                changeTracker.addCellChange('task', blockedTaskId, 'blockerIds', oldBlockerIds, newBlockerIds);
+            }
         }
     }
 
@@ -364,11 +390,21 @@ export function useDragAndDrop({ rows, setRows }: DragAndDropProps) {
                     if (weekIdx >= 0) {
                         const weekNumber = weekIdx + 1; // Преобразуем в 1-based
 
+                        // Получаем текущие блокеры недель до изменения
+                        const taskRow = rows.find(r => r.kind === "task" && r.id === draggedRow.id) as TaskRow | undefined;
+                        const oldWeekBlockers = taskRow?.weekBlockers || [];
+                        const newWeekBlockers = Array.from(new Set([...oldWeekBlockers, weekNumber]));
+
                         setRows(prev => prev.map(row =>
                             (row.kind === "task" && row.id === draggedRow.id)
-                                ? { ...row, weekBlockers: Array.from(new Set([...(row as TaskRow).weekBlockers, weekNumber])) }
+                                ? { ...row, weekBlockers: newWeekBlockers }
                                 : row
                         ));
+
+                        // Отслеживаем изменение
+                        if (changeTracker) {
+                            changeTracker.addCellChange('task', draggedRow.id, 'weekBlockers', oldWeekBlockers, newWeekBlockers);
+                        }
 
                         // Очищаем состояние и выходим
                         setDragTooltip({ visible: false, x: 0, y: 0, task: null, resource: null });
@@ -401,11 +437,21 @@ export function useDragAndDrop({ rows, setRows }: DragAndDropProps) {
                                 // Не делаем ничего, просто игнорируем
                             } else {
                                 if (canSetBlocker(draggedRow.id, targetRowData.id)) {
+                                    // Получаем текущие блокеры до изменения
+                                    const taskRow = rows.find(r => r.kind === "task" && r.id === draggedRow.id) as TaskRow | undefined;
+                                    const oldBlockerIds = taskRow?.blockerIds || [];
+                                    const newBlockerIds = Array.from(new Set([...oldBlockerIds, targetRowData.id]));
+
                                     setRows(prev => prev.map(row =>
                                         (row.kind === "task" && row.id === draggedRow.id)
-                                            ? { ...row, blockerIds: Array.from(new Set([...(row as TaskRow).blockerIds, targetRowData.id])) }
+                                            ? { ...row, blockerIds: newBlockerIds }
                                             : row
                                     ));
+
+                                    // Отслеживаем изменение
+                                    if (changeTracker) {
+                                        changeTracker.addCellChange('task', draggedRow.id, 'blockerIds', oldBlockerIds, newBlockerIds);
+                                    }
                                 } else {
                                     alert("Нельзя создать блокер: обнаружен цикл или неверный порядок.");
                                 }

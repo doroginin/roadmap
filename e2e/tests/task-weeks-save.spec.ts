@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { waitForAutoSave } from '../helpers/autosave';
 
 test.describe('Task Weeks Save functionality', () => {
   test('should create task, save weeks plan, reload page, verify data, and delete task', async ({ page }) => {

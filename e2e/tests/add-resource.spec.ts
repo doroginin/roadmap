@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { waitForAutoSave } from '../helpers/autosave';
 
 test.describe('Add Resource functionality', () => {
   test('should add a new resource, save it, and delete it', async ({ page }) => {

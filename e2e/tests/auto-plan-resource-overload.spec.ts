@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { waitForAutoSave } from '../helpers/autosave';
 
 test.describe('Auto Plan and Resource Overload', () => {
   test('should auto-plan task, detect overload on manual edit, and restore auto-plan', async ({ page }) => {

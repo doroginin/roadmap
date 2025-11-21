@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { waitForAutoSave } from '../helpers/autosave';
 
 test.describe('Auto Plan Recalculation', () => {
   test('should recalculate plan when planWeeks or planEmpl changes for task with autoPlanEnabled', async ({ page }) => {
@@ -104,7 +105,8 @@ test.describe('Auto Plan Recalculation', () => {
     // Save and wait for auto-plan to trigger
     console.log('Saving and waiting for auto-plan calculation...\n');
     await page.getByTestId('manual-save-button').click();
-    await page.waitForTimeout(500);
+    // Ждем автосохранения
+    await waitForAutoSave(page);
 
     // Step 5: Verify initial auto-plan (should be on weeks 1-3)
     console.log('✅ Step 5: Verifying initial auto-plan scheduled on weeks 1-3');
@@ -125,8 +127,8 @@ test.describe('Auto Plan Recalculation', () => {
     await planWeeksInput2.press('Enter');
     console.log('✅ planWeeks changed to 5');
 
-    // Wait for re-calculation
-    await page.waitForTimeout(500);
+    // Ждем автосохранения и пересчета плана
+    await waitForAutoSave(page);
 
     // Step 7: Verify plan was recalculated (should now be on weeks 1-5)
     console.log('\n✅ Step 7: Verifying plan was recalculated to weeks 1-5');
@@ -151,8 +153,8 @@ test.describe('Auto Plan Recalculation', () => {
     await planEmplInput2.press('Enter');
     console.log('✅ planEmpl changed to 0.5');
 
-    // Wait for re-calculation
-    await page.waitForTimeout(500);
+    // Ждем автосохранения и пересчета плана
+    await waitForAutoSave(page);
 
     // Step 9: Verify plan was recalculated (should still be on weeks 1-5 but with value 0.5)
     console.log('\n✅ Step 9: Verifying plan was recalculated with new planEmpl value');

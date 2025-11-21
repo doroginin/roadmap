@@ -923,6 +923,7 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker, autoSave
     } = useDragAndDrop({
         rows,
         setRows,
+        changeTracker,
     });
 
     // Функция для форматирования даты в формат DD.MM.YYYY

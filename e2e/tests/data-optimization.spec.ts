@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { waitForAutoSave } from '../helpers/autosave';
 
 test.describe('Data Optimization Tests', () => {
   test('should send only changed task data to API', async ({ page }) => {
@@ -95,9 +96,9 @@ test.describe('Data Optimization Tests', () => {
 
     // Шаг 4: Сохраняем данные вручную
     await page.getByTestId('manual-save-button').click();
-    
-    // Ждем немного для завершения сохранения
-    await page.waitForTimeout(1000);
+
+    // Ждем автосохранения
+    await waitForAutoSave(page);
 
     // Проверяем, что был отправлен PUT запрос
     expect(apiRequests.length).toBeGreaterThanOrEqual(1);
@@ -236,9 +237,9 @@ test.describe('Data Optimization Tests', () => {
 
     // Сохраняем данные вручную
     await page.getByTestId('manual-save-button').click();
-    
-    // Ждем немного для завершения сохранения
-    await page.waitForTimeout(1000);
+
+    // Ждем автосохранения
+    await waitForAutoSave(page);
 
     // Проверяем, что был отправлен PUT запрос
     expect(apiRequests.length).toBeGreaterThanOrEqual(1);
@@ -351,7 +352,7 @@ test.describe('Data Optimization Tests', () => {
     await expect(taskCell).toContainText(initialTaskName);
 
     // Ждем автосохранения
-    await page.waitForTimeout(2000);
+    await waitForAutoSave(page);
 
     // Создаем новый ресурс
     await addButton.click();
@@ -412,13 +413,11 @@ test.describe('Data Optimization Tests', () => {
     await resourceInput2.fill(newResourceName);
     await resourceInput2.press('Enter');
 
-    // Ждем немного для обработки изменений
-
     // Сохраняем данные вручную
     await page.getByTestId('manual-save-button').click();
-    
-    // Ждем немного для завершения сохранения
-    await page.waitForTimeout(2000);
+
+    // Ждем автосохранения
+    await waitForAutoSave(page);
 
     // Проверяем, что был отправлен PUT запрос
     expect(apiRequests.length).toBeGreaterThanOrEqual(1);
