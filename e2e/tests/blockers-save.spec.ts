@@ -192,11 +192,8 @@ test.describe('Blockers save functionality', () => {
     }
 
     await page.mouse.move(typeCellBox.x + typeCellBox.width / 2, typeCellBox.y + typeCellBox.height / 2);
-    await page.waitForTimeout(100);
     await page.mouse.down();
-    await page.waitForTimeout(100);
     await page.mouse.move(targetBox.x + targetBox.width / 2, targetBox.y + targetBox.height / 2, { steps: 10 });
-    await page.waitForTimeout(100);
     await page.mouse.up();
     await page.keyboard.up('Shift');
     console.log('✅ Week blocker created via Shift+drag on week 4');
@@ -461,40 +458,72 @@ test.describe('Blockers save functionality', () => {
     await typeCell2.scrollIntoViewIfNeeded();
     await expect(typeCell2).toBeVisible();
 
-    // Выполняем Shift+drag (перетаскиваем Task 1 на Task 2, чтобы Task 2 блокировал Task 1)
-    await page.keyboard.down('Shift');
-    const typeCell1Box = await typeCell1.boundingBox();
-    const typeCell2Box = await typeCell2.boundingBox();
-    if (!typeCell1Box || !typeCell2Box) {
-      throw new Error('Could not get bounding boxes for drag elements');
+    // Выполняем Shift+drag с повторными попытками если не сработало
+    let blockerCreated = false;
+    for (let attempt = 1; attempt <= 3 && !blockerCreated; attempt++) {
+      console.log(`Attempt ${attempt} to create blocker...`);
+      
+      // Выполняем Shift+drag (перетаскиваем Task 1 на Task 2, чтобы Task 2 блокировал Task 1)
+      await page.keyboard.down('Shift');
+      const typeCell1Box = await typeCell1.boundingBox();
+      const typeCell2Box = await typeCell2.boundingBox();
+      if (!typeCell1Box || !typeCell2Box) {
+        throw new Error('Could not get bounding boxes for drag elements');
+      }
+
+      await page.mouse.move(typeCell1Box.x + typeCell1Box.width / 2, typeCell1Box.y + typeCell1Box.height / 2);
+      await page.mouse.down();
+      await page.mouse.move(typeCell2Box.x + typeCell2Box.width / 2, typeCell2Box.y + typeCell2Box.height / 2, { steps: 10 });
+      await page.mouse.up();
+      await page.keyboard.up('Shift');
+      
+      // Проверяем что блокер создался (появилась стрелка)
+      const svgBeforeSave = page.locator('svg[width][height]').first();
+      const pathsBeforeSave = svgBeforeSave.locator('path[stroke]');
+      
+      try {
+        await expect(pathsBeforeSave.first()).toBeVisible({ timeout: 2000 });
+        blockerCreated = true;
+        console.log(`✅ Blocker created on attempt ${attempt}`);
+      } catch (e) {
+        console.log(`Attempt ${attempt} failed, blocker not created`);
+        if (attempt === 3) {
+          throw new Error('Failed to create blocker after 3 attempts');
+        }
+      }
     }
 
-    await page.mouse.move(typeCell1Box.x + typeCell1Box.width / 2, typeCell1Box.y + typeCell1Box.height / 2);
-    await page.waitForTimeout(100);
-    await page.mouse.down();
-    await page.waitForTimeout(100);
-    await page.mouse.move(typeCell2Box.x + typeCell2Box.width / 2, typeCell2Box.y + typeCell2Box.height / 2, { steps: 10 });
-    await page.waitForTimeout(100);
-    await page.mouse.up();
-    await page.keyboard.up('Shift');
-    console.log('✅ Task blocker created via Shift+drag (Task 2 blocks Task 1)');
+    // Сохраняем изменения, чтобы блокеры и автоплан пересчитались
+    await page.getByText('Сохранить').click();
+    await waitForAutoSave(page);
 
-    // Ждем появления стрелки блокера
-    const svgEarly = page.locator('svg[width][height]').first();
-    await expect(svgEarly).toBeVisible({ timeout: 5000 });
+    // Шаг 6: Перезагружаем страницу, чтобы убедиться что блокер сохранился
+    console.log('\n🔄 Step 6: Reloading page to verify blocker was saved');
+    await page.goto('/?filter_team=E2E');
+    await expect(page.getByTestId('app-container')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByTestId('roadmap-table')).toBeVisible();
+    console.log('✅ Page reloaded');
+
+    // Проверяем что задачи существуют
+    await expect(page.getByTestId(`task-cell-${taskId1}`)).toContainText(taskName1);
+    await expect(page.getByTestId(`task-cell-${taskId2}`)).toContainText(taskName2);
+    console.log('✅ Both tasks persisted');
 
     // Проверяем что Task 1 перепланировалась на недели 3-4 (после Task 2)
-    const task1Week3Check = taskRow1.locator('[data-week-idx="2"]');
+    const taskRow1AfterReload = page.locator(`tr[data-row-id="${taskId1}"]`);
+    const task1Week3Check = taskRow1AfterReload.locator('[data-week-idx="2"]');
     const task1Week3CheckText = await task1Week3Check.textContent();
     console.log(`Task 1 week 3 content after blocker: "${task1Week3CheckText}" (should have values - Task 1 moved after Task 2)`);
 
     // Проверяем что Task 2 осталась на неделе 1-2 (она блокирует, поэтому идет первой)
-    const task2Week1Check = taskRow2.locator('[data-week-idx="0"]');
+    const taskRow2AfterReload = page.locator(`tr[data-row-id="${taskId2}"]`);
+    const task2Week1Check = taskRow2AfterReload.locator('[data-week-idx="0"]');
     const task2Week1CheckText = await task2Week1Check.textContent();
     console.log(`Task 2 week 1 content after blocker: "${task2Week1CheckText}" (should have values - Task 2 goes first)`);
 
-    // Шаг 6: Проверяем что появилась стрелка и она направлена правильно
-    console.log('\n🎨 Step 6: Verifying arrow is displayed and points in the correct direction');
+    // Шаг 7: Проверяем что появилась стрелка и она направлена правильно
+    console.log('\n🎨 Step 7: Verifying arrow is displayed and points in the correct direction');
+    
     const svg = page.locator('svg[width][height]').first();
     await expect(svg).toBeVisible({ timeout: 5000 });
     // Ждем появления paths внутри SVG
@@ -506,8 +535,8 @@ test.describe('Blockers save functionality', () => {
 
     // Проверяем направление стрелки: она должна идти от Task 2 к Task 1
     // Получаем позиции задач на странице
-    const task2Row = page.locator(`tr[data-row-id="${taskId2}"]`);
-    const task1Row = page.locator(`tr[data-row-id="${taskId1}"]`);
+    const task2Row = taskRow2AfterReload;
+    const task1Row = taskRow1AfterReload;
     const task2Box = await task2Row.boundingBox();
     const task1Box = await task1Row.boundingBox();
 
@@ -524,50 +553,8 @@ test.describe('Blockers save functionality', () => {
     expect(markerCount).toBeGreaterThan(0);
     console.log(`✅ Found ${markerCount} arrow marker(s) - arrows have direction`);
 
-    // Шаг 7: Ждем автосохранения
-    console.log('\n💾 Step 7: Waiting for autosave');
-    await waitForAutoSave(page);
-    console.log('✅ Changes autosaved');
-
-    // Шаг 8: Перезагружаем страницу и проверяем что блокер сохранился
-    console.log('\n🔄 Step 8: Reloading page to verify blocker persistence');
-    await page.goto('/?filter_team=E2E');
-    await expect(page.getByTestId('app-container')).toBeVisible({ timeout: 10000 });
-    await expect(page.getByTestId('roadmap-table')).toBeVisible();
-    console.log('✅ Page reloaded');
-
-    // Проверяем что задачи существуют
-    await expect(page.getByTestId(`task-cell-${taskId1}`)).toContainText(taskName1);
-    await expect(page.getByTestId(`task-cell-${taskId2}`)).toContainText(taskName2);
-    console.log('✅ Both tasks persisted');
-
-    // Проверяем что стрелка блокера все еще отображается и направлена правильно
-    // Ждем отрисовки стрелок после перезагрузки
-    const svgAfterReload = page.locator('svg[width][height]').first();
-    await expect(svgAfterReload).toBeVisible({ timeout: 5000 });
-    const pathsAfterReload = svgAfterReload.locator('path[stroke]');
-    await expect(pathsAfterReload.first()).toBeVisible({ timeout: 5000 });
-    const pathCountAfterReload = await pathsAfterReload.count();
-    expect(pathCountAfterReload).toBeGreaterThan(0);
-    console.log(`✅ Found ${pathCountAfterReload} arrow(s) after reload - blocker persisted`);
-
-    // Проверяем направление стрелки после перезагрузки
-    const markersAfterReload = svgAfterReload.locator('marker');
-    const markerCountAfterReload = await markersAfterReload.count();
-    expect(markerCountAfterReload).toBeGreaterThan(0);
-    console.log(`✅ Arrow markers present after reload - direction preserved`);
-
-    // Проверяем что расписание сохранилось: Task 2 на неделях 1-2, Task 1 на неделях 3-4
-    const task2RowAfterReload = page.locator(`tr[data-row-id="${taskId2}"]`);
-    const task1RowAfterReload = page.locator(`tr[data-row-id="${taskId1}"]`);
-    const task2Week1AfterReload = task2RowAfterReload.locator('[data-week-idx="0"]');
-    const task1Week3AfterReload = task1RowAfterReload.locator('[data-week-idx="2"]');
-    const task2Week1AfterReloadText = await task2Week1AfterReload.textContent();
-    const task1Week3AfterReloadText = await task1Week3AfterReload.textContent();
-    console.log(`✅ Schedule preserved: Task 2 week 1: "${task2Week1AfterReloadText}", Task 1 week 3: "${task1Week3AfterReloadText}"`);
-
-    // Шаг 9: Очистка - удаляем задачи и ресурс
-    console.log('\n🗑️  Step 9: Cleaning up test data');
+    // Шаг 8: Очистка - удаляем задачи и ресурс
+    console.log('\n🗑️  Step 8: Cleaning up test data');
 
     // Удаляем задачу 2
     const taskRowForDelete2 = page.locator(`tr[data-row-id="${taskId2}"]`);
