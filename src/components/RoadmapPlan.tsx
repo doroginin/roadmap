@@ -216,7 +216,8 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker, autoSave
                 fn: r.fn || undefined,
                 empl: r.empl || undefined,
                 weeks: r.weeks || undefined,
-                displayOrder: r.displayOrder || undefined
+                prevId: r.prevId || undefined,
+                nextId: r.nextId || undefined
             };
         });
         
@@ -253,7 +254,8 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker, autoSave
                 expectedStartWeek: t.expectedStartWeek || undefined,
                 autoPlanEnabled: t.autoPlanEnabled || undefined,
                 weeks: weeksToSave !== undefined ? weeksToSave : undefined,
-                displayOrder: t.displayOrder || undefined
+                prevId: t.prevId || undefined,
+                nextId: t.nextId || undefined
             };
         });
         
@@ -331,14 +333,12 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker, autoSave
                 });
                 
                 // Объединяем ресурсы и задачи в один массив rows
+                // Backend уже возвращает данные в правильном порядке (linked list)
                 const allRows: Row[] = [
                     ...(data.resources || []),
                     ...tasksWithWeeks
                 ] as Row[];
-                
-                // Сортируем по displayOrder
-                allRows.sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0));
-                
+
                 setRows(allRows as Row[]);
                 setSprints(data.sprints || []);
                 setTeamData(data.teams || []);
@@ -1673,7 +1673,8 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker, autoSave
             functionId: row.functionId,
             employeeId: row.employeeId,
             weeks: row.weeks,
-            displayOrder: row.displayOrder
+            prevId: row.prevId,
+            nextId: row.nextId
         };
     }
     
@@ -1698,7 +1699,8 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker, autoSave
             expectedStartWeek: row.expectedStartWeek,
             autoPlanEnabled: row.autoPlanEnabled,
             weeks: row.weeks,
-            displayOrder: row.displayOrder
+            prevId: row.prevId,
+            nextId: row.nextId
         };
     }
     

@@ -37,7 +37,8 @@ CREATE TABLE resources (
     fn_bg_color VARCHAR(7), -- function background color (hex)
     fn_text_color VARCHAR(7), -- function text color (hex)
     weeks DECIMAL[] DEFAULT '{}', -- capacity per week
-    display_order INTEGER DEFAULT 0,
+    prev_id UUID REFERENCES resources(id) ON DELETE SET NULL, -- previous resource in ordered list
+    next_id UUID REFERENCES resources(id) ON DELETE SET NULL, -- next resource in ordered list
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -62,7 +63,8 @@ CREATE TABLE tasks (
     expected_start_week INTEGER, -- hidden field for expected start week
     auto_plan_enabled BOOLEAN DEFAULT TRUE,
     weeks DECIMAL[] DEFAULT '{}', -- actual placed amounts by week
-    display_order INTEGER DEFAULT 0,
+    prev_id UUID REFERENCES tasks(id) ON DELETE SET NULL, -- previous task in ordered list
+    next_id UUID REFERENCES tasks(id) ON DELETE SET NULL, -- next task in ordered list
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -96,14 +98,16 @@ CREATE TABLE change_log (
 CREATE INDEX idx_resources_team_ids ON resources USING GIN (team_ids);
 CREATE INDEX idx_resources_function ON resources (function);
 CREATE INDEX idx_resources_employee ON resources (employee);
-CREATE INDEX idx_resources_display_order ON resources (display_order);
+CREATE INDEX idx_resources_prev_id ON resources (prev_id);
+CREATE INDEX idx_resources_next_id ON resources (next_id);
 
 CREATE INDEX idx_tasks_team_id ON tasks (team_id);
 CREATE INDEX idx_tasks_function ON tasks (function);
 CREATE INDEX idx_tasks_employee ON tasks (employee);
 CREATE INDEX idx_tasks_status ON tasks (status);
 CREATE INDEX idx_tasks_blocker_ids ON tasks USING GIN (blocker_ids);
-CREATE INDEX idx_tasks_display_order ON tasks (display_order);
+CREATE INDEX idx_tasks_prev_id ON tasks (prev_id);
+CREATE INDEX idx_tasks_next_id ON tasks (next_id);
 
 CREATE INDEX idx_change_log_version ON change_log (version_number);
 CREATE INDEX idx_change_log_table_record ON change_log (table_name, record_id);

@@ -168,11 +168,11 @@ func (h *Handlers) hasValidChanges(req *models.UpdateRequest) bool {
 
 	// Check resources
 	for i, resource := range req.Resources {
-		fmt.Printf("hasValidChanges: Checking resource %d: TeamIDs=%v, Function=%v, Employee=%v, FnBgColor=%v, FnTextColor=%v, Weeks=%v, DisplayOrder=%v\n",
-			i, resource.TeamIDs, resource.Function, resource.Employee, resource.FnBgColor, resource.FnTextColor, resource.Weeks, resource.DisplayOrder)
+		fmt.Printf("hasValidChanges: Checking resource %d: TeamIDs=%v, Function=%v, Employee=%v, FnBgColor=%v, FnTextColor=%v, Weeks=%v, PrevID=%v, NextID=%v\n",
+			i, resource.TeamIDs, resource.Function, resource.Employee, resource.FnBgColor, resource.FnTextColor, resource.Weeks, resource.PrevID, resource.NextID)
 		if resource.TeamIDs != nil || resource.Function != nil || resource.Employee != nil ||
 			resource.FnBgColor != nil || resource.FnTextColor != nil ||
-			resource.Weeks != nil || resource.DisplayOrder != nil {
+			resource.Weeks != nil || resource.PrevID != nil || resource.NextID != nil {
 			fmt.Printf("hasValidChanges: Found valid changes in resource %d\n", i)
 			return true
 		}
@@ -188,7 +188,7 @@ func (h *Handlers) hasValidChanges(req *models.UpdateRequest) bool {
 			task.PlanEmpl != nil || task.PlanWeeks != nil || task.BlockerIDs != nil ||
 			task.WeekBlockers != nil || task.Fact != nil || task.StartWeek != nil ||
 			task.EndWeek != nil || task.ExpectedStartWeek != nil || task.AutoPlanEnabled != nil ||
-			task.Weeks != nil || task.DisplayOrder != nil {
+			task.Weeks != nil || task.PrevID != nil || task.NextID != nil {
 			fmt.Printf("hasValidChanges: Found valid changes in task %d\n", i)
 			return true
 		}

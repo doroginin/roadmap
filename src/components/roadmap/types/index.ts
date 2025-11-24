@@ -34,7 +34,8 @@ export type ResourceRow = {
     empl?: string; // optional binding to a specific person
     employeeId?: string; // UUID for saving
     weeks: number[]; // capacity per week
-    displayOrder?: number; // order for display
+    prevId?: string | null; // Previous resource ID in order
+    nextId?: string | null; // Next resource ID in order
 };
 
 export type TaskRow = {
@@ -60,7 +61,8 @@ export type TaskRow = {
     expectedStartWeek?: number | null; // скрытое поле для ожидаемой недели начала
     autoPlanEnabled: boolean; // чекбокс автоплана
     weeks: number[]; // actual placed amounts by week
-    displayOrder?: number; // order for display
+    prevId?: string | null; // Previous task ID in order
+    nextId?: string | null; // Next task ID in order
 };
 
 export type Row = ResourceRow | TaskRow;

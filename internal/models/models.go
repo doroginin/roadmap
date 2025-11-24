@@ -48,18 +48,19 @@ type Sprint struct {
 
 // Resource represents a resource row
 type Resource struct {
-	ID           uuid.UUID        `json:"id" db:"id"`
-	Kind         RowKind          `json:"kind"`                                     // Computed field for API responses
-	TeamIDs      *pq.StringArray  `json:"team,omitempty" db:"team_ids"`             // Team names for display (populated from Team table)
-	TeamUUIDs    pq.StringArray   `json:"teamIds,omitempty"`                        // Team UUIDs for saving (populated separately)
-	Function     *string          `json:"fn,omitempty" db:"function"`               // Function name stored as string
-	Employee     *string          `json:"empl,omitempty" db:"employee"`             // Employee name stored as string
-	FnBgColor    *string          `json:"fnBgColor,omitempty" db:"fn_bg_color"`     // Function background color
-	FnTextColor  *string          `json:"fnTextColor,omitempty" db:"fn_text_color"` // Function text color
-	Weeks        *pq.Float64Array `json:"weeks,omitempty" db:"weeks"`
-	DisplayOrder *int             `json:"displayOrder,omitempty" db:"display_order"`
-	CreatedAt    time.Time        `json:"createdAt" db:"created_at"`
-	UpdatedAt    time.Time        `json:"updatedAt" db:"updated_at"`
+	ID          uuid.UUID        `json:"id" db:"id"`
+	Kind        RowKind          `json:"kind"`                                     // Computed field for API responses
+	TeamIDs     *pq.StringArray  `json:"team,omitempty" db:"team_ids"`             // Team names for display (populated from Team table)
+	TeamUUIDs   pq.StringArray   `json:"teamIds,omitempty"`                        // Team UUIDs for saving (populated separately)
+	Function    *string          `json:"fn,omitempty" db:"function"`               // Function name stored as string
+	Employee    *string          `json:"empl,omitempty" db:"employee"`             // Employee name stored as string
+	FnBgColor   *string          `json:"fnBgColor,omitempty" db:"fn_bg_color"`     // Function background color
+	FnTextColor *string          `json:"fnTextColor,omitempty" db:"fn_text_color"` // Function text color
+	Weeks       *pq.Float64Array `json:"weeks,omitempty" db:"weeks"`
+	PrevID      *uuid.UUID       `json:"prevId,omitempty" db:"prev_id"` // Previous resource in ordered list
+	NextID      *uuid.UUID       `json:"nextId,omitempty" db:"next_id"` // Next resource in ordered list
+	CreatedAt   time.Time        `json:"createdAt" db:"created_at"`
+	UpdatedAt   time.Time        `json:"updatedAt" db:"updated_at"`
 }
 
 // Task represents a task row
@@ -84,7 +85,8 @@ type Task struct {
 	ExpectedStartWeek *int             `json:"expectedStartWeek" db:"expected_start_week"`
 	AutoPlanEnabled   *bool            `json:"autoPlanEnabled,omitempty" db:"auto_plan_enabled"`
 	Weeks             *pq.Float64Array `json:"weeks,omitempty" db:"weeks"`
-	DisplayOrder      *int             `json:"displayOrder,omitempty" db:"display_order"`
+	PrevID            *uuid.UUID       `json:"prevId,omitempty" db:"prev_id"` // Previous task in ordered list
+	NextID            *uuid.UUID       `json:"nextId,omitempty" db:"next_id"` // Next task in ordered list
 	CreatedAt         time.Time        `json:"createdAt" db:"created_at"`
 	UpdatedAt         time.Time        `json:"updatedAt" db:"updated_at"`
 }
@@ -93,26 +95,19 @@ type Task struct {
 type Row interface {
 	GetID() uuid.UUID
 	GetKind() RowKind
-	GetDisplayOrder() int
+	GetPrevID() *uuid.UUID
+	GetNextID() *uuid.UUID
 }
 
-func (r *Resource) GetID() uuid.UUID { return r.ID }
-func (r *Resource) GetKind() RowKind { return RowKindResource }
-func (r *Resource) GetDisplayOrder() int {
-	if r.DisplayOrder != nil {
-		return *r.DisplayOrder
-	}
-	return 0
-}
+func (r *Resource) GetID() uuid.UUID      { return r.ID }
+func (r *Resource) GetKind() RowKind      { return RowKindResource }
+func (r *Resource) GetPrevID() *uuid.UUID { return r.PrevID }
+func (r *Resource) GetNextID() *uuid.UUID { return r.NextID }
 
-func (t *Task) GetID() uuid.UUID { return t.ID }
-func (t *Task) GetKind() RowKind { return RowKindTask }
-func (t *Task) GetDisplayOrder() int {
-	if t.DisplayOrder != nil {
-		return *t.DisplayOrder
-	}
-	return 0
-}
+func (t *Task) GetID() uuid.UUID      { return t.ID }
+func (t *Task) GetKind() RowKind      { return RowKindTask }
+func (t *Task) GetPrevID() *uuid.UUID { return t.PrevID }
+func (t *Task) GetNextID() *uuid.UUID { return t.NextID }
 
 // DocumentVersion represents the current version of the document
 type DocumentVersion struct {
@@ -169,14 +164,15 @@ type UpdateRequest struct {
 
 // ResourceUpdate represents a resource update request
 type ResourceUpdate struct {
-	ID           uuid.UUID        `json:"id"`
-	TeamIDs      *pq.StringArray  `json:"teamIds,omitempty"`
-	Function     *string          `json:"fn,omitempty"`
-	Employee     *string          `json:"empl,omitempty"`
-	FnBgColor    *string          `json:"fnBgColor,omitempty"`
-	FnTextColor  *string          `json:"fnTextColor,omitempty"`
-	Weeks        *pq.Float64Array `json:"weeks,omitempty"`
-	DisplayOrder *int             `json:"displayOrder,omitempty"`
+	ID          uuid.UUID        `json:"id"`
+	TeamIDs     *pq.StringArray  `json:"teamIds,omitempty"`
+	Function    *string          `json:"fn,omitempty"`
+	Employee    *string          `json:"empl,omitempty"`
+	FnBgColor   *string          `json:"fnBgColor,omitempty"`
+	FnTextColor *string          `json:"fnTextColor,omitempty"`
+	Weeks       *pq.Float64Array `json:"weeks,omitempty"`
+	PrevID      *uuid.UUID       `json:"prevId,omitempty"`
+	NextID      *uuid.UUID       `json:"nextId,omitempty"`
 }
 
 // TaskUpdate represents a task update request
@@ -199,7 +195,8 @@ type TaskUpdate struct {
 	ExpectedStartWeek *int             `json:"expectedStartWeek,omitempty"`
 	AutoPlanEnabled   *bool            `json:"autoPlanEnabled,omitempty"`
 	Weeks             *pq.Float64Array `json:"weeks,omitempty"`
-	DisplayOrder      *int             `json:"displayOrder,omitempty"`
+	PrevID            *uuid.UUID       `json:"prevId,omitempty"`
+	NextID            *uuid.UUID       `json:"nextId,omitempty"`
 }
 
 // UpdateResponse represents the response after updating data

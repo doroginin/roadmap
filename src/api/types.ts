@@ -14,7 +14,8 @@ export interface Resource {
   fnBgColor?: string; // Function background color (hex)
   fnTextColor?: string; // Function text color (hex)
   weeks?: number[];
-  displayOrder?: number;
+  prevId?: string | null; // Previous resource ID in order
+  nextId?: string | null; // Next resource ID in order
 }
 
 export interface Task {
@@ -36,7 +37,8 @@ export interface Task {
   expectedStartWeek?: number | null;
   autoPlanEnabled?: boolean;
   weeks?: number[];
-  displayOrder?: number;
+  prevId?: string | null; // Previous task ID in order
+  nextId?: string | null; // Next task ID in order
 }
 
 

@@ -124,14 +124,13 @@ func (r *Repository) GetSprints() ([]models.Sprint, error) {
 	return sprints, rows.Err()
 }
 
-// GetResources returns all resources
+// GetResources returns all resources ordered by linked list
 func (r *Repository) GetResources() ([]models.Resource, error) {
 	rows, err := r.db.Query(`
-		SELECT 
-			id, team_ids, function, employee, fn_bg_color, fn_text_color, weeks, 
-			display_order, created_at, updated_at
+		SELECT
+			id, team_ids, function, employee, fn_bg_color, fn_text_color, weeks,
+			prev_id, next_id, created_at, updated_at
 		FROM resources
-		ORDER BY COALESCE(display_order, 0), created_at
 	`)
 	if err != nil {
 		return nil, err
@@ -144,7 +143,10 @@ func (r *Repository) GetResources() ([]models.Resource, error) {
 		return nil, fmt.Errorf("failed to get team map: %w", err)
 	}
 
-	var resources []models.Resource
+	// First, collect all resources in a map
+	resourceMap := make(map[uuid.UUID]models.Resource)
+	var firstResourceID *uuid.UUID
+
 	for rows.Next() {
 		var resource models.Resource
 		var teamIDs pq.StringArray
@@ -153,11 +155,11 @@ func (r *Repository) GetResources() ([]models.Resource, error) {
 		var fnBgColor sql.NullString
 		var fnTextColor sql.NullString
 		var weeks pq.Float64Array
-		var displayOrder sql.NullInt32
+		var prevID, nextID sql.NullString
 
 		err := rows.Scan(
 			&resource.ID, &teamIDs, &function, &employee, &fnBgColor, &fnTextColor, &weeks,
-			&displayOrder, &resource.CreatedAt, &resource.UpdatedAt,
+			&prevID, &nextID, &resource.CreatedAt, &resource.UpdatedAt,
 		)
 		if err != nil {
 			return nil, err
@@ -185,9 +187,20 @@ func (r *Repository) GetResources() ([]models.Resource, error) {
 		if weeks != nil {
 			resource.Weeks = &weeks
 		}
-		if displayOrder.Valid {
-			order := int(displayOrder.Int32)
-			resource.DisplayOrder = &order
+		if prevID.Valid {
+			parsedPrevID, err := uuid.Parse(prevID.String)
+			if err == nil {
+				resource.PrevID = &parsedPrevID
+			}
+		} else {
+			// This is the first resource
+			firstResourceID = &resource.ID
+		}
+		if nextID.Valid {
+			parsedNextID, err := uuid.Parse(nextID.String)
+			if err == nil {
+				resource.NextID = &parsedNextID
+			}
 		}
 
 		// Save original team UUIDs before converting to names
@@ -208,32 +221,75 @@ func (r *Repository) GetResources() ([]models.Resource, error) {
 			resource.TeamIDs = &teamNamesArray
 		}
 
-		resources = append(resources, resource)
+		resourceMap[resource.ID] = resource
 	}
 
-	return resources, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	// Order resources using linked list
+	var resources []models.Resource
+	if firstResourceID != nil {
+		currentID := firstResourceID
+		visited := make(map[uuid.UUID]bool)
+
+		for currentID != nil {
+			if visited[*currentID] {
+				// Circular reference detected, break
+				break
+			}
+			resource, exists := resourceMap[*currentID]
+			if !exists {
+				break
+			}
+			resources = append(resources, resource)
+			visited[*currentID] = true
+			currentID = resource.NextID
+		}
+	}
+
+	// Add any orphaned resources not in the linked list
+	if len(resources) < len(resourceMap) {
+		for _, resource := range resourceMap {
+			found := false
+			for _, r := range resources {
+				if r.ID == resource.ID {
+					found = true
+					break
+				}
+			}
+			if !found {
+				resources = append(resources, resource)
+			}
+		}
+	}
+
+	return resources, nil
 }
 
-// GetTasks returns all tasks with populated team names
+// GetTasks returns all tasks with populated team names, ordered by linked list
 func (r *Repository) GetTasks() ([]models.Task, error) {
 	rows, err := r.db.Query(`
-		SELECT 
-			t.id, t.status, t.sprints_auto, t.epic, t.task_name, 
+		SELECT
+			t.id, t.status, t.sprints_auto, t.epic, t.task_name,
 			t.team_id, t.function, t.employee, t.plan_empl, t.plan_weeks,
 			t.blocker_ids, t.week_blockers, t.fact, t.start_week, t.end_week,
 			t.expected_start_week, t.auto_plan_enabled, t.weeks,
-			t.display_order, t.created_at, t.updated_at,
+			t.prev_id, t.next_id, t.created_at, t.updated_at,
 			tm.name as team_name
 		FROM tasks t
 		LEFT JOIN teams tm ON t.team_id = tm.id
-		ORDER BY COALESCE(t.display_order, 0), t.created_at
 	`)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	var tasks []models.Task
+	// First, collect all tasks in a map
+	taskMap := make(map[uuid.UUID]models.Task)
+	var firstTaskID *uuid.UUID
+
 	for rows.Next() {
 		var task models.Task
 		var teamName sql.NullString
@@ -249,14 +305,14 @@ func (r *Repository) GetTasks() ([]models.Task, error) {
 		var startWeek, endWeek, expectedStartWeek sql.NullInt32
 		var autoPlanEnabled sql.NullBool
 		var weeks pq.Float64Array
-		var displayOrder sql.NullInt32
+		var prevID, nextID sql.NullString
 
 		err := rows.Scan(
 			&task.ID, &status, &sprintsAuto, &epic, &taskName,
 			&teamID, &function, &employee, &planEmpl, &planWeeks,
 			&blockerIDs, &weekBlockers, &fact, &startWeek, &endWeek,
 			&expectedStartWeek, &autoPlanEnabled, &weeks,
-			&displayOrder, &task.CreatedAt, &task.UpdatedAt,
+			&prevID, &nextID, &task.CreatedAt, &task.UpdatedAt,
 			&teamName,
 		)
 		if err != nil {
@@ -323,9 +379,20 @@ func (r *Repository) GetTasks() ([]models.Task, error) {
 		if weeks != nil {
 			task.Weeks = &weeks
 		}
-		if displayOrder.Valid {
-			order := int(displayOrder.Int32)
-			task.DisplayOrder = &order
+		if prevID.Valid {
+			parsedPrevID, err := uuid.Parse(prevID.String)
+			if err == nil {
+				task.PrevID = &parsedPrevID
+			}
+		} else {
+			// This is the first task
+			firstTaskID = &task.ID
+		}
+		if nextID.Valid {
+			parsedNextID, err := uuid.Parse(nextID.String)
+			if err == nil {
+				task.NextID = &parsedNextID
+			}
 		}
 
 		// Set display names
@@ -333,10 +400,51 @@ func (r *Repository) GetTasks() ([]models.Task, error) {
 			task.Team = teamName.String
 		}
 
-		tasks = append(tasks, task)
+		taskMap[task.ID] = task
 	}
 
-	return tasks, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	// Order tasks using linked list
+	var tasks []models.Task
+	if firstTaskID != nil {
+		currentID := firstTaskID
+		visited := make(map[uuid.UUID]bool)
+
+		for currentID != nil {
+			if visited[*currentID] {
+				// Circular reference detected, break
+				break
+			}
+			task, exists := taskMap[*currentID]
+			if !exists {
+				break
+			}
+			tasks = append(tasks, task)
+			visited[*currentID] = true
+			currentID = task.NextID
+		}
+	}
+
+	// Add any orphaned tasks not in the linked list
+	if len(tasks) < len(taskMap) {
+		for _, task := range taskMap {
+			found := false
+			for _, t := range tasks {
+				if t.ID == task.ID {
+					found = true
+					break
+				}
+			}
+			if !found {
+				tasks = append(tasks, task)
+			}
+		}
+	}
+
+	return tasks, nil
 }
 
 // GetChangesSince returns all changes since the specified version
@@ -467,8 +575,8 @@ func (r *Repository) UpdateData(tx *sql.Tx, req *models.UpdateRequest) error {
 	// Update resources
 	for _, resource := range req.Resources {
 		_, err := tx.Exec(`
-			INSERT INTO resources (id, team_ids, function, employee, fn_bg_color, fn_text_color, weeks, display_order)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+			INSERT INTO resources (id, team_ids, function, employee, fn_bg_color, fn_text_color, weeks, prev_id, next_id)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 			ON CONFLICT (id) DO UPDATE SET
 				team_ids = COALESCE(EXCLUDED.team_ids, resources.team_ids),
 				function = COALESCE(EXCLUDED.function, resources.function),
@@ -476,7 +584,8 @@ func (r *Repository) UpdateData(tx *sql.Tx, req *models.UpdateRequest) error {
 				fn_bg_color = COALESCE(EXCLUDED.fn_bg_color, resources.fn_bg_color),
 				fn_text_color = COALESCE(EXCLUDED.fn_text_color, resources.fn_text_color),
 				weeks = COALESCE(EXCLUDED.weeks, resources.weeks),
-				display_order = COALESCE(EXCLUDED.display_order, resources.display_order),
+				prev_id = COALESCE(EXCLUDED.prev_id, resources.prev_id),
+				next_id = COALESCE(EXCLUDED.next_id, resources.next_id),
 				updated_at = NOW()
 		`, resource.ID,
 			func() interface{} {
@@ -492,7 +601,7 @@ func (r *Repository) UpdateData(tx *sql.Tx, req *models.UpdateRequest) error {
 				}
 				return nil
 			}(),
-			resource.DisplayOrder)
+			resource.PrevID, resource.NextID)
 		if err != nil {
 			return fmt.Errorf("failed to update resource %s: %w", resource.ID, err)
 		}
@@ -504,9 +613,9 @@ func (r *Repository) UpdateData(tx *sql.Tx, req *models.UpdateRequest) error {
 			INSERT INTO tasks (
 				id, status, sprints_auto, epic, task_name, team_id, function, employee,
 				plan_empl, plan_weeks, blocker_ids, week_blockers, fact, start_week, end_week,
-				expected_start_week, auto_plan_enabled, weeks, display_order
+				expected_start_week, auto_plan_enabled, weeks, prev_id, next_id
 			)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
 			ON CONFLICT (id) DO UPDATE SET
 				status = COALESCE(EXCLUDED.status, tasks.status),
 				sprints_auto = COALESCE(EXCLUDED.sprints_auto, tasks.sprints_auto),
@@ -525,7 +634,8 @@ func (r *Repository) UpdateData(tx *sql.Tx, req *models.UpdateRequest) error {
 				expected_start_week = COALESCE(EXCLUDED.expected_start_week, tasks.expected_start_week),
 				auto_plan_enabled = COALESCE(EXCLUDED.auto_plan_enabled, tasks.auto_plan_enabled),
 				weeks = COALESCE(EXCLUDED.weeks, tasks.weeks),
-				display_order = COALESCE(EXCLUDED.display_order, tasks.display_order),
+				prev_id = COALESCE(EXCLUDED.prev_id, tasks.prev_id),
+				next_id = COALESCE(EXCLUDED.next_id, tasks.next_id),
 				updated_at = NOW()
 		`, task.ID, task.Status,
 			func() interface{} {
@@ -556,7 +666,7 @@ func (r *Repository) UpdateData(tx *sql.Tx, req *models.UpdateRequest) error {
 				}
 				return nil
 			}(),
-			task.DisplayOrder)
+			task.PrevID, task.NextID)
 		if err != nil {
 			return fmt.Errorf("failed to update task %s: %w", task.ID, err)
 		}

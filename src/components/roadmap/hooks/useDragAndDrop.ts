@@ -465,8 +465,44 @@ export function useDragAndDrop({ rows, setRows, changeTracker }: DragAndDropProp
                                 if (from < 0 || to < 0 || from === to) {
                                     return prev;
                                 }
-                                const [m] = list.splice(from, 1);
-                                list.splice(to, 0, m);
+
+                                // Remove dragged row from original position
+                                const [movedRow] = list.splice(from, 1);
+
+                                // Insert at target position
+                                const insertIndex = dropPosition === 'top' ? to : to + 1;
+                                list.splice(insertIndex, 0, movedRow);
+
+                                // Update prev_id and next_id for all affected rows
+                                // Resources and tasks are in separate sections, so we need to update only within the same kind
+                                const isResource = movedRow.kind === 'resource';
+                                const sameKindRows = list.filter(r => r.kind === (isResource ? 'resource' : 'task'));
+
+                                // Update linked list pointers
+                                const rowType = isResource ? 'resource' : 'task';
+                                sameKindRows.forEach((row, index) => {
+                                    const prevRow = index > 0 ? sameKindRows[index - 1] : null;
+                                    const nextRow = index < sameKindRows.length - 1 ? sameKindRows[index + 1] : null;
+
+                                    const oldPrevId = row.prevId;
+                                    const oldNextId = row.nextId;
+                                    const newPrevId = prevRow ? prevRow.id : null;
+                                    const newNextId = nextRow ? nextRow.id : null;
+
+                                    row.prevId = newPrevId;
+                                    row.nextId = newNextId;
+
+                                    // Track changes for affected rows (only if values actually changed)
+                                    if (changeTracker) {
+                                        if (oldPrevId !== newPrevId) {
+                                            changeTracker.addCellChange(rowType, row.id, 'prevId', oldPrevId, newPrevId);
+                                        }
+                                        if (oldNextId !== newNextId) {
+                                            changeTracker.addCellChange(rowType, row.id, 'nextId', oldNextId, newNextId);
+                                        }
+                                    }
+                                });
+
                                 return list;
                             });
                         }
