@@ -19,6 +19,7 @@ export type Link = {
 };
 
 export type Sprint = {
+    id?: string;  // Sprint UUID
     code: string; // QxSy
     start: string; // YYYY-MM-DD
     end: string;   // YYYY-MM-DD

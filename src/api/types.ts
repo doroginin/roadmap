@@ -43,6 +43,7 @@ export interface Task {
 
 
 export interface Sprint {
+  id?: string; // Sprint UUID
   code: string;
   start: string;
   end: string;

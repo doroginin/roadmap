@@ -340,8 +340,9 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker, autoSave
                 ] as Row[];
 
                 setRows(allRows as Row[]);
-                setSprints(data.sprints || []);
-                setTeamData(data.teams || []);
+                // Generate IDs for sprints and teams that don't have them (for change tracking)
+                setSprints((data.sprints || []).map(s => ({ ...s, id: s.id || generateUUID() })));
+                setTeamData((data.teams || []).map(t => ({ ...t, id: t.id || generateUUID() })));
                 setCurrentVersion(data.version || 0);
             } catch (err) {
                 setError(err instanceof Error ? err.message : 'Unknown error');
@@ -946,57 +947,106 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker, autoSave
     }
 
     // ====== Функции управления спринтами ======
+    // Вспомогательная функция для форматирования даты в YYYY-MM-DD (для API)
+    function formatDateForSprintApi(date: Date): string {
+        const day = String(date.getDate()).padStart(2, '0');
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const year = date.getFullYear();
+        return `${year}-${month}-${day}`;
+    }
+
+    // Вспомогательная функция для создания дефолтных дат спринта
+    function getDefaultSprintDates(): { start: string; end: string } {
+        const today = new Date();
+        const endDate = new Date(today);
+        endDate.setDate(endDate.getDate() + 13); // 2 недели спринт
+        return {
+            start: formatDateForSprintApi(today),
+            end: formatDateForSprintApi(endDate)
+        };
+    }
+
     function addSprint() {
+        const { start, end } = getDefaultSprintDates();
         const newSprint: Sprint = {
+            id: generateUUID(),
             code: `Q3S${sprints.length + 1}`,
-            start: "",
-            end: ""
+            start,
+            end
         };
         setSprints([...sprints, newSprint]);
+        changeTracker.addRowChange('sprint', newSprint.id!, 'added', newSprint);
     }
 
     function addSprintAbove(index: number) {
+        const { start, end } = getDefaultSprintDates();
         const newSprint: Sprint = {
+            id: generateUUID(),
             code: `Q3S${sprints.length + 1}`,
-            start: "",
-            end: ""
+            start,
+            end
         };
         const newSprints = [...sprints];
         newSprints.splice(index, 0, newSprint);
         setSprints(newSprints);
+        changeTracker.addRowChange('sprint', newSprint.id!, 'added', newSprint);
     }
 
     function addSprintBelow(index: number) {
+        const { start, end } = getDefaultSprintDates();
         const newSprint: Sprint = {
+            id: generateUUID(),
             code: `Q3S${sprints.length + 1}`,
-            start: "",
-            end: ""
+            start,
+            end
         };
         const newSprints = [...sprints];
         newSprints.splice(index + 1, 0, newSprint);
         setSprints(newSprints);
+        changeTracker.addRowChange('sprint', newSprint.id!, 'added', newSprint);
     }
 
     function deleteSprint(index: number) {
         if (sprints.length > 1) {
+            const sprintToDelete = sprints[index];
             const newSprints = sprints.filter((_, i) => i !== index);
             setSprints(newSprints);
+            if (sprintToDelete.id) {
+                changeTracker.addRowChange('sprint', sprintToDelete.id, 'deleted');
+            }
+        }
+    }
+
+    // Функция для обновления поля спринта с отслеживанием изменений
+    function updateSprintField(index: number, field: 'code' | 'start' | 'end', newValue: string) {
+        const sprint = sprints[index];
+        const oldValue = sprint[field];
+
+        if (oldValue === newValue) return;
+
+        setSprints(sp => sp.map((x, idx) => idx === index ? {...x, [field]: newValue} : x));
+
+        if (sprint.id) {
+            changeTracker.addCellChange('sprint', sprint.id, field, oldValue, newValue);
         }
     }
 
     // ====== Функции управления командами ======
     function addTeam() {
         const newTeam: LocalTeamData = {
+            id: generateUUID(),
             name: `Team ${teamData.length + 1}`,
             jiraProject: "",
             featureTeam: "",
             issueType: ""
         };
         setTeamData([...teamData, newTeam]);
+        changeTracker.addRowChange('team', newTeam.id!, 'added', newTeam);
     }
 
     function addTeamAbove(index: number) {
         const newTeam: LocalTeamData = {
+            id: generateUUID(),
             name: `Team ${teamData.length + 1}`,
             jiraProject: "",
             featureTeam: "",
@@ -1005,10 +1055,12 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker, autoSave
         const newTeams = [...teamData];
         newTeams.splice(index, 0, newTeam);
         setTeamData(newTeams);
+        changeTracker.addRowChange('team', newTeam.id!, 'added', newTeam);
     }
 
     function addTeamBelow(index: number) {
         const newTeam: LocalTeamData = {
+            id: generateUUID(),
             name: `Team ${teamData.length + 1}`,
             jiraProject: "",
             featureTeam: "",
@@ -1017,12 +1069,31 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker, autoSave
         const newTeams = [...teamData];
         newTeams.splice(index + 1, 0, newTeam);
         setTeamData(newTeams);
+        changeTracker.addRowChange('team', newTeam.id!, 'added', newTeam);
     }
 
     function deleteTeam(index: number) {
         if (teamData.length > 1) {
+            const teamToDelete = teamData[index];
             const newTeams = teamData.filter((_, i) => i !== index);
             setTeamData(newTeams);
+            if (teamToDelete.id) {
+                changeTracker.addRowChange('team', teamToDelete.id, 'deleted');
+            }
+        }
+    }
+
+    // Функция для обновления поля команды с отслеживанием изменений
+    function updateTeamField(index: number, field: 'name' | 'jiraProject' | 'featureTeam' | 'issueType', newValue: string) {
+        const team = teamData[index];
+        const oldValue = team[field];
+
+        if (oldValue === newValue) return;
+
+        setTeamData(teams => teams.map((x, idx) => idx === index ? {...x, [field]: newValue} : x));
+
+        if (team.id) {
+            changeTracker.addCellChange('team', team.id, field, oldValue, newValue);
         }
     }
 
@@ -2667,7 +2738,7 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker, autoSave
         </>
     ) : tab === 'sprints' ? (
         <>
-        <div className="sprint-table-container flex-grow border rounded-xl overflow-auto" style={{ position: "relative", maxHeight: "calc(100vh - 200px)" }}>
+        <div className="sprint-table-container flex-grow border rounded-xl overflow-auto" data-testid="sprint-table-container" style={{ position: "relative", maxHeight: "calc(100vh - 200px)" }}>
             <table className="min-w-full text-sm select-none table-fixed border-collapse" style={{ border: '1px solid rgb(226, 232, 240)' }}>
                 <colgroup>
                     <col style={{ width: '120px' }} />
@@ -2689,39 +2760,39 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker, autoSave
                             onDoubleClick={() => startSprintEdit({rowId: i, col: 'code'})} 
                             onClick={() => setSprintSel({rowId: i, col: 'code'})}>
                             {sprintEditing?.rowId === i && sprintEditing?.col === 'code' ? (
-                                <input 
-                                    autoFocus 
-                                    className="w-full h-8 box-border min-w-0 outline-none bg-transparent" 
+                                <input
+                                    autoFocus
+                                    className="w-full h-8 box-border min-w-0 outline-none bg-transparent"
                                     style={{ border: 'none', padding: 0, margin: 0 }}
-                                    defaultValue={s.code} 
+                                    defaultValue={s.code}
                                     onKeyDown={(e) => {
-                                        if (e.key === 'Enter') { 
-                                            setSprints(sp => sp.map((x, idx) => idx === i ? {...x, code: (e.target as HTMLInputElement).value} : x)); 
-                                            commitSprintEdit(); 
+                                        if (e.key === 'Enter') {
+                                            updateSprintField(i, 'code', (e.target as HTMLInputElement).value);
+                                            commitSprintEdit();
                                         }
-                                        if (e.key === 'Tab' && e.shiftKey) { 
-                                            e.preventDefault(); 
-                                            e.stopPropagation(); 
-                                            setSprints(sp => sp.map((x, idx) => idx === i ? {...x, code: (e.target as HTMLInputElement).value} : x)); 
-                                            navigateSprintInEditMode('prev', i, 'code'); 
-                                            return; 
+                                        if (e.key === 'Tab' && e.shiftKey) {
+                                            e.preventDefault();
+                                            e.stopPropagation();
+                                            updateSprintField(i, 'code', (e.target as HTMLInputElement).value);
+                                            navigateSprintInEditMode('prev', i, 'code');
+                                            return;
                                         }
-                                        if (e.key === 'Tab') { 
-                                            e.preventDefault(); 
-                                            setSprints(sp => sp.map((x, idx) => idx === i ? {...x, code: (e.target as HTMLInputElement).value} : x)); 
-                                            navigateSprintInEditMode('next', i, 'code'); 
+                                        if (e.key === 'Tab') {
+                                            e.preventDefault();
+                                            updateSprintField(i, 'code', (e.target as HTMLInputElement).value);
+                                            navigateSprintInEditMode('next', i, 'code');
                                         }
-                                        if (e.key === 'Escape') { 
-                                            cancelSprintEditRef.current = true; 
-                                            stopSprintEdit(); 
+                                        if (e.key === 'Escape') {
+                                            cancelSprintEditRef.current = true;
+                                            stopSprintEdit();
                                         }
                                     }}
-                                    onBlur={(e) => { 
-                                        if (!cancelSprintEditRef.current) { 
-                                            setSprints(sp => sp.map((x, idx) => idx === i ? {...x, code: (e.target as HTMLInputElement).value} : x)); 
-                                        } 
-                                        stopSprintEdit(); 
-                                    }} 
+                                    onBlur={(e) => {
+                                        if (!cancelSprintEditRef.current) {
+                                            updateSprintField(i, 'code', (e.target as HTMLInputElement).value);
+                                        }
+                                        stopSprintEdit();
+                                    }}
                                 />
                             ) : (
                                 <span>{s.code}</span>
@@ -2732,40 +2803,40 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker, autoSave
                             onDoubleClick={() => startSprintEdit({rowId: i, col: 'start'})} 
                             onClick={() => setSprintSel({rowId: i, col: 'start'})}>
                             {sprintEditing?.rowId === i && sprintEditing?.col === 'start' ? (
-                                <input 
-                                    type="date" 
-                                    autoFocus 
-                                    className="w-full h-8 box-border min-w-0 outline-none bg-transparent" 
+                                <input
+                                    type="date"
+                                    autoFocus
+                                    className="w-full h-8 box-border min-w-0 outline-none bg-transparent"
                                     style={{ border: 'none', padding: 0, margin: 0 }}
-                                    defaultValue={s.start} 
+                                    defaultValue={s.start}
                                     onKeyDown={(e) => {
-                                        if (e.key === 'Enter') { 
-                                            setSprints(sp => sp.map((x, idx) => idx === i ? {...x, start: (e.target as HTMLInputElement).value} : x)); 
-                                            commitSprintEdit(); 
+                                        if (e.key === 'Enter') {
+                                            updateSprintField(i, 'start', (e.target as HTMLInputElement).value);
+                                            commitSprintEdit();
                                         }
-                                        if (e.key === 'Tab' && e.shiftKey) { 
-                                            e.preventDefault(); 
-                                            e.stopPropagation(); 
-                                            setSprints(sp => sp.map((x, idx) => idx === i ? {...x, start: (e.target as HTMLInputElement).value} : x)); 
-                                            navigateSprintInEditMode('prev', i, 'start'); 
-                                            return; 
+                                        if (e.key === 'Tab' && e.shiftKey) {
+                                            e.preventDefault();
+                                            e.stopPropagation();
+                                            updateSprintField(i, 'start', (e.target as HTMLInputElement).value);
+                                            navigateSprintInEditMode('prev', i, 'start');
+                                            return;
                                         }
-                                        if (e.key === 'Tab') { 
-                                            e.preventDefault(); 
-                                            setSprints(sp => sp.map((x, idx) => idx === i ? {...x, start: (e.target as HTMLInputElement).value} : x)); 
-                                            navigateSprintInEditMode('next', i, 'start'); 
+                                        if (e.key === 'Tab') {
+                                            e.preventDefault();
+                                            updateSprintField(i, 'start', (e.target as HTMLInputElement).value);
+                                            navigateSprintInEditMode('next', i, 'start');
                                         }
-                                        if (e.key === 'Escape') { 
-                                            cancelSprintEditRef.current = true; 
-                                            stopSprintEdit(); 
+                                        if (e.key === 'Escape') {
+                                            cancelSprintEditRef.current = true;
+                                            stopSprintEdit();
                                         }
                                     }}
-                                    onBlur={(e) => { 
-                                        if (!cancelSprintEditRef.current) { 
-                                            setSprints(sp => sp.map((x, idx) => idx === i ? {...x, start: (e.target as HTMLInputElement).value} : x)); 
-                                        } 
-                                        stopSprintEdit(); 
-                                    }} 
+                                    onBlur={(e) => {
+                                        if (!cancelSprintEditRef.current) {
+                                            updateSprintField(i, 'start', (e.target as HTMLInputElement).value);
+                                        }
+                                        stopSprintEdit();
+                                    }}
                                 />
                             ) : (
                                 <span>{formatDate(s.start)}</span>
@@ -2776,40 +2847,40 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker, autoSave
                             onDoubleClick={() => startSprintEdit({rowId: i, col: 'end'})} 
                             onClick={() => setSprintSel({rowId: i, col: 'end'})}>
                             {sprintEditing?.rowId === i && sprintEditing?.col === 'end' ? (
-                                <input 
-                                    type="date" 
-                                    autoFocus 
-                                    className="w-full h-8 box-border min-w-0 outline-none bg-transparent" 
+                                <input
+                                    type="date"
+                                    autoFocus
+                                    className="w-full h-8 box-border min-w-0 outline-none bg-transparent"
                                     style={{ border: 'none', padding: 0, margin: 0 }}
-                                    defaultValue={s.end} 
+                                    defaultValue={s.end}
                                     onKeyDown={(e) => {
-                                        if (e.key === 'Enter') { 
-                                            setSprints(sp => sp.map((x, idx) => idx === i ? {...x, end: (e.target as HTMLInputElement).value} : x)); 
-                                            commitSprintEdit(); 
+                                        if (e.key === 'Enter') {
+                                            updateSprintField(i, 'end', (e.target as HTMLInputElement).value);
+                                            commitSprintEdit();
                                         }
-                                        if (e.key === 'Tab' && e.shiftKey) { 
-                                            e.preventDefault(); 
-                                            e.stopPropagation(); 
-                                            setSprints(sp => sp.map((x, idx) => idx === i ? {...x, end: (e.target as HTMLInputElement).value} : x)); 
-                                            navigateSprintInEditMode('prev', i, 'end'); 
-                                            return; 
+                                        if (e.key === 'Tab' && e.shiftKey) {
+                                            e.preventDefault();
+                                            e.stopPropagation();
+                                            updateSprintField(i, 'end', (e.target as HTMLInputElement).value);
+                                            navigateSprintInEditMode('prev', i, 'end');
+                                            return;
                                         }
-                                        if (e.key === 'Tab') { 
-                                            e.preventDefault(); 
-                                            setSprints(sp => sp.map((x, idx) => idx === i ? {...x, end: (e.target as HTMLInputElement).value} : x)); 
-                                            navigateSprintInEditMode('next', i, 'end'); 
+                                        if (e.key === 'Tab') {
+                                            e.preventDefault();
+                                            updateSprintField(i, 'end', (e.target as HTMLInputElement).value);
+                                            navigateSprintInEditMode('next', i, 'end');
                                         }
-                                        if (e.key === 'Escape') { 
-                                            cancelSprintEditRef.current = true; 
-                                            stopSprintEdit(); 
+                                        if (e.key === 'Escape') {
+                                            cancelSprintEditRef.current = true;
+                                            stopSprintEdit();
                                         }
                                     }}
-                                    onBlur={(e) => { 
-                                        if (!cancelSprintEditRef.current) { 
-                                            setSprints(sp => sp.map((x, idx) => idx === i ? {...x, end: (e.target as HTMLInputElement).value} : x)); 
-                                        } 
-                                        stopSprintEdit(); 
-                                    }} 
+                                    onBlur={(e) => {
+                                        if (!cancelSprintEditRef.current) {
+                                            updateSprintField(i, 'end', (e.target as HTMLInputElement).value);
+                                        }
+                                        stopSprintEdit();
+                                    }}
                                 />
                             ) : (
                                 <span>{formatDate(s.end)}</span>
@@ -2823,12 +2894,12 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker, autoSave
 
         {/* Кнопка Добавить снизу */}
         <div className="flex justify-start">
-            <button className="border rounded px-4 py-2" style={{backgroundColor: '#f3f4f6'}} onClick={addSprint}>+ Добавить</button>
+            <button className="border rounded px-4 py-2" style={{backgroundColor: '#f3f4f6'}} onClick={addSprint} data-testid="add-sprint-button">+ Добавить</button>
         </div>
         </>
     ) : (
         <>
-        <div className="team-table-container flex-grow border rounded-xl overflow-auto" style={{ position: "relative", maxHeight: "calc(100vh - 200px)" }}>
+        <div className="team-table-container flex-grow border rounded-xl overflow-auto" data-testid="team-table-container" style={{ position: "relative", maxHeight: "calc(100vh - 200px)" }}>
             <table className="min-w-full text-sm select-none table-fixed border-collapse" style={{ border: '1px solid rgb(226, 232, 240)' }}>
                 <colgroup>
                     <col style={{ width: '200px' }} />
@@ -2852,39 +2923,39 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker, autoSave
                             onDoubleClick={() => startTeamEdit({rowId: i, col: 'name'})} 
                             onClick={() => setTeamSel({rowId: i, col: 'name'})}>
                             {teamEditing?.rowId === i && teamEditing?.col === 'name' ? (
-                                <input 
-                                    autoFocus 
-                                    className="w-full h-8 box-border min-w-0 outline-none bg-transparent" 
+                                <input
+                                    autoFocus
+                                    className="w-full h-8 box-border min-w-0 outline-none bg-transparent"
                                     style={{ border: 'none', padding: 0, margin: 0 }}
-                                    defaultValue={t.name} 
+                                    defaultValue={t.name}
                                     onKeyDown={(e) => {
-                                        if (e.key === 'Enter') { 
-                                            setTeamData(teams => teams.map((x, idx) => idx === i ? {...x, name: (e.target as HTMLInputElement).value} : x)); 
-                                            commitTeamEdit(); 
+                                        if (e.key === 'Enter') {
+                                            updateTeamField(i, 'name', (e.target as HTMLInputElement).value);
+                                            commitTeamEdit();
                                         }
-                                        if (e.key === 'Tab' && e.shiftKey) { 
-                                            e.preventDefault(); 
-                                            e.stopPropagation(); 
-                                            setTeamData(teams => teams.map((x, idx) => idx === i ? {...x, name: (e.target as HTMLInputElement).value} : x)); 
-                                            navigateTeamInEditMode('prev', i, 'name'); 
-                                            return; 
+                                        if (e.key === 'Tab' && e.shiftKey) {
+                                            e.preventDefault();
+                                            e.stopPropagation();
+                                            updateTeamField(i, 'name', (e.target as HTMLInputElement).value);
+                                            navigateTeamInEditMode('prev', i, 'name');
+                                            return;
                                         }
-                                        if (e.key === 'Tab') { 
-                                            e.preventDefault(); 
-                                            setTeamData(teams => teams.map((x, idx) => idx === i ? {...x, name: (e.target as HTMLInputElement).value} : x)); 
-                                            navigateTeamInEditMode('next', i, 'name'); 
+                                        if (e.key === 'Tab') {
+                                            e.preventDefault();
+                                            updateTeamField(i, 'name', (e.target as HTMLInputElement).value);
+                                            navigateTeamInEditMode('next', i, 'name');
                                         }
-                                        if (e.key === 'Escape') { 
-                                            cancelTeamEditRef.current = true; 
-                                            stopTeamEdit(); 
+                                        if (e.key === 'Escape') {
+                                            cancelTeamEditRef.current = true;
+                                            stopTeamEdit();
                                         }
                                     }}
-                                    onBlur={(e) => { 
-                                        if (!cancelTeamEditRef.current) { 
-                                            setTeamData(teams => teams.map((x, idx) => idx === i ? {...x, name: (e.target as HTMLInputElement).value} : x)); 
-                                        } 
-                                        stopTeamEdit(); 
-                                    }} 
+                                    onBlur={(e) => {
+                                        if (!cancelTeamEditRef.current) {
+                                            updateTeamField(i, 'name', (e.target as HTMLInputElement).value);
+                                        }
+                                        stopTeamEdit();
+                                    }}
                                 />
                             ) : (
                                 <span>{t.name}</span>
@@ -2914,7 +2985,7 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker, autoSave
             </table>
         </div>
         <div className="flex justify-start">
-            <button className="bg-black text-white rounded px-4 py-2" onClick={addTeam}>+ Добавить</button>
+            <button className="bg-black text-white rounded px-4 py-2" onClick={addTeam} data-testid="add-team-button">+ Добавить</button>
         </div>
         </>
     )}

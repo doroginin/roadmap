@@ -27,6 +27,10 @@ export function useAutoSave(
   const currentVersionRef = useRef<number>(0);
   const isInitializedRef = useRef<boolean>(false);
 
+  // Ref для changeTracker чтобы избежать stale closure в setTimeout
+  const changeTrackerRef = useRef(changeTracker);
+  changeTrackerRef.current = changeTracker;
+
   // Эффект для автосохранения с задержкой
   useEffect(() => {
     if (!data || !enabled) return;
@@ -66,18 +70,12 @@ export function useAutoSave(
       setState(prev => ({ ...prev, isSaving: true, error: null }));
 
       try {
+        // Используем ref для получения актуального changeTracker (избегаем stale closure)
+        const currentChangeTracker = changeTrackerRef.current;
+
         // Получаем лог изменений только когда нужно сохранить
-        const changeLog = changeTracker.buildChangeLog();
-        
-        // Отладочная информация
-        console.log('🔍 AutoSave Debug:', {
-          hasChanges: Object.keys(changeLog).length > 0,
-          changeLog,
-          changeLogKeys: Object.keys(changeLog),
-          changeLogString: JSON.stringify(changeLog, null, 2),
-          hasUnsavedChanges: changeTracker.hasUnsavedChanges
-        });
-        
+        const changeLog = currentChangeTracker.buildChangeLog();
+
         const result = await saveRoadmapChanges(changeLog, currentVersionRef.current, userId || undefined);
         
         if (result.error) {
@@ -119,7 +117,7 @@ export function useAutoSave(
           });
           
           // Очищаем изменения в трекере
-          changeTracker.clearChanges();
+          currentChangeTracker.clearChanges();
           
           onSaveSuccess?.(result.data.version);
         }

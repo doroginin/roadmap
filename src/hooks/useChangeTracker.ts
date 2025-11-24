@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useState, useRef } from 'react';
 import type { Task, Resource, TeamData, Sprint } from '../api/types';
 
 // Типы для отслеживания изменений
@@ -53,6 +53,10 @@ export interface ChangeLog {
 export function useChangeTracker() {
   const [changes, setChanges] = useState<Change[]>([]);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+
+  // Ref для хранения актуальных changes (для избежания stale closure)
+  const changesRef = useRef<Change[]>([]);
+  changesRef.current = changes;
   
   // Добавляем изменение ячейки
   const addCellChange = useCallback((
@@ -62,12 +66,8 @@ export function useChangeTracker() {
     oldValue: any,
     newValue: any
   ) => {
-    console.log('🔍 addCellChange called:', { entityType, id, field, oldValue, newValue });
-    console.log('🔍 changeTracker state:', { changes: changes.length, hasUnsavedChanges });
-    
     // Проверяем, действительно ли значение изменилось
     if (oldValue === newValue) {
-      console.log('🔍 Values are the same, skipping change');
       return;
     }
 
@@ -81,19 +81,15 @@ export function useChangeTracker() {
       timestamp: Date.now()
     };
 
-    console.log('🔍 Adding change:', change);
-
     setChanges(prev => {
       // Удаляем предыдущие изменения для этой ячейки
-      const filtered = prev.filter(c => 
+      const filtered = prev.filter(c =>
         !(c.type === 'cell' && c.entityType === entityType && c.id === id && 'field' in c && c.field === field)
       );
-      
-      const newChanges = [...filtered, change];
-      console.log('🔍 New changes array:', newChanges);
-      return newChanges;
+
+      return [...filtered, change];
     });
-    
+
     setHasUnsavedChanges(true);
   }, []);
 
@@ -127,32 +123,20 @@ export function useChangeTracker() {
 
   // Формируем лог изменений для отправки на сервер
   const buildChangeLog = useCallback((): ChangeLog => {
-    console.log('🔍 buildChangeLog called with changes:', changes);
-    console.log('🔍 changes length:', changes.length);
-    console.log('🔍 hasUnsavedChanges:', hasUnsavedChanges);
-    changes.forEach((change, index) => {
-      console.log(`🔍 change ${index}:`, {
-        type: change.type,
-        entityType: change.entityType,
-        id: change.id,
-        field: 'field' in change ? change.field : 'N/A',
-        action: 'action' in change ? change.action : 'N/A'
-      });
-    });
-    
+    // Используем changesRef для получения актуальных изменений (избегаем stale closure)
+    const currentChanges = changesRef.current;
+
     const changeLog: ChangeLog = {};
     const deleted: ChangeLog['deleted'] = {};
 
     // Группируем изменения по типам
-    const changesByType = changes.reduce((acc, change) => {
+    const changesByType = currentChanges.reduce((acc, change) => {
       if (!acc[change.entityType]) {
         acc[change.entityType] = [];
       }
       acc[change.entityType].push(change);
       return acc;
     }, {} as Record<EntityType, Change[]>);
-    
-    console.log('🔍 changesByType:', changesByType);
 
     // Обрабатываем каждую группу изменений
     Object.entries(changesByType).forEach(([entityType, typeChanges]) => {
@@ -197,19 +181,19 @@ export function useChangeTracker() {
       changeLog.deleted = deleted;
     }
 
-    console.log('🔍 buildChangeLog result:', changeLog);
     return changeLog;
-  }, [changes, hasUnsavedChanges]);
+  }, []); // Используем ref, поэтому зависимостей нет
 
   // Очищаем изменения после успешного сохранения
   const clearChanges = useCallback(() => {
-    console.log('🔍 clearChanges called');
+    changesRef.current = [];
     setChanges([]);
     setHasUnsavedChanges(false);
   }, []);
 
   // Сбрасываем трекер
   const reset = useCallback(() => {
+    changesRef.current = [];
     setChanges([]);
     setHasUnsavedChanges(false);
   }, []);
