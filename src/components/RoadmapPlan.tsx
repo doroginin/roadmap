@@ -352,7 +352,7 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker, autoSave
         };
         
         loadData();
-    }, [initialData]);
+    }, [initialData?.version]);
 
     // ===== Уведомление родительского компонента об изменениях данных =====
     const isInitialMount = useRef(true);
@@ -1957,7 +1957,7 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker, autoSave
             </div>
             
             {/* Основной контент в контейнере */}
-            <div className="flex-grow p-4 w-full overflow-visible" style={{ height: 'calc(100vh - 120px)' }}>
+            <div className="flex-grow p-4 w-full overflow-visible" style={{ height: 'calc(100vh - 120px)', display: 'flex', flexDirection: 'column' }}>
     
             {tab === 'plan' ? (
                 <>
@@ -2737,8 +2737,8 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker, autoSave
             </div>
         </>
     ) : tab === 'sprints' ? (
-        <>
-        <div className="sprint-table-container flex-grow border rounded-xl overflow-auto" data-testid="sprint-table-container" style={{ position: "relative", maxHeight: "calc(100vh - 200px)" }}>
+        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+        <div className="border rounded-xl overflow-auto" data-testid="sprint-table-container" style={{ position: "relative" }}>
             <table className="min-w-full text-sm select-none table-fixed border-collapse" style={{ border: '1px solid rgb(226, 232, 240)' }}>
                 <colgroup>
                     <col style={{ width: '120px' }} />
@@ -2754,7 +2754,7 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker, autoSave
                 </thead>
                 <tbody className="divide-y divide-gray-200">
                 {sprints.map((s, i) => (
-                    <tr key={i} className="border-b bg-white" onContextMenu={(e) => onContextMenuSprint(e, i)}>
+                    <tr key={s.id} className="border-b bg-white" onContextMenu={(e) => onContextMenuSprint(e, i)}>
                         <td className="px-4 py-2 align-middle" 
                             style={getSprintCellBorderStyle(sprintSel?.rowId === i && sprintSel?.col === 'code')}
                             onDoubleClick={() => startSprintEdit({rowId: i, col: 'code'})} 
@@ -2896,10 +2896,10 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker, autoSave
         <div className="flex justify-start">
             <button className="border rounded px-4 py-2" style={{backgroundColor: '#f3f4f6'}} onClick={addSprint} data-testid="add-sprint-button">+ Добавить</button>
         </div>
-        </>
+        </div>
     ) : (
-        <>
-        <div className="team-table-container flex-grow border rounded-xl overflow-auto" data-testid="team-table-container" style={{ position: "relative", maxHeight: "calc(100vh - 200px)" }}>
+        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+        <div className="border rounded-xl overflow-auto" data-testid="team-table-container" style={{ position: "relative" }}>
             <table className="min-w-full text-sm select-none table-fixed border-collapse" style={{ border: '1px solid rgb(226, 232, 240)' }}>
                 <colgroup>
                     <col style={{ width: '200px' }} />
@@ -2917,7 +2917,7 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker, autoSave
                 </thead>
                 <tbody className="divide-y divide-gray-200">
                 {teamData.map((t, i) => (
-                    <tr key={i} className="border-b bg-white" onContextMenu={(e) => onContextMenuTeam(e, i)}>
+                    <tr key={t.id} className="border-b bg-white" onContextMenu={(e) => onContextMenuTeam(e, i)}>
                         <td className="px-4 py-2 align-middle" 
                             style={getTeamCellBorderStyle(teamSel?.rowId === i && teamSel?.col === 'name')}
                             onDoubleClick={() => startTeamEdit({rowId: i, col: 'name'})} 
@@ -2987,7 +2987,7 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker, autoSave
         <div className="flex justify-start">
             <button className="bg-black text-white rounded px-4 py-2" onClick={addTeam} data-testid="add-team-button">+ Добавить</button>
         </div>
-        </>
+        </div>
     )}
 
 {/* Контекстное меню спринтов */}
