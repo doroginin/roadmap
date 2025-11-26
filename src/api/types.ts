@@ -8,6 +8,7 @@ export interface RoadmapData {
 
 export interface Resource {
   id: string;
+  team?: string[]; // Team names for display
   teamIds?: string[]; // Team UUIDs for saving
   fn?: string; // Function name
   empl?: string; // Employee name

@@ -34,6 +34,8 @@ export type ResourceRow = {
     functionId?: string; // UUID for saving
     empl?: string; // optional binding to a specific person
     employeeId?: string; // UUID for saving
+    fnBgColor?: string; // Function background color (hex)
+    fnTextColor?: string; // Function text color (hex)
     weeks: number[]; // capacity per week
     prevId?: string | null; // Previous resource ID in order
     nextId?: string | null; // Next resource ID in order

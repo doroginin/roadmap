@@ -344,6 +344,20 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker, autoSave
                 setSprints((data.sprints || []).map(s => ({ ...s, id: s.id || generateUUID() })));
                 setTeamData((data.teams || []).map(t => ({ ...t, id: t.id || generateUUID() })));
                 setCurrentVersion(data.version || 0);
+
+                // Инициализируем цвета из загруженных ресурсов
+                const initialColors: Record<string, { bg: string; text: string }> = {};
+                (data.resources || []).forEach(resource => {
+                    if (resource.fnBgColor && resource.fnTextColor) {
+                        const teams = Array.isArray(resource.team) ? resource.team.slice().sort().join('+') : '';
+                        const teamFnKey = `${teams}|${resource.fn || ''}`;
+                        initialColors[teamFnKey] = {
+                            bg: resource.fnBgColor,
+                            text: resource.fnTextColor
+                        };
+                    }
+                });
+                setTeamFnColors(initialColors);
             } catch (err) {
                 setError(err instanceof Error ? err.message : 'Unknown error');
             } finally {
@@ -3086,7 +3100,17 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker, autoSave
         anchor={colorPanel.anchor}
         initialColors={colorPanel.initial}
         onApply={(bg, text) => {
+            // Обновляем цвета в состоянии для UI
             setTeamFnColors(prev => ({ ...prev, [colorPanel.teamFnKey]: { bg, text } }));
+
+            // Сохраняем цвета в ресурсы (даже если цвет выбран в задаче)
+            // Находим все ресурсы с этим teamFnKey и обновляем их
+            computedRows
+                .filter(row => row.kind === "resource" && teamKeyFromResource(row as ResourceRow) === colorPanel.teamFnKey)
+                .forEach(row => {
+                    updateResource(row.id, { fnBgColor: bg, fnTextColor: text });
+                });
+
             setColorPanel(null);
         }}
         onCancel={() => {
