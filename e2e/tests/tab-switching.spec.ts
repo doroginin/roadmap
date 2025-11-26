@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test';
 test.describe('Tab Switching Tests', () => {
     test('should maintain scroll and add button after switching tabs', async ({ page }) => {
         // Загружаем приложение
-        await page.goto('http://localhost:5173');
+        await page.goto('/');
 
         // Ждем загрузки таблицы
         await page.waitForSelector('[data-testid="roadmap-table"]', { timeout: 10000 });
@@ -88,7 +88,7 @@ test.describe('Tab Switching Tests', () => {
 
     test('should handle multiple tab switches correctly', async ({ page }) => {
         // Загружаем приложение
-        await page.goto('http://localhost:5173');
+        await page.goto('/');
 
         // Ждем загрузки таблицы
         await page.waitForSelector('[data-testid="roadmap-table"]', { timeout: 10000 });
@@ -139,7 +139,7 @@ test.describe('Tab Switching Tests', () => {
 
     test('should recalculate layout after window resize following tab switch', async ({ page }) => {
         // Загружаем приложение
-        await page.goto('http://localhost:5173');
+        await page.goto('/');
 
         // Ждем загрузки таблицы
         await page.waitForSelector('[data-testid="roadmap-table"]', { timeout: 10000 });

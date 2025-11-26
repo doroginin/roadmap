@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 
 test.describe('Frozen Columns Tests', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('http://localhost:5173');
+    await page.goto('/');
     // Ждем загрузки приложения
     await expect(page.getByTestId('app-container')).toBeVisible({ timeout: 10000 });
     await expect(page.getByTestId('roadmap-table')).toBeVisible();

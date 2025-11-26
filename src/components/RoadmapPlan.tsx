@@ -281,6 +281,9 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker, autoSave
     // Using useRef to track if data is already loaded to avoid re-loading on every initialData change
     const loadedVersionRef = useRef<number | null>(null);
     
+    // Ref для контекстного меню строк
+    const contextMenuRef = useRef<HTMLDivElement>(null);
+    
     useEffect(() => {
         const loadData = async () => {
             // Skip if we already loaded this version
@@ -332,10 +335,33 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker, autoSave
                     };
                 });
                 
+                // Ensure resources have weeks and team arrays initialized
+                const resourcesWithDefaults = (data.resources || []).map(resource => {
+                    // Initialize weeks array if null/undefined
+                    let weeks: number[];
+                    if (Array.isArray(resource.weeks) && resource.weeks.length > 0) {
+                        weeks = [...resource.weeks];
+                        while (weeks.length < totalWeeks) {
+                            weeks.push(0);
+                        }
+                    } else {
+                        weeks = Array(totalWeeks).fill(0);
+                    }
+                    
+                    // Initialize team array if null/undefined
+                    const team = Array.isArray(resource.team) ? resource.team : [];
+                    
+                    return {
+                        ...resource,
+                        weeks,
+                        team
+                    };
+                });
+                
                 // Объединяем ресурсы и задачи в один массив rows
                 // Backend уже возвращает данные в правильном порядке (linked list)
                 const allRows: Row[] = [
-                    ...(data.resources || []),
+                    ...resourcesWithDefaults,
                     ...tasksWithWeeks
                 ] as Row[];
 
@@ -1184,6 +1210,27 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker, autoSave
             : getTeamFnColorForTask(r as TaskRow);
         setCtx({ x: e.clientX, y: e.clientY, rowId: r.id, kind, field, draftColor: currentColor });
     }
+
+    // Закрытие контекстного меню при клике вне его
+    useEffect(() => {
+        if (!ctx) return;
+
+        const handleClickOutside = (event: MouseEvent) => {
+            if (contextMenuRef.current && !contextMenuRef.current.contains(event.target as Node)) {
+                setCtx(null);
+            }
+        };
+
+        // Добавляем слушатель с небольшой задержкой, чтобы не закрыть меню сразу после открытия
+        const timer = setTimeout(() => {
+            document.addEventListener('mousedown', handleClickOutside);
+        }, 0);
+
+        return () => {
+            clearTimeout(timer);
+            document.removeEventListener('mousedown', handleClickOutside);
+        };
+    }, [ctx]);
 
 
     // Вспомогательная функция для получения стиля границ ячейки
@@ -2193,8 +2240,8 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker, autoSave
                                         />
                                     </div>
                                 ) : (
-                                    <div className="w-full overflow-hidden" title={(r as ResourceRow).team.join(', ')}>
-                                        <span className="block truncate">{(r as ResourceRow).team.join(', ')}</span>
+                                    <div className="w-full overflow-hidden" title={(r as ResourceRow).team?.join(', ') || ''}>
+                                        <span className="block truncate">{(r as ResourceRow).team?.join(', ') || ''}</span>
                                     </div>
                                 )}
                                 </td>
@@ -3066,7 +3113,7 @@ export function RoadmapPlan({ initialData, onDataChange, changeTracker, autoSave
 {ctx && (
         <>
             <div className="fixed inset-0 z-40" onMouseDown={()=>setCtx(null)} />
-            <div data-testid="context-menu" className="fixed z-50 bg-white shadow-lg rounded-md border border-gray-200 p-2" style={{left:ctx.x, top:ctx.y}} onMouseDown={(e)=>e.stopPropagation()}>
+            <div ref={contextMenuRef} data-testid="context-menu" className="fixed z-50 bg-white shadow-lg rounded-md border border-gray-200 p-2" style={{left:ctx.x, top:ctx.y}} onMouseDown={(e)=>e.stopPropagation()}>
                 <div className="bg-white border rounded shadow text-sm">
                     <button className="block w-full text-left px-3 py-1 hover:bg-gray-100" onClick={()=>duplicateRow(ctx.rowId)} data-testid="duplicate-row-button">Дублировать</button>
                     <button className="block w-full text-left px-3 py-1 hover:bg-gray-100" onClick={()=>deleteRow(ctx.rowId)} data-testid="context-menu-delete">Удалить</button>
